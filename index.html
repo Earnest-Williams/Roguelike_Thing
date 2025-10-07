@@ -454,6 +454,20 @@
 
             add(itemOrStack) {
                 const incoming = (itemOrStack instanceof ItemStack) ? itemOrStack : new ItemStack(itemOrStack, 1);
+                const merges = [];
+                let mergedTotalQty = 0;
+                const revertMerges = () => {
+                    for (const { index, added } of merges) {
+                        const stack = this.stacks[index];
+                        if (stack) {
+                            stack.qty -= added;
+                            if (stack.qty === 0) this.stacks[index] = null;
+                        }
+                    }
+                    incoming.qty += mergedTotalQty;
+                    merges.length = 0;
+                    mergedTotalQty = 0;
+                };
                 // Try merge first
                 if (incoming.stackable) {
                     for (let i = 0; i < this.stacks.length && incoming.qty > 0; i++) {
@@ -462,8 +476,10 @@
                             const space = s.maxStack - s.qty;
                             const moved = Math.min(space, incoming.qty);
                             const tmp = new ItemStack(incoming.item.clone(), moved);
-                            if (!this.fitsConstraints(tmp)) return false;
+                            if (!this.fitsConstraints(tmp)) { revertMerges(); return false; }
                             s.qty += moved;
+                            merges.push({ index: i, added: moved });
+                            mergedTotalQty += moved;
                             incoming.qty -= moved;
                         }
                     }
@@ -473,11 +489,12 @@
                 for (let i = 0; i < this.stacks.length; i++) {
                     if (!this.stacks[i]) {
                         const tmp = new ItemStack(incoming.item.clone(), incoming.qty);
-                        if (!this.fitsConstraints(tmp)) return false;
+                        if (!this.fitsConstraints(tmp)) { revertMerges(); return false; }
                         this.stacks[i] = tmp;
                         return true;
                     }
                 }
+                revertMerges();
                 return false;
             }
 
