@@ -1776,6 +1776,9 @@
             }
         }
 
+        // Keep the viewport centred on the player without allowing the camera to
+        // drift past the map edges. This is effectively a clamped translation
+        // that mimics a traditional roguelike "camera" following the hero.
         function updateCamera(playerPos) {
             const mapPxW = MAP_W * CELL_SIZE;
             const mapPxH = MAP_H * CELL_SIZE;
@@ -1787,6 +1790,9 @@
             const ty = Math.round(Math.max(vh - mapPxH, Math.min(0, desiredY)));
             canvas.style.transform = `translate3d(${tx}px, ${ty}px, 0)`;
         }
+        // Render a single map tile. The function intentionally duplicates a bit
+        // of style logic (instead of delegating to CSS classes) so we can keep
+        // rendering on the canvas fast and free from layout thrashing.
         function drawCell(x, y, isVisible, isPlayer = false, isStart = false, isEnd = false) {
             const cellX = x * CELL_SIZE;
             const cellY = y * CELL_SIZE;
@@ -1832,6 +1838,9 @@
                 ctx.fillRect(cellX, cellY, CELL_SIZE, CELL_SIZE);
             }
         }
+        // Updates the persistent fog-of-war state as the player moves. This both
+        // records which tiles were ever seen (exploredGrid) and promotes nearby
+        // floor cells to "frontiers" so the explorer knows where to head next.
         function updateVisionAndExploration(pos) {
             const lightRadius = getLightRadius();
             const minX = Math.max(0, pos.x - lightRadius - 1);
@@ -1884,6 +1893,10 @@
                 }
             }
         }
+        // Heuristic scoring for neighbouring tiles when no direct goal is
+        // available. Higher scores favour cells that reveal new territory while
+        // penalising ones we recently stepped on (shortTermMemory) to reduce
+        // aimless oscillation.
         function explorationScore(pos, shortTermMemory) {
             let score = 0;
             const lightRadius = getLightRadius();
@@ -1903,6 +1916,9 @@
             }
             return score;
         }
+        // Classic breadth-first search that respects the knowledge gathered so
+        // far. We allow the caller to provide a short-term memory blacklist so
+        // the AI can temporarily avoid tiles that caused recent backtracking.
         function bfsToTarget(start, target, shortTermMemory) {
             const queue = [{pos: start, path: []}];
             const visited = new Set([posKey(start)]);
@@ -1989,6 +2005,10 @@
             drawCell(playerPos.x, playerPos.y, isVis, true, isS, isE);
         }
         // --- SIMULATION LOGIC ---
+        // Main autonomous exploration loop. The routine alternates between three
+        // behaviours: beeline to the exit once discovered, opportunistically
+        // explore high-value neighbours, and finally backtrack via the frontier
+        // stack when no better move exists.
         function simulate(startPos, endPos) {
             statusDiv.textContent = 'AI exploring...';
             restartBtn.style.display = 'none';
