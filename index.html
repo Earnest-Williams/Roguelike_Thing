@@ -325,7 +325,33 @@
                 // Runtime state for containers (contents as stacks)
                 if (this.container) this.contents = [];
             }
-            clone() { return new Item(JSON.parse(JSON.stringify(this))); }
+            clone() {
+                const copy = {
+                    id: this.id,
+                    name: this.name,
+                    kind: this.kind,
+                    equipSlots: Array.isArray(this.equipSlots) ? this.equipSlots.slice() : this.equipSlots,
+                    handsRequired: this.handsRequired,
+                    dims: this.dims ? { ...this.dims } : undefined,
+                    mass: this.mass,
+                    stackable: this.stackable,
+                    maxStack: this.maxStack,
+                    lightRadius: this.lightRadius,
+                    container: null,
+                };
+
+                if (this.container) {
+                    copy.container = { ...this.container };
+                }
+
+                const cloned = new Item(copy);
+
+                if (Array.isArray(this.contents)) {
+                    cloned.contents = this.contents.slice();
+                }
+
+                return cloned;
+            }
             canEquipTo(slot) { return this.equipSlots.includes(slot); }
             volumeLPerUnit() { return dimsVolumeL(this.dims); }
             longestCm() { return dimsLongest(this.dims); }
