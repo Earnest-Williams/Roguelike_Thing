@@ -1683,7 +1683,7 @@
             });
             const inventory = player?.inventory;
             const capacity = typeof inventory?.capacitySlots === 'number' ? inventory.capacitySlots : 0;
-            const stackLength = Array.isArray(inventory?.stacks) ? inventory.stacks.length : capacity;
+            const stackLength = Array.isArray(inventory?.stacks) ? inventory.stacks.length : 0;
             const invCapacity = Math.max(capacity, stackLength);
             for (let i = 0; i < invCapacity; i++) {
                 const slot = document.createElement('div');
