@@ -461,7 +461,7 @@
                         const stack = this.stacks[index];
                         if (stack) {
                             stack.qty -= added;
-                            if (stack.qty <= 0) this.stacks[index] = null;
+                            if (stack.qty === 0) this.stacks[index] = null;
                         }
                     }
                     if (mergedTotalQty > 0) incoming.qty += mergedTotalQty;
