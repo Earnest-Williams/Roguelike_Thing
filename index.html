@@ -218,11 +218,67 @@
       </div>
     </div>
     <script>
-        // --- CONSTANTS ---
-        const VIEW_W = 41, VIEW_H = 41; // on-screen window
-        const CELL_SIZE = 20; // px per tile
-        const HALF_CELL = CELL_SIZE / 2;
-        // --- DOM ELEMENTS ---
+        const CONFIG = {
+            visual: {
+                view: { width: 41, height: 41 },
+                cellSize: 20,
+                colors: {
+                    unseen: '#111',
+                    wall: '#3a2a23',
+                    floor: '#222',
+                    floorGlyph: '#444',
+                    defaultText: '#d3d3d3',
+                    start: '#4caf50',
+                    end: '#f44336',
+                    player: '#2196f3',
+                    playerGlyph: '#fff',
+                    visibleOverlay: 'rgba(255,255,102,0.20)'
+                }
+            },
+            ai: {
+                ticksPerSecond: 12,
+                shortTermMemory: 30
+            },
+            generator: {
+                hybrid: {
+                    large: {
+                        roomCountRange: [1, 11],
+                        areaRange: [300, 750],
+                        minSide: 8,
+                        minL1EdgeSpacing: 30,
+                        border: 15,
+                        maxAttemptsPerRoom: 600
+                    },
+                    small: {
+                        candidateCount: 320,
+                        minSize: { w: 5, h: 5 },
+                        maxSize: { w: 14, h: 12 },
+                        separationIters: 80,
+                        keepRatio: 1.0,
+                        clearanceFromLarge: 2
+                    },
+                    corridors: {
+                        extraEdgeFraction: 0.15,
+                        rescueConnectivity: true
+                    }
+                }
+            },
+            minimap: {
+                padding: 1,
+                colors: {
+                    wall: '#3a2a23',
+                    floor: '#111',
+                    floorExplored: '#1a1a1a',
+                    player: '#2196f3',
+                    viewport: '#00bcd4',
+                    border: '#333'
+                }
+            },
+            general: {
+                maxInitRetries: 10
+            }
+        };
+        const Game = (() => {
         const viewportEl = document.getElementById('maze-viewport');
         const canvas = document.getElementById('maze-canvas');
         const ctx = canvas.getContext('2d');
@@ -233,13 +289,14 @@
         const speedSlider = document.getElementById('speed-slider');
         const speedValue = document.getElementById('speed-value');
         const pauseIndicator = document.getElementById('pause-indicator');
-        // --- MINIMAP ELEMENTS (will be initialized) ---
+
         let minimapModalEl, minimapCanvas, minimapCtx, minimapCloseBtn;
-        // --- GAME STATE ---
-        let MAP_W, MAP_H; // Set dynamically by the generator
+
+        let MAP_W, MAP_H;
         let gameLoopTimeout;
+        let gameLoopFn = null;
         let isPaused = false;
-        let simulationSpeed = 12; // Ticks per second
+        let simulationSpeed = CONFIG.ai.ticksPerSecond;
         let maze = [];
         let exploredGrid = [];
         let knownGrid = [];
@@ -251,7 +308,12 @@
         let prevPlayerPos = null;
         let currentVisible = new Set();
         let initRetries = 0;
-        const MAX_INIT_RETRIES = 10;
+
+        const VIEW_W = CONFIG.visual.view.width;
+        const VIEW_H = CONFIG.visual.view.height;
+        const CELL_SIZE = CONFIG.visual.cellSize;
+        const HALF_CELL = CELL_SIZE / 2;
+        const MAX_INIT_RETRIES = CONFIG.general.maxInitRetries;
         
         // ===================== EQUIPMENT MODEL =====================
 
@@ -1397,31 +1459,7 @@
         // Floors = 0, Walls = 1
         // ============================================================
         // ----- CONFIG -----
-        const HYBRID_CFG = {
-          // Large-room scaffold (delegates to your existing makeShape etc.)
-          large: {
-            roomCountRange: [1, 11],
-            areaRange: [300, 750],
-            minSide: 8,
-            minL1EdgeSpacing: 30,
-            border: 15,
-            maxAttemptsPerRoom: 600,
-          },
-          // Small-room fill (rectangles like test.html)
-          small: {
-            candidateCount: 320, // how many rects to seed before separation
-            minSize: { w: 5, h: 5 }, // minimum kept room size
-            maxSize: { w: 14, h: 12 },// soft cap; separation rounds these
-            separationIters: 80, // physics-style push iterations
-            keepRatio: 1.0, // keep all that pass filters; tune down if too dense
-            clearanceFromLarge: 2, // tiles of clearance from large rooms' solids
-          },
-          // Corridors
-          corridors: {
-            extraEdgeFraction: 0.15, // add 15% of non-MST edges for loops
-            rescueConnectivity: true, // ensure all rooms connected with BFS + L-corridors
-          }
-        };
+        const HYBRID_CFG = CONFIG.generator.hybrid;
         // Utility
         const clamp01 = (v) => Math.max(0, Math.min(1, v));
         const manhattan = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
@@ -1796,26 +1834,26 @@
         function drawCell(x, y, isVisible, isPlayer = false, isStart = false, isEnd = false) {
             const cellX = x * CELL_SIZE;
             const cellY = y * CELL_SIZE;
-            if (!exploredGrid[y][x]) return; // Unexplored cells remain background #111
-            let bgColor = '#111';
+            if (!exploredGrid[y][x]) return; // Unexplored cells retain the base background color
+            let bgColor = CONFIG.visual.colors.unseen;
             let text = '';
-            let textColor = '#d3d3d3';
+            let textColor = CONFIG.visual.colors.defaultText;
             let fontWeight = '';
             const isWall = maze[y][x] === 1;
             if (isWall) {
-                bgColor = '#3a2a23';
+                bgColor = CONFIG.visual.colors.wall;
                 textColor = 'transparent';
             } else {
-                bgColor = '#222';
+                bgColor = CONFIG.visual.colors.floor;
                 text = '·';
-                textColor = '#444';
+                textColor = CONFIG.visual.colors.floorGlyph;
             }
-            if (isStart) bgColor = '#4caf50';
-            if (isEnd) bgColor = '#f44336';
+            if (isStart) bgColor = CONFIG.visual.colors.start;
+            if (isEnd) bgColor = CONFIG.visual.colors.end;
             if (isPlayer) {
-                bgColor = '#2196f3';
+                bgColor = CONFIG.visual.colors.player;
                 text = '@';
-                textColor = '#fff';
+                textColor = CONFIG.visual.colors.playerGlyph;
                 fontWeight = 'bold ';
             }
             ctx.fillStyle = bgColor;
@@ -1834,7 +1872,7 @@
                 ctx.fillText(text, cellX + HALF_CELL, cellY + HALF_CELL);
             }
             if (isVisible) {
-                ctx.fillStyle = 'rgba(255,255,102,0.20)';
+                ctx.fillStyle = CONFIG.visual.colors.visibleOverlay;
                 ctx.fillRect(cellX, cellY, CELL_SIZE, CELL_SIZE);
             }
         }
@@ -2029,7 +2067,7 @@
                     // Track a short trail of recently visited tiles so the explorer does not keep
                     // oscillating in the same small loop.
                     shortTermMemory.push(posKey(player.pos));
-                    if (shortTermMemory.length > 30) {
+                    if (shortTermMemory.length > CONFIG.ai.shortTermMemory) {
                         shortTermMemory.shift();
                     }
                     let nextMove = null;
@@ -2103,7 +2141,7 @@
                 const delay = 1000 / simulationSpeed;
                 gameLoopTimeout = setTimeout(gameLoop, delay);
             }
-            window.gameLoop = gameLoop;
+            gameLoopFn = gameLoop;
             gameLoop();
         }
         function togglePause() {
@@ -2112,8 +2150,8 @@
                 pauseIndicator.textContent = 'PAUSED';
             } else {
                 pauseIndicator.textContent = '';
-                if (typeof window.gameLoop === 'function') {
-                    gameLoopTimeout = setTimeout(window.gameLoop, 1000 / simulationSpeed); // Resume the loop
+                if (typeof gameLoopFn === 'function') {
+                    gameLoopTimeout = setTimeout(gameLoopFn, 1000 / simulationSpeed); // Resume the loop
                 }
             }
         }
@@ -2124,6 +2162,7 @@
                 return;
             }
             clearTimeout(gameLoopTimeout);
+            gameLoopFn = null;
             isPaused = false;
             pauseIndicator.textContent = '';
             statusDiv.textContent = 'Generating dungeon...';
@@ -2199,34 +2238,29 @@
                 setTimeout(() => simulate(player.startPos, endPos), 500);
             }, 50);
         }
-        restartBtn.addEventListener('click', init);
-        speedSlider.addEventListener('input', (e) => {
-            simulationSpeed = parseInt(e.target.value);
-            speedValue.textContent = `${simulationSpeed} tps`;
-        });
-        window.addEventListener('keydown', (e) => {
-            if (e.code === 'Space') {
-                e.preventDefault();
-                togglePause();
-            }
-        });
-        window.onload = () => {
+        function bootstrap() {
+            speedSlider.value = CONFIG.ai.ticksPerSecond;
+            speedValue.textContent = `${CONFIG.ai.ticksPerSecond} tps`;
+            restartBtn.addEventListener('click', init);
+            speedSlider.addEventListener('input', (e) => {
+                simulationSpeed = parseInt(e.target.value, 10);
+                speedValue.textContent = `${simulationSpeed} tps`;
+            });
+            window.addEventListener('keydown', (e) => {
+                if (e.code === 'Space') {
+                    e.preventDefault();
+                    togglePause();
+                }
+            });
             initMinimapDOM();
             init();
-        };
+        }
         // ===================== MINIMAP =====================
         let minimapBase = null;      // offscreen static layer (map tiles)
         let minimapScale = 1;        // pixels per tile inside the minimap canvas
-        let minimapPadding = 1;      // visual padding around map in tiles
+        let minimapPadding = CONFIG.minimap.padding;      // visual padding around map in tiles
 
-        // Colors match your theme
-        const MINIMAP_COLORS = {
-          wall: "#3a2a23",
-          floor: "#111",
-          floorExplored: "#1a1a1a",   // if you later want explored shading; currently unused
-          player: "#2196f3",
-          viewport: "#00bcd4"
-        };
+        const MINIMAP_COLORS = CONFIG.minimap.colors;
 
         function initMinimapDOM() {
           minimapModalEl = document.getElementById("minimapModal");
@@ -2326,7 +2360,7 @@
           }
 
           // Optional border to make the map bounds obvious
-          ctx.strokeStyle = "#333";
+          ctx.strokeStyle = MINIMAP_COLORS.border;
           ctx.lineWidth = Math.max(1, Math.floor(minimapScale / 2));
           ctx.strokeRect(ox, oy, MAP_W * minimapScale, MAP_H * minimapScale);
         }
@@ -2405,6 +2439,15 @@
         }
 
         // ===================== END MINIMAP =====================
+        return {
+            bootstrap,
+            togglePause,
+        };
+        })();
+
+        window.addEventListener('load', () => {
+            Game.bootstrap();
+        });
     </script>
 </body>
 </html>
