@@ -3,39 +3,2273 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Roguelike Thing</title>
+    <title>Self-Playing Roguelike Dungeon Simulator</title>
     <style>
         body {
-            margin: 0;
-            padding: 0;
+            font-family: monospace;
+            background-color: #1a1a1a;
+            color: #f0f0f0;
             display: flex;
             justify-content: center;
             align-items: center;
-            min-height: 100vh;
-            background-color: #1a1a1a;
-            font-family: monospace;
-            color: #ffffff;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
         }
-        
-        #game-container {
+        #app-container {
+            display: flex;
+            gap: 20px;
+            align-items: flex-start;
+        }
+        #container {
             text-align: center;
+            background-color: #2b2b2b;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
         }
-        
-        #game-canvas {
-            border: 2px solid #ffffff;
-            background-color: #000000;
-        }
-        
         h1 {
-            margin-bottom: 20px;
+            margin-top: 0;
+            color: #00bcd4;
+        }
+        #maze-viewport {
+            overflow: hidden;
+            position: relative;
+            border: 2px solid #00bcd4;
+            margin: 20px auto;
+            background-color: #111; /* Fallback for unexplored */
+        }
+        #maze-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            will-change: transform;
+            background-color: #111;
+        }
+        #status {
+            font-size: 18px;
+            margin-top: 10px;
+            color: #e0e0e0;
+            height: 25px;
+        }
+        #controls {
+            margin-top: 10px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            color: #ccc;
+        }
+        #speed-slider {
+            width: 150px;
+        }
+        #pause-indicator {
+            color: #ffeb3b;
+            font-weight: bold;
+            height: 20px;
+            margin-top: 5px;
+        }
+        #restartBtn {
+            margin-top: 15px; padding: 10px 20px; font-size: 16px; font-family: monospace;
+            cursor: pointer; border: none; border-radius: 5px; background-color: #00bcd4;
+            color: #1a1a1a; font-weight: bold; transition: background-color 0.2s;
+        }
+        #restartBtn:hover { background-color: #0097a7; }
+        /* UI Panel Styling */
+        #ui-panel {
+            width: 250px;
+            background-color: #2b2b2b;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+        }
+        .ui-section h2 {
+            color: #00bcd4;
+            border-bottom: 1px solid #00bcd4;
+            padding-bottom: 5px;
+            margin-top: 0;
+            margin-bottom: 10px;
+        }
+        .slot-container {
+            display: grid;
+            gap: 10px;
+        }
+        .equipment-slots {
+            grid-template-columns: 1fr;
+        }
+        .inventory-slots {
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(2, 1fr);
+        }
+        .slot {
+            height: 60px;
+            background-color: #333;
+            border: 1px solid #555;
+            border-radius: 5px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            font-size: 12px;
+            padding: 5px;
+            overflow: hidden;
+            white-space: nowrap;
+        }
+        .slot-label {
+            font-size: 10px;
+            color: #aaa;
+            width: 100%;
+            text-align: left;
+            margin-bottom: 4px;
+        }
+        .slot-item {
+            font-weight: bold;
+        }
+        /* Minimap modal */
+        #minimapModal {
+          position: fixed;
+          inset: 0;
+          background: rgba(0,0,0,0.65);
+          display: none;             /* toggled by JS */
+          align-items: center;
+          justify-content: center;
+          z-index: 9999;
+        }
+        #minimapPanel {
+          background: #222;
+          border: 1px solid #00bcd4;
+          border-radius: 10px;
+          padding: 10px 10px 14px 10px;
+          box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+          max-width: 100vw;
+          max-height: 100vh;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+        #minimapHeader {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          color: #00bcd4;
+          font-weight: bold;
+          padding: 4px 2px 8px 2px;
+        }
+        #minimapClose {
+          background: transparent;
+          border: none;
+          color: #ccc;
+          font-size: 22px;
+          cursor: pointer;
+        }
+        #minimapClose:hover { color: #fff; }
+
+        #minimapCanvas {
+          image-rendering: pixelated;
+          width: min(94vw, 94vh);  /* square that fits either width or height */
+          height: min(94vw, 94vh);
+          border: 1px solid #444;
+          background: #111;
+        }
+        #minimapHint {
+          color: #aaa;
+          font-size: 12px;
+          text-align: center;
         }
     </style>
 </head>
 <body>
-    <div id="game-container">
-        <h1>Roguelike Thing</h1>
-        <canvas id="game-canvas" width="800" height="600"></canvas>
-        <p>Game will load here</p>
+    <div id="app-container">
+        <div id="container">
+            <h1>Roguelike Dungeon Simulator</h1>
+            <div id="maze-viewport">
+                <canvas id="maze-canvas"></canvas>
+            </div>
+            <div id="status">Generating dungeon...</div>
+            <div id="controls">
+                <label for="speed-slider">Speed:</label>
+                <input type="range" id="speed-slider" min="1" max="50" value="12">
+                <span id="speed-value">12 tps</span>
+            </div>
+            <div id="pause-indicator"></div>
+            <button id="restartBtn" style="display: none;">Restart</button>
+        </div>
+        <div id="ui-panel">
+            <div class="ui-section">
+                <h2>Equipment</h2>
+                <div id="equipment-slots" class="slot-container equipment-slots"></div>
+            </div>
+            <div class="ui-section" style="margin-top: 20px;">
+                <h2>Inventory</h2>
+                <div id="inventory-slots" class="slot-container inventory-slots"></div>
+            </div>
+        </div>
     </div>
+    <!-- Minimap Modal -->
+    <div id="minimapModal" aria-hidden="true">
+      <div id="minimapPanel">
+        <div id="minimapHeader">
+          <span>Minimap</span>
+          <button id="minimapClose" title="Close (Esc)">×</button>
+        </div>
+        <canvas id="minimapCanvas" width="640" height="640"></canvas>
+        <div id="minimapHint">Press “m” to toggle, “Esc” to close</div>
+      </div>
+    </div>
+    <script>
+        // --- CONSTANTS ---
+        const VIEW_W = 41, VIEW_H = 41; // on-screen window
+        const CELL_SIZE = 20; // px per tile
+        const HALF_CELL = CELL_SIZE / 2;
+        // --- DOM ELEMENTS ---
+        const viewportEl = document.getElementById('maze-viewport');
+        const canvas = document.getElementById('maze-canvas');
+        const ctx = canvas.getContext('2d');
+        const statusDiv = document.getElementById('status');
+        const restartBtn = document.getElementById('restartBtn');
+        const equipmentSlotsDiv = document.getElementById('equipment-slots');
+        const inventorySlotsDiv = document.getElementById('inventory-slots');
+        const speedSlider = document.getElementById('speed-slider');
+        const speedValue = document.getElementById('speed-value');
+        const pauseIndicator = document.getElementById('pause-indicator');
+        // --- MINIMAP ELEMENTS (will be initialized) ---
+        let minimapModalEl, minimapCanvas, minimapCtx, minimapCloseBtn;
+        // --- GAME STATE ---
+        let MAP_W, MAP_H; // Set dynamically by the generator
+        let gameLoopTimeout;
+        let isPaused = false;
+        let simulationSpeed = 12; // Ticks per second
+        let maze = [];
+        let exploredGrid = [];
+        let knownGrid = [];
+        let player = {};
+        let frontiers = new Set();
+        let newlyExplored = [];
+        let isEndRendered = false;
+        let prevVisible = new Set();
+        let prevPlayerPos = null;
+        let currentVisible = new Set();
+        let initRetries = 0;
+        const MAX_INIT_RETRIES = 10;
+        
+        // ===================== EQUIPMENT MODEL =====================
+
+        // ---- Slot enum (canonical names)
+        const SLOT = {
+            Head: "Head",
+            LeftHand: "LeftHand",
+            RightHand: "RightHand",
+            LeftRing: "LeftRing",
+            RightRing: "RightRing",
+            Amulet: "Amulet",
+            BodyArmor: "BodyArmor",
+            Cloak: "Cloak",
+            Boots: "Boots",
+            Gloves: "Gloves",
+            Belt: "Belt",        // the belt garment itself
+            Belt1: "Belt1",      // attachments on belt
+            Belt2: "Belt2",
+            Belt3: "Belt3",
+            Belt4: "Belt4",
+            Backpack: "Backpack",
+            Quiver: "Quiver",
+        };
+
+        // Legacy aliases so existing UI keeps showing something
+        const LEGACY_SLOT_ALIAS = new Map([
+            ["Left", SLOT.LeftHand],
+            ["Right", SLOT.RightHand],
+            ["Body", SLOT.BodyArmor],
+        ]);
+
+        // Order for rendering later
+        const ALL_SLOTS_ORDER = [
+            SLOT.Head,
+            SLOT.Amulet,
+            SLOT.LeftRing, SLOT.RightRing,
+            SLOT.Cloak,
+            SLOT.BodyArmor,
+            SLOT.Gloves, SLOT.Boots,
+            SLOT.LeftHand, SLOT.RightHand,
+            SLOT.Belt, SLOT.Belt1, SLOT.Belt2, SLOT.Belt3, SLOT.Belt4,
+            SLOT.Backpack,
+            SLOT.Quiver,
+        ];
+
+        // ---- Physical helpers (dimensions in cm, mass in kg)
+        function dimsVolumeL(d) { return (d.l * d.w * d.h) / 1000.0; } // cm^3 to liters
+        function dimsLongest(d) { return Math.max(d.l, d.w, d.h); }
+
+        // ===================== ITEMS =====================
+
+        class Item {
+            // id: stable id; name: label; kind: "weapon","armor","jewelry","container","tool","ammo","misc"
+            // equipSlots: array of SLOT names where this can be equipped
+            // handsRequired: 1 or 2 for weapons
+            // dims: {l,w,h} in cm; mass: kg
+            // stackable/maxStack: for things like arrows, torches
+            // lightRadius: tiles if lit (lantern/torch)
+            // container: optional { volumeL, maxMassKg, maxItemLengthCm, accepts: fn(item) -> boolean }
+            constructor(o) {
+                this.id = o.id;
+                this.name = o.name;
+                this.kind = o.kind;
+                this.equipSlots = Array.isArray(o.equipSlots) ? o.equipSlots.slice() : [];
+                this.handsRequired = o.handsRequired ?? 0;
+                this.dims = o.dims ?? { l: 1, w: 1, h: 1 };
+                this.mass = o.mass ?? 0.1;
+                this.stackable = !!o.stackable;
+                this.maxStack = o.maxStack ?? (this.stackable ? 99 : 1);
+                this.lightRadius = o.lightRadius ?? 0;
+                this.container = o.container ? { ...o.container } : null;
+                // Runtime state for containers (contents as stacks)
+                if (this.container) this.contents = [];
+            }
+            clone() { return new Item(JSON.parse(JSON.stringify(this))); }
+            canEquipTo(slot) { return this.equipSlots.includes(slot); }
+            volumeLPerUnit() { return dimsVolumeL(this.dims); }
+            longestCm() { return dimsLongest(this.dims); }
+        }
+
+        // Stack of identical items
+        class ItemStack {
+            constructor(item, qty = 1) {
+                if (!(item instanceof Item)) throw new Error("ItemStack needs Item");
+                this.item = item;
+                this.qty = qty;
+            }
+            get id() { return this.item.id; }
+            get name() { return this.item.name; }
+            get stackable() { return this.item.stackable; }
+            get maxStack() { return this.item.maxStack; }
+            totalMassKg() { return this.item.mass * this.qty; }
+            totalVolumeL() { return this.item.volumeLPerUnit() * this.qty; }
+            canMerge(other) { return this.stackable && other.stackable && this.id === other.id; }
+        }
+
+        // Registry
+        const ItemRegistry = new Map();
+        function registerItem(def) { ItemRegistry.set(def.id, new Item(def)); }
+        function makeItem(id) {
+            const t = ItemRegistry.get(id);
+            if (!t) throw new Error("Unknown item: " + id);
+            return t.clone();
+        }
+
+        // ===================== INVENTORY =====================
+        // This represents the carried inventory. Capacity is enforced by the equipped Backpack.
+
+        class Inventory {
+            constructor(slotCount = 20) {
+                this.capacitySlots = slotCount;             // UI slots; you can raise this later
+                this.stacks = Array.from({ length: slotCount }, () => null);
+                this.constraints = null;                     // set from equipped backpack
+            }
+            setConstraints(c) { this.constraints = c ? { ...c } : null; }
+            list() { return this.stacks; }
+
+            usedMassKg() {
+                let m = 0;
+                for (const s of this.stacks) if (s) m += s.totalMassKg();
+                return m;
+                }
+            usedVolumeL() {
+                let v = 0;
+                for (const s of this.stacks) if (s) v += s.totalVolumeL();
+                return v;
+            }
+            longestItemCm() {
+                let L = 0;
+                for (const s of this.stacks) if (s) L = Math.max(L, s.item.longestCm());
+                return L;
+            }
+
+            // capacity check vs backpack constraints
+            fitsConstraints(stack) {
+                if (!this.constraints) return true; // no backpack equipped => unrestricted (you may change this)
+                const cap = this.constraints;
+                const massAfter = this.usedMassKg() + stack.totalMassKg();
+                const volAfter  = this.usedVolumeL() + stack.totalVolumeL();
+                const longest   = Math.max(this.longestItemCm(), stack.item.longestCm());
+                if (massAfter > cap.maxMassKg) return false;
+                if (volAfter  > cap.volumeL) return false;
+                if (longest   > cap.maxItemLengthCm) return false;
+                if (typeof cap.accepts === "function" && !cap.accepts(stack.item)) return false;
+                return true;
+            }
+
+            add(itemOrStack) {
+                const incoming = (itemOrStack instanceof ItemStack) ? itemOrStack : new ItemStack(itemOrStack, 1);
+                // Try merge first
+                if (incoming.stackable) {
+                    for (let i = 0; i < this.stacks.length && incoming.qty > 0; i++) {
+                        const s = this.stacks[i];
+                        if (s && s.canMerge(incoming) && s.qty < s.maxStack) {
+                            const space = s.maxStack - s.qty;
+                            const moved = Math.min(space, incoming.qty);
+                            const tmp = new ItemStack(incoming.item.clone(), moved);
+                            if (!this.fitsConstraints(tmp)) return false;
+                            s.qty += moved;
+                            incoming.qty -= moved;
+                        }
+                    }
+                    if (incoming.qty <= 0) return true;
+                }
+                // Place into a free slot
+                for (let i = 0; i < this.stacks.length; i++) {
+                    if (!this.stacks[i]) {
+                        const tmp = new ItemStack(incoming.item.clone(), incoming.qty);
+                        if (!this.fitsConstraints(tmp)) return false;
+                        this.stacks[i] = tmp;
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            removeByIndex(idx, qty = Infinity) {
+                const s = this.stacks[idx];
+                if (!s) return null;
+                const take = Math.min(qty, s.qty);
+                s.qty -= take;
+                if (s.qty <= 0) this.stacks[idx] = null;
+                return new ItemStack(s.item.clone(), take);
+            }
+        }
+
+        // ===================== EQUIPMENT =====================
+        // Enforces slot compatibility and 2H weapon occupancy.
+
+        class Equipment {
+            constructor() {
+                this.slots = new Map();
+                for (const s of ALL_SLOTS_ORDER) this.slots.set(s, null);
+                // Derived occupancy marker for two-handed
+                this._twoHandOccupantId = null;
+            }
+
+            get(slot) { return this.slots.get(slot) || null; }
+            all() { return Array.from(this.slots.entries()); }
+
+            // For legacy UI; maps to the 5 old labels
+            asLegacyRecord() {
+                return {
+                    Head: this.get(SLOT.Head),
+                    Body: this.get(SLOT.BodyArmor),
+                    Left: this.get(SLOT.LeftHand),
+                    Right: this.get(SLOT.RightHand),
+                    Belt: this.get(SLOT.Belt),
+                };
+            }
+
+            canEquipTo(slot, item) {
+                if (!(item instanceof Item)) return false;
+                if (!this.slots.has(slot)) return false;
+                if (!item.canEquipTo(slot)) return false;
+                // Two-handed weapon needs both hands free
+                if ((slot === SLOT.LeftHand || slot === SLOT.RightHand) && item.handsRequired === 2) {
+                    const other = (slot === SLOT.LeftHand) ? SLOT.RightHand : SLOT.LeftHand;
+                    if (this.get(other)) return false;
+                }
+                return true;
+            }
+
+            equipTo(slot, item) {
+                if (!this.canEquipTo(slot, item)) return false;
+                // Clear any two-hand occupancy first
+                if (this._twoHandOccupantId && (slot === SLOT.LeftHand || slot === SLOT.RightHand)) {
+                    this.slots.set(SLOT.LeftHand, null);
+                    this.slots.set(SLOT.RightHand, null);
+                    this._twoHandOccupantId = null;
+                }
+                this.slots.set(slot, item);
+                // If 2H, occupy both hands
+                if ((slot === SLOT.LeftHand || slot === SLOT.RightHand) && item.handsRequired === 2) {
+                    const other = (slot === SLOT.LeftHand) ? SLOT.RightHand : SLOT.LeftHand;
+                    this.slots.set(other, item); // same reference
+                    this._twoHandOccupantId = item.id;
+                }
+                return true;
+            }
+
+            unequip(slot) {
+                const it = this.get(slot);
+                // If removing a 2H item from either hand, clear both
+                if (it && (slot === SLOT.LeftHand || slot === SLOT.RightHand) && it.handsRequired === 2) {
+                    this.slots.set(SLOT.LeftHand, null);
+                    this.slots.set(SLOT.RightHand, null);
+                    this._twoHandOccupantId = null;
+                    return it;
+                }
+                this.slots.set(slot, null);
+                return it;
+            }
+
+            getLightRadius() {
+                let r = 1;
+                for (const [, it] of this.slots) if (it && it.lightRadius) r = Math.max(r, it.lightRadius);
+                return r;
+            }
+
+            currentBackpackConstraints() {
+                const pack = this.get(SLOT.Backpack);
+                return pack && pack.container ? {
+                    volumeL: pack.container.volumeL,
+                    maxMassKg: pack.container.maxMassKg,
+                    maxItemLengthCm: pack.container.maxItemLengthCm,
+                    accepts: pack.container.accepts || null
+                } : null;
+            }
+        }
+
+        // ===================== MOB SYSTEM =====================
+
+        let __mobAutoId = 1;
+
+        class Mob {
+            constructor(o) {
+                this.id = __mobAutoId++;
+                this.kind = o.kind;
+                this.name = o.name;
+                this.x = o.x | 0;
+                this.y = o.y | 0;
+                this.hp = o.hp ?? 10;
+                this.maxHp = this.hp;
+                this.speed = o.speed ?? 1;
+                this.glyph = o.glyph ?? "?";
+                this.color = o.color ?? "#fff";
+                this.equipment = new Equipment();
+                this.inventory = new Inventory(20);
+            }
+            get pos() { return { x: this.x, y: this.y }; }
+            set pos(p) { this.x = p.x | 0; this.y = p.y | 0; }
+            lightRadius() { return this.equipment.getLightRadius(); }
+
+            canOccupy(x, y, maze, mobManager = null) {
+                if (y < 0 || y >= maze.length || x < 0 || x >= maze[0].length) return false;
+                if (maze[y][x] === 1) return false;
+                if (mobManager && mobManager.getMobAt(x, y)) return false;
+                return true;
+            }
+            tryMove(dx, dy, maze, mobManager = null) {
+                const nx = this.x + dx, ny = this.y + dy;
+                if (this.canOccupy(nx, ny, maze, mobManager)) { this.x = nx; this.y = ny; return true; }
+                return false;
+            }
+            takeTurn(gameCtx) { /* no-op base */ }
+        }
+
+        class Player extends Mob {
+            constructor(o) { super({ kind: "player", glyph: "@", color: "#fff", ...o }); }
+        }
+
+        class Monster extends Mob {
+            constructor(o) {
+                super({ kind: "monster", glyph: "m", color: "#f99", ...o });
+                this.aggroRange = o.aggroRange ?? 8;
+            }
+            takeTurn(gameCtx) {
+                const { player, maze } = gameCtx;
+                const dx = player.x - this.x, dy = player.y - this.y;
+                const dist = Math.abs(dx) + Math.abs(dy);
+                if (dist === 0) return;
+                if (dist <= this.aggroRange) {
+                    const step = Math.abs(dx) > Math.abs(dy) ? { dx: Math.sign(dx), dy: 0 } : { dx: 0, dy: Math.sign(dy) };
+                    if (!this.tryMove(step.dx, step.dy, maze, gameCtx.mobManager)) {
+                        const alt = (step.dx !== 0) ? { dx: 0, dy: Math.sign(dy) } : { dx: Math.sign(dx), dy: 0 };
+                        this.tryMove(alt.dx, alt.dy, maze, gameCtx.mobManager);
+                    }
+                } else {
+                    const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
+                    const [mx, my] = dirs[(Math.random() * dirs.length) | 0];
+                    this.tryMove(mx, my, maze, gameCtx.mobManager);
+                }
+            }
+        }
+
+        class MobManager {
+            constructor() { this.list = []; this.index = new Map(); }
+            add(m) { this.list.push(m); this.reindex(); return m; }
+            removeById(id) { this.list = this.list.filter(x => x.id !== id); this.reindex(); }
+            getMobAt(x, y) { return this.index.get(`${x},${y}`) || null; }
+            reindex() { this.index.clear(); for (const m of this.list) this.index.set(`${m.x},${m.y}`, m); }
+            tick(gameCtx) { for (const m of this.list) if (m.kind !== "player") m.takeTurn(gameCtx); this.reindex(); }
+        }
+
+        // --- ITEM TEMPLATES ---
+        // Weapons
+        registerItem({
+            id:"dagger", name:"Dagger", kind:"weapon",
+            equipSlots:[SLOT.LeftHand, SLOT.RightHand, SLOT.Belt1, SLOT.Belt2, SLOT.Belt3, SLOT.Belt4],
+            handsRequired:1,
+            dims:{l:30,w:4,h:2}, mass:0.4
+        });
+        registerItem({
+            id:"short_sword", name:"Short Sword", kind:"weapon",
+            equipSlots:[SLOT.LeftHand, SLOT.RightHand, SLOT.Belt1, SLOT.Belt2, SLOT.Belt3, SLOT.Belt4],
+            handsRequired:1,
+            dims:{l:75,w:5,h:3}, mass:1.2
+        });
+        registerItem({
+            id:"long_sword", name:"Longsword", kind:"weapon",
+            equipSlots:[SLOT.LeftHand, SLOT.RightHand, SLOT.Belt1, SLOT.Belt2],
+            handsRequired:1,
+            dims:{l:110,w:5,h:3}, mass:1.6
+        });
+        registerItem({
+            id:"halberd", name:"Halberd", kind:"weapon",
+            equipSlots:[SLOT.LeftHand, SLOT.RightHand], // cannot belt-carry or backpack
+            handsRequired:2,
+            dims:{l:210,w:20,h:4}, mass:3.5
+        });
+
+        // Armor and wearables
+        registerItem({ id:"leather_cap", name:"Leather Cap", kind:"armor",
+            equipSlots:[SLOT.Head], dims:{l:25,w:20,h:15}, mass:0.6
+        });
+        registerItem({ id:"basic_clothes", name:"Basic Clothes", kind:"armor",
+            equipSlots:[SLOT.BodyArmor], dims:{l:40,w:30,h:10}, mass:1.0
+        });
+        registerItem({ id:"cloak", name:"Cloak", kind:"armor",
+            equipSlots:[SLOT.Cloak], dims:{l:50,w:35,h:10}, mass:1.2
+        });
+        registerItem({ id:"boots", name:"Boots", kind:"armor",
+            equipSlots:[SLOT.Boots], dims:{l:35,w:25,h:15}, mass:1.5
+        });
+        registerItem({ id:"gloves", name:"Gloves", kind:"armor",
+            equipSlots:[SLOT.Gloves], dims:{l:20,w:12,h:6}, mass:0.3
+        });
+
+        // Jewelry
+        registerItem({ id:"ring_plain", name:"Plain Ring", kind:"jewelry",
+            equipSlots:[SLOT.LeftRing, SLOT.RightRing], dims:{l:3,w:3,h:1}, mass:0.02, stackable:false
+        });
+        registerItem({ id:"amulet_simple", name:"Amulet", kind:"jewelry",
+            equipSlots:[SLOT.Amulet], dims:{l:5,w:4,h:1}, mass:0.05
+        });
+
+        // Light sources
+        registerItem({ id:"torch", name:"Torch", kind:"tool",
+            equipSlots:[SLOT.LeftHand, SLOT.RightHand, SLOT.Belt1, SLOT.Belt2, SLOT.Belt3, SLOT.Belt4],
+            dims:{l:30,w:4,h:4}, mass:0.5, stackable:true, maxStack:20, lightRadius:2
+        });
+        registerItem({ id:"lantern", name:"Lantern", kind:"tool",
+            equipSlots:[SLOT.LeftHand, SLOT.RightHand, SLOT.Belt1, SLOT.Belt2, SLOT.Belt3, SLOT.Belt4],
+            dims:{l:18,w:12,h:12}, mass:0.9, lightRadius:5
+        });
+
+        // Belt garment and attachments
+        registerItem({ id:"belt_leather", name:"Leather Belt", kind:"armor",
+            equipSlots:[SLOT.Belt], dims:{l:20,w:10,h:5}, mass:0.3
+        });
+
+        // Pouch that sits on a belt slot; we treat it as “equipped” to Belt1–4 and it is a tiny container
+        registerItem({
+            id:"pouch_small", name:"Small Pouch", kind:"container",
+            equipSlots:[SLOT.Belt1, SLOT.Belt2, SLOT.Belt3, SLOT.Belt4],
+            dims:{l:10,w:8,h:4}, mass:0.1,
+            container:{ volumeL: 0.6, maxMassKg: 1.0, maxItemLengthCm: 12,
+                        accepts: (it)=> it.kind==="ammo" || it.mass<=0.2 }
+        });
+
+        // Backpacks (choose one equipped at SLOT.Backpack). Capacity and length gates enforced.
+        registerItem({
+            id:"pack_sack", name:"Cloth Sack", kind:"container",
+            equipSlots:[SLOT.Backpack],
+            dims:{l:40,w:30,h:10}, mass:0.6,
+            container:{ volumeL: 20, maxMassKg: 12, maxItemLengthCm: 60,
+                        accepts: (it)=> it.longestCm() <= 60 }
+        });
+        registerItem({
+            id:"pack_rucksack", name:"Rucksack", kind:"container",
+            equipSlots:[SLOT.Backpack],
+            dims:{l:60,w:35,h:20}, mass:1.8,
+            container:{ volumeL: 45, maxMassKg: 25, maxItemLengthCm: 80,
+                        accepts: (it)=> it.longestCm() <= 80 }
+        });
+        registerItem({
+            id:"pack_frame", name:"Frame Pack", kind:"container",
+            equipSlots:[SLOT.Backpack],
+            dims:{l:80,w:40,h:25}, mass:2.6,
+            container:{ volumeL: 65, maxMassKg: 30, maxItemLengthCm: 120,
+                        accepts: (it)=> it.longestCm() <= 120 }
+        });
+
+        // Quiver and ammo
+        registerItem({
+            id:"quiver_std", name:"Quiver", kind:"container",
+            equipSlots:[SLOT.Quiver],
+            dims:{l:70,w:15,h:8}, mass:0.5,
+            container:{ volumeL: 6, maxMassKg: 5, maxItemLengthCm: 80,
+                        accepts: (it)=> it.kind==="ammo" && it.id.startsWith("arrow_") }
+        });
+        registerItem({
+            id:"arrow_wood", name:"Wooden Arrow", kind:"ammo",
+            equipSlots:[], stackable:true, maxStack:99,
+            dims:{l:75,w:1,h:1}, mass:0.03
+        });
+
+
+        // --- UTILITY FUNCTIONS ---
+        function shuffle(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        }
+        function posKey(pos) {
+            return `${pos.x},${pos.y}`;
+        }
+        
+        const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+        const randChoice = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
+        function getLightRadius() {
+            return player && player.equipment ? player.equipment.getLightRadius() : 1;
+        }
+
+        function bresenhamLine(x0, y0, x1, y1) {
+            const points = [];
+            let dx = Math.abs(x1 - x0);
+            let dy = Math.abs(y1 - y0);
+            let sx = x0 < x1 ? 1 : -1;
+            let sy = y0 < y1 ? 1 : -1;
+            let err = dx - dy;
+            while (true) {
+                points.push({x: x0, y: y0});
+                if (x0 === x1 && y0 === y1) break;
+                const e2 = 2 * err;
+                if (e2 > -dy) { err -= dy; x0 += sx; }
+                if (e2 < dx) { err += dx; y0 += sy; }
+            }
+            return points;
+        }
+        function isVisible(targetX, targetY, pos, sim = false) {
+            const lightRadius = getLightRadius();
+            if (Math.hypot(targetX - pos.x, targetY - pos.y) > lightRadius) return false;
+            const line = bresenhamLine(pos.x, pos.y, targetX, targetY).slice(1, -1);
+            for (const pt of line) {
+                if (pt.x < 0 || pt.x >= MAP_W || pt.y < 0 || pt.y >= MAP_H) return false;
+                const val = sim ? knownGrid[pt.y][pt.x] : maze[pt.y][pt.x];
+                if (val === 1) return false;
+            }
+            return true;
+        }
+        function computeVisibleCells(pos) {
+            const lightRadius = getLightRadius();
+            const minX = Math.max(0, pos.x - lightRadius - 1);
+            const maxX = Math.min(MAP_W - 1, pos.x + lightRadius + 1);
+            const minY = Math.max(0, pos.y - lightRadius - 1);
+            const maxY = Math.min(MAP_H - 1, pos.y + lightRadius + 1);
+            const losCells = new Set();
+            for (let y = minY; y <= maxY; y++) {
+                for (let x = minX; x <= maxX; x++) {
+                    if (isVisible(x, y, pos, false)) {
+                        losCells.add(posKey({x, y}));
+                    }
+                }
+            }
+            const visibleCells = new Set(losCells);
+            for (const cellKey of losCells) {
+                const [x, y] = cellKey.split(',').map(Number);
+                if (maze[y][x] === 0) {
+                    const neighbors = [
+                        {x: x, y: y-1}, {x: x, y: y+1}, {x: x-1, y: y}, {x: x+1, y: y}
+                    ];
+                    for (const n of neighbors) {
+                        if (n.x >= 0 && n.x < MAP_W && n.y >= 0 && n.y < MAP_H && maze[n.y][n.x] === 1) {
+                            visibleCells.add(posKey(n));
+                        }
+                    }
+                }
+            }
+            return visibleCells;
+        }
+        // --- A* PATHFINDING FOR MAP VALIDATION ---
+        function inBounds(grid, x, y) {
+            return y >= 0 && y < grid.length && x >= 0 && x < grid[0].length;
+        }
+        function aStarPath(grid, start, end) {
+            const heuristic = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+            const openSet = [];
+            const closedSet = new Set();
+            const cameFrom = new Map();
+            const gScore = new Map();
+            const fScore = new Map();
+            const startKey = posKey(start);
+            gScore.set(startKey, 0);
+            fScore.set(startKey, heuristic(start, end));
+            openSet.push(start);
+            while (openSet.length > 0) {
+                let lowestIndex = 0;
+                for (let i = 1; i < openSet.length; i++) {
+                    const fA = fScore.get(posKey(openSet[i])) || Infinity;
+                    const fB = fScore.get(posKey(openSet[lowestIndex])) || Infinity;
+                    if (fA < fB) {
+                        lowestIndex = i;
+                    }
+                }
+                const current = openSet.splice(lowestIndex, 1)[0];
+                const currentKey = posKey(current);
+                if (current.x === end.x && current.y === end.y) {
+                    const path = [];
+                    let temp = current;
+                    while (temp) {
+                        path.unshift(temp);
+                        temp = cameFrom.get(posKey(temp));
+                    }
+                    return path;
+                }
+                closedSet.add(currentKey);
+                const neighbors = [
+                    {x: current.x, y: current.y - 1}, {x: current.x, y: current.y + 1},
+                    {x: current.x - 1, y: current.y}, {x: current.x + 1, y: current.y}
+                ];
+                for (const neighbor of neighbors) {
+                    if (!inBounds(grid, neighbor.x, neighbor.y) || grid[neighbor.y][neighbor.x] === 1) {
+                        continue;
+                    }
+                    const neighborKey = posKey(neighbor);
+                    if (closedSet.has(neighborKey)) {
+                        continue;
+                    }
+                    const tentativeGScore = (gScore.get(currentKey) || 0) + 1;
+                    if (!openSet.some(node => posKey(node) === neighborKey) || tentativeGScore < (gScore.get(neighborKey) || Infinity)) {
+                        cameFrom.set(neighborKey, current);
+                        gScore.set(neighborKey, tentativeGScore);
+                        fScore.set(neighborKey, tentativeGScore + heuristic(neighbor, end));
+                        if (!openSet.some(node => posKey(node) === neighborKey)) {
+                            openSet.push(neighbor);
+                        }
+                    }
+                }
+            }
+            return null; // No path found
+        }
+        
+        // --- DUNGEON SHAPE GENERATION HELPERS ---
+        function manhattanEdgeDistanceRect(A, B) {
+            const dx = Math.max(0, B.x0 - A.x1, A.x0 - B.x1);
+            const dy = Math.max(0, B.y0 - A.y1, A.y0 - B.y1);
+            return dx + dy;
+        }
+        function pointInPoly(x, y, poly) {
+            let inside = false;
+            for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+                const xi = poly[i].x, yi = poly[i].y;
+                const xj = poly[j].x, yj = poly[j].y;
+                const intersect =
+                    ((yi > y) !== (yj > y)) &&
+                    (x < ((xj - xi) * (y - yi)) / (yj - yi) + xi);
+                if (intersect) inside = !inside;
+            }
+            return inside;
+        }
+        function rasterizeRegularPolygon(n, targetArea, minSide) {
+            const twoPi = Math.PI * 2;
+            const sin = Math.sin;
+            const areaToR = (A) => Math.sqrt((2 * A) / (n * sin(twoPi / n)));
+            const Rmin = minSide / (2 * sin(Math.PI / n));
+            let R = Math.max(areaToR(targetArea), Rmin);
+            const tryBuild = (Rtry) => {
+                const w = Math.ceil(2 * Rtry) + 2; const h = w;
+                const cx = w / 2, cy = h / 2;
+                const verts = [];
+                for (let i = 0; i < n; i++) {
+                    const ang = (twoPi * i) / n - Math.PI / n;
+                    verts.push({ x: cx + Rtry * Math.cos(ang), y: cy + Rtry * Math.sin(ang) });
+                }
+                const tiles = [];
+                for (let ty = 0; ty < h; ty++) {
+                    for (let tx = 0; tx < w; tx++) {
+                        const cxCell = tx + 0.5, cyCell = ty + 0.5;
+                        if (pointInPoly(cxCell, cyCell, verts)) {
+                            tiles.push({ x: tx, y: ty });
+                        }
+                    }
+                }
+                return { tiles, width: w, height: h };
+            };
+            let out = tryBuild(R);
+            const measured = out.tiles.length;
+            if (measured < 0.9 * targetArea || measured > 1.1 * targetArea) {
+                const scale = Math.sqrt(targetArea / Math.max(1, measured));
+                R = Math.max(R * scale, Rmin);
+                out = tryBuild(R);
+            }
+            return out;
+        }
+        function rasterizeDisc(targetArea, minSide) {
+            let R = Math.sqrt(targetArea / Math.PI);
+            R = Math.max(R, minSide);
+            const w = Math.ceil(2 * R) + 2; const h = w;
+            const cx = w / 2, cy = h / 2;
+            const R2 = R * R;
+            const tiles = [];
+            for (let y = 0; y < h; y++) {
+                for (let x = 0; x < w; x++) {
+                    const dx = (x + 0.5) - cx;
+                    const dy = (y + 0.5) - cy;
+                    if (dx * dx + dy * dy <= R2) tiles.push({ x, y });
+                }
+            }
+            const measured = tiles.length;
+            if (measured < 0.9 * targetArea || measured > 1.1 * targetArea) {
+                const scale = Math.sqrt(targetArea / Math.max(1, measured));
+                const R2b = Math.max(R * scale, minSide);
+                return rasterizeDisc(Math.PI * R2b * R2b, minSide);
+            }
+            return { tiles, width: w, height: h };
+        }
+        function rasterizeRectLike(targetArea, minSide, kind) {
+            let w, h;
+            if (kind === 'square') {
+                const s = Math.max(minSide, Math.round(Math.sqrt(targetArea)));
+                w = s; h = s;
+            } else {
+                const ratio = 1 + Math.random() * 1.5; // 1.0..2.5
+                w = Math.max(minSide, Math.round(Math.sqrt(targetArea * ratio)));
+                h = Math.max(minSide, Math.round(targetArea / w));
+                if (w * h < targetArea) {
+                    if (w < h) w = Math.max(w + 1, minSide);
+                    else h = Math.max(h + 1, minSide);
+                }
+            }
+            const tiles = [];
+            for (let y = 0; y < h; y++) { for (let x = 0; x < w; x++) tiles.push({ x, y }); }
+            return { tiles, width: w, height: h };
+        }
+        function rasterizeCross(targetArea, minSide) {
+            const armWidth = Math.max(3, Math.round(clamp(minSide / 2, 3, 10)));
+            // Area = 2 * L * armWidth - armWidth^2
+            const L = Math.round((targetArea + armWidth * armWidth) / (2 * armWidth));
+            const size = Math.max(L, minSide, armWidth * 3);
+            const halfSize = Math.floor(size / 2);
+            const halfArm = Math.floor(armWidth / 2);
+
+            const tiles = [];
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    const isHorizontal = Math.abs(y - halfSize) <= halfArm;
+                    const isVertical = Math.abs(x - halfSize) <= halfArm;
+                    if (isHorizontal || isVertical) {
+                        tiles.push({ x, y });
+                    }
+                }
+            }
+            return { width: size, height: size, tiles };
+        }
+        function rasterizeX(targetArea, minSide) {
+            let size = Math.max(minSide, Math.round(Math.sqrt(targetArea * 0.9))); // Initial guess
+
+            const countFor = (S) => {
+                const armWidth = Math.max(3, Math.round(clamp(S / 5, 3, 9)));
+                const tiles = new Set();
+                const halfArm = Math.floor(armWidth / 2);
+                for (let i = 0; i < S; i++) {
+                    for (let w = -halfArm; w <= halfArm; w++) {
+                        // Main diagonal segment
+                        if (i + w >= 0 && i + w < S) tiles.add(`${i},${i+w}`);
+                        // Anti-diagonal segment
+                        if ((S - 1 - i) + w >= 0 && (S - 1 - i) + w < S) tiles.add(`${i},${(S - 1 - i) + w}`);
+                    }
+                }
+                return tiles.size;
+            };
+            
+            let areaNow = countFor(size);
+            let guard = 0;
+            const within = (val, tgt) => Math.abs(val - tgt) <= Math.max(15, Math.floor(tgt * 0.15));
+            while (!within(areaNow, targetArea) && guard++ < 50) {
+                const ratio = Math.sqrt(targetArea / areaNow);
+                let nextSize = Math.round(size * ratio);
+                if (nextSize === size) nextSize = areaNow < targetArea ? size + 1 : size -1;
+                size = Math.max(minSide, nextSize);
+                areaNow = countFor(size);
+            }
+
+            const finalTiles = [];
+            const armWidth = Math.max(3, Math.round(clamp(size / 5, 3, 9)));
+            const tileSet = new Set();
+            const halfArm = Math.floor(armWidth / 2);
+             for (let i = 0; i < size; i++) {
+                for (let w = -halfArm; w <= halfArm; w++) {
+                    if (i + w >= 0 && i + w < size) tileSet.add(`${i},${i+w}`);
+                    if ((size - 1 - i) + w >= 0 && (size - 1 - i) + w < size) tileSet.add(`${i},${(size - 1 - i) + w}`);
+                }
+            }
+            tileSet.forEach(key => {
+                const [x, y] = key.split(',').map(Number);
+                finalTiles.push({x, y});
+            });
+
+            return { width: size, height: size, tiles: finalTiles };
+        }
+        function rasterizeRingHub(targetArea, minSide) {
+            const orient = randChoice(['h', 'v']);
+            const cw = Math.max(1, Math.floor(Math.max(2, minSide / 6)));
+
+            let R = Math.max(minSide, Math.ceil(Math.sqrt(targetArea / Math.PI)));
+
+            const chooseParams = (R) => {
+                const w = clamp(Math.floor(R / 4), 2, Math.max(2, Math.floor(minSide / 2)));
+                const rcMax = Math.max(2, R - w - 3);
+                const rc = clamp(Math.floor(R / 3), 2, rcMax);
+                return { w, rc };
+            };
+
+            const countFor = (R) => {
+                const { w, rc } = chooseParams(R);
+                const S = 2 * R + 1;
+                const half = R;
+                let c = 0;
+
+                const tInner2 = (R - w) * (R - w);
+                const tOuter2 = R * R;
+                const hub2 = rc * rc;
+                const halfCW = Math.floor((cw - 1) / 2);
+
+                if (orient === 'h') {
+                    for (let y = -half; y <= half; y++) {
+                        for (let x = -half; x <= half; x++) {
+                            const r2 = x * x + y * y;
+                            const inRing = (r2 <= tOuter2) && (r2 >= tInner2);
+                            const inHub = (r2 <= hub2);
+                            const inCorr = (Math.abs(y) <= halfCW && x >= rc && x <= (R - w));
+                            if (inRing || inHub || inCorr) c++;
+                        }
+                    }
+                } else {
+                    for (let y = -half; y <= half; y++) {
+                        for (let x = -half; x <= half; x++) {
+                            const r2 = x * x + y * y;
+                            const inRing = (r2 <= tOuter2) && (r2 >= tInner2);
+                            const inHub = (r2 <= hub2);
+                            const inCorr = (Math.abs(x) <= halfCW && y >= rc && y <= (R - w));
+                            if (inRing || inHub || inCorr) c++;
+                        }
+                    }
+                }
+                return c;
+            };
+
+            const within = (val, tgt) => Math.abs(val - tgt) <= Math.max(12, Math.floor(tgt * 0.10));
+            let areaNow = countFor(R);
+            let guard = 0;
+            while (!within(areaNow, targetArea) && guard++ < 200) {
+                if (areaNow < targetArea) R += 1;
+                else if (R > minSide + 2) R -= 1;
+                else break;
+                areaNow = countFor(R);
+            }
+
+            const { w, rc } = chooseParams(R);
+            const S = 2 * R + 1;
+            const half = R;
+            const tiles = [];
+
+            const tInner2 = (R - w) * (R - w);
+            const tOuter2 = R * R;
+            const hub2 = rc * rc;
+            const halfCW = Math.floor((cw - 1) / 2);
+
+            if (orient === 'h') {
+                for (let y = -half; y <= half; y++) {
+                    for (let x = -half; x <= half; x++) {
+                        const r2 = x * x + y * y;
+                        const inRing = (r2 <= tOuter2) && (r2 >= tInner2);
+                        const inHub = (r2 <= hub2);
+                        const inCorr = (Math.abs(y) <= halfCW && x >= rc && x <= (R - w));
+                        if (inRing || inHub || inCorr) tiles.push({ x: x + half, y: y + half });
+                    }
+                }
+            } else {
+                for (let y = -half; y <= half; y++) {
+                    for (let x = -half; x <= half; x++) {
+                        const r2 = x * x + y * y;
+                        const inRing = (r2 <= tOuter2) && (r2 >= tInner2);
+                        const inHub = (r2 <= hub2);
+                        const inCorr = (Math.abs(x) <= halfCW && y >= rc && y <= (R - w));
+                        if (inRing || inHub || inCorr) tiles.push({ x: x + half, y: y + half });
+                    }
+                }
+            }
+
+            return { width: S, height: S, tiles };
+        }
+        function makeShape(targetArea, minSide) {
+            const shape = randChoice(['square', 'rectangle', 'round', 'hex', 'oct', 'cross', 'x', 'ringhub']);
+            if (shape === 'square')    return { kind: 'square',    ...rasterizeRectLike(targetArea, minSide, 'square') };
+            if (shape === 'rectangle') return { kind: 'rectangle', ...rasterizeRectLike(targetArea, minSide, 'rectangle') };
+            if (shape === 'round')     return { kind: 'round',     ...rasterizeDisc(targetArea, minSide) };
+            if (shape === 'hex')       return { kind: 'hex',       ...rasterizeRegularPolygon(6, targetArea, minSide) };
+            if (shape === 'oct')       return { kind: 'oct',       ...rasterizeRegularPolygon(8, targetArea, minSide) };
+            if (shape === 'cross')     return { kind: 'cross',     ...rasterizeCross(targetArea, minSide) };
+            if (shape === 'x')         return { kind: 'x',         ...rasterizeX(targetArea, minSide) };
+            return { kind: 'ringhub', ...rasterizeRingHub(targetArea, minSide) };
+        }
+        function canPlace(bbox, placed, minSpacing) {
+            for (const r of placed) {
+                const overlap = !(bbox.x1 < r.x0 || bbox.x0 > r.x1 || bbox.y1 < r.y0 || bbox.y0 > r.y1);
+                if (overlap) return false;
+                const l1 = manhattanEdgeDistanceRect(bbox, r);
+                if (l1 < minSpacing) return false;
+            }
+            return true;
+        }
+
+        // -------------------------------------------------------------
+        // Large-Rooms-Only Dungeon Generator (dynamic map, wall buffer)
+        // Floors = 0, Walls = 1
+        // -------------------------------------------------------------
+        function generateLargeRoomsMap(options = {}) {
+            const cfg = {
+                roomCountRange: [1, 11],
+                areaRange: [300, 750],
+                minSide: 8, // tiles; for round => diameter >= 2*minSide
+                minL1EdgeSpacing: 30, // tiles; Manhattan edge-to-edge distance
+                border: 15, // outer wall buffer thickness
+                maxAttemptsPerRoom: 600,
+                ...options
+            };
+            const randInt = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+            
+            const desiredRooms = randInt(cfg.roomCountRange[0], cfg.roomCountRange[1]);
+            const bigRooms = [];
+            for (let i = 0; i < desiredRooms; i++) {
+                const area = randInt(cfg.areaRange[0], cfg.areaRange[1]);
+                bigRooms.push(makeShape(area, cfg.minSide));
+            }
+            const placed = [];
+            let searchRadius = 0;
+            for (const room of bigRooms) {
+                let placedOK = false;
+                const baseR = (searchRadius += Math.max(room.width, room.height) + cfg.minL1EdgeSpacing);
+                for (let attempt = 0; attempt < cfg.maxAttemptsPerRoom; attempt++) {
+                    const R = baseR + Math.floor(attempt / 10) * 10;
+                    const tx = randInt(-R, R);
+                    const ty = randInt(-R, R);
+                    const bbox = { x0: tx, y0: ty, x1: tx + room.width - 1, y1: ty + room.height - 1 };
+                    if (!canPlace(bbox, placed, cfg.minL1EdgeSpacing)) continue;
+                    placed.push({ ...room, x0: bbox.x0, y0: bbox.y0, x1: bbox.x1, y1: bbox.y1, tiles: room.tiles.map(t => ({ x: tx + t.x, y: ty + t.y })), });
+                    placedOK = true;
+                    break;
+                }
+            }
+            if (placed.length === 0) {
+                const fallback = rasterizeRectLike(clamp((cfg.areaRange[0] + cfg.areaRange[1]) >> 1, 300, 750), cfg.minSide, 'square');
+                placed.push({ kind: 'square', ...fallback, x0: 0, y0: 0, x1: fallback.width - 1, y1: fallback.height - 1, tiles: fallback.tiles.map(t => ({ x: t.x, y: t.y })), });
+            }
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            for (const r of placed) {
+                minX = Math.min(minX, r.x0); minY = Math.min(minY, r.y0);
+                maxX = Math.max(maxX, r.x1); maxY = Math.max(maxY, r.y1);
+            }
+            const innerW = maxX - minX + 1; const innerH = maxY - minY + 1;
+            const W = innerW + 2 * cfg.border; const H = innerH + 2 * cfg.border;
+            const grid = Array.from({ length: H }, () => Array(W).fill(1));
+            const ox = -minX + cfg.border; const oy = -minY + cfg.border;
+            for (const r of placed) {
+                for (const t of r.tiles) {
+                    const gx = t.x + ox; const gy = t.y + oy;
+                    if (gy >= 0 && gy < H && gx >= 0 && gx < W) grid[gy][gx] = 0;
+                }
+            }
+            return {
+                grid, width: W, height: H,
+                rooms: placed.map(r => ({
+                    kind: r.kind,
+                    bbox: { x0: r.x0 + ox, y0: r.y0 + oy, x1: r.x1 + ox, y1: r.y1 + oy },
+                    center: { x: Math.floor((r.x0 + r.x1) / 2) + ox, y: Math.floor((r.y0 + r.y1) / 2) + oy }
+                })),
+                meta: {
+                    border: cfg.border, minL1EdgeSpacing: cfg.minL1EdgeSpacing,
+                    minSide: cfg.minSide, requestedRooms: desiredRooms, placedRooms: placed.length
+                }
+            };
+        }
+        // --- DELAUNAY TRIANGULATION IMPLEMENTATION ---
+        class Vertex {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+            }
+            equals(vertex) {
+                return this.x === vertex.x && this.y === vertex.y;
+            }
+        }
+
+        class Edge {
+            constructor(v0, v1) {
+                this.v0 = v0;
+                this.v1 = v1;
+            }
+            equals(edge) {
+                return (this.v0.equals(edge.v0) && this.v1.equals(edge.v1)) ||
+                       (this.v0.equals(edge.v1) && this.v1.equals(edge.v0));
+            }
+        }
+
+        class Triangle {
+            constructor(v0, v1, v2) {
+                this.v0 = v0;
+                this.v1 = v1;
+                this.v2 = v2;
+                this.circumCirc = calcCircumCirc(v0, v1, v2);
+            }
+            inCircumcircle(v) {
+                const dx = this.circumCirc.c.x - v.x;
+                const dy = this.circumCirc.c.y - v.y;
+                return Math.sqrt(dx * dx + dy * dy) <= this.circumCirc.r;
+            }
+        }
+
+        function calcCircumCirc(v0, v1, v2) {
+            const ax = v0.x, ay = v0.y;
+            const bx = v1.x, by = v1.y;
+            const cx = v2.x, cy = v2.y;
+            const d = 2 * (ax*(by - cy) + bx*(cy - ay) + cx*(ay - by));
+            if (d === 0) return {c: {x:0,y:0}, r: Infinity}; // collinear
+            const ux = ((ax*ax + ay*ay)*(by - cy) + (bx*bx + by*by)*(cy - ay) + (cx*cx + cy*cy)*(ay - by)) / d;
+            const uy = ((ax*ax + ay*ay)*(cx - bx) + (bx*bx + by*by)*(ax - cx) + (cx*cx + cy*cy)*(bx - ax)) / d;
+            const center = {x: ux, y: uy};
+            const r = Math.sqrt( (ax - ux)**2 + (ay - uy)**2 );
+            return {c: center, r: r};
+        }
+        function superTriangle(vertices) {
+            var minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
+            vertices.forEach(function(vertex) {
+                minx = Math.min(minx, vertex.x);
+                miny = Math.min(miny, vertex.y);
+                maxx = Math.max(maxx, vertex.x);
+                maxy = Math.max(maxy, vertex.y);
+            });
+            var dx = (maxx - minx) * 10, dy = (maxy - miny) * 10;
+            var v0 = new Vertex(minx - dx, miny - dy * 3),
+                v1 = new Vertex(minx - dx, maxy + dy),
+                v2 = new Vertex(maxx + dx * 3, maxy + dy);
+            return new Triangle(v0, v1, v2);
+        }
+        function addVertex(vertex, triangles) {
+            var edges = [];
+            triangles = triangles.filter(function(triangle) {
+                if (triangle.inCircumcircle(vertex)) {
+                    edges.push(new Edge(triangle.v0, triangle.v1));
+                    edges.push(new Edge(triangle.v1, triangle.v2));
+                    edges.push(new Edge(triangle.v2, triangle.v0));
+                    return false;
+                }
+                return true;
+            });
+            edges = uniqueEdges(edges);
+            edges.forEach(function(edge) {
+                triangles.push(new Triangle(edge.v0, edge.v1, vertex));
+            });
+            return triangles;
+        }
+        function uniqueEdges(edges) {
+            const uniqueEdgesMap = new Map();
+            for (const edge of edges) {
+                // Create a consistent key regardless of vertex order
+                const key = edge.v0.x < edge.v1.x || (edge.v0.x === edge.v1.x && edge.v0.y < edge.v1.y)
+                    ? `${posKey(edge.v0)}-${posKey(edge.v1)}`
+                    : `${posKey(edge.v1)}-${posKey(edge.v0)}`;
+                
+                if (uniqueEdgesMap.has(key)) {
+                    uniqueEdgesMap.delete(key); // Found a pair, so it's not unique
+                } else {
+                    uniqueEdgesMap.set(key, edge); // First time seeing this edge
+                }
+            }
+            return Array.from(uniqueEdgesMap.values());
+        }
+        function triangulate(vertices) {
+            var st = superTriangle(vertices);
+            var triangles = [st];
+            vertices.forEach(function(vertex) {
+                triangles = addVertex(vertex, triangles);
+            });
+            triangles = triangles.filter(function(triangle) {
+                return !(triangle.v0.equals(st.v0) || triangle.v0.equals(st.v1) || triangle.v0.equals(st.v2) ||
+                       triangle.v1.equals(st.v0) || triangle.v1.equals(st.v1) || triangle.v1.equals(st.v2) ||
+                       triangle.v2.equals(st.v0) || triangle.v2.equals(st.v1) || triangle.v2.equals(st.v2));
+            });
+            return triangles;
+        }
+        // ============================================================
+        // HYBRID DUNGEON GENERATOR
+        // Large-room scaffold (test2) + small-room fill (test) + corridors at the end
+        // Floors = 0, Walls = 1
+        // ============================================================
+        // ----- CONFIG -----
+        const HYBRID_CFG = {
+          // Large-room scaffold (delegates to your existing makeShape etc.)
+          large: {
+            roomCountRange: [1, 11],
+            areaRange: [300, 750],
+            minSide: 8,
+            minL1EdgeSpacing: 30,
+            border: 15,
+            maxAttemptsPerRoom: 600,
+          },
+          // Small-room fill (rectangles like test.html)
+          small: {
+            candidateCount: 320, // how many rects to seed before separation
+            minSize: { w: 5, h: 5 }, // minimum kept room size
+            maxSize: { w: 14, h: 12 },// soft cap; separation rounds these
+            separationIters: 80, // physics-style push iterations
+            keepRatio: 1.0, // keep all that pass filters; tune down if too dense
+            clearanceFromLarge: 2, // tiles of clearance from large rooms' solids
+          },
+          // Corridors
+          corridors: {
+            extraEdgeFraction: 0.15, // add 15% of non-MST edges for loops
+            rescueConnectivity: true, // ensure all rooms connected with BFS + L-corridors
+          }
+        };
+        // Utility
+        const clamp01 = (v) => Math.max(0, Math.min(1, v));
+        const manhattan = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+        // -------------------------
+        // Phase A: Large rooms
+        // -------------------------
+        function generateLargeRoomsScaffold(cfg = HYBRID_CFG.large) {
+          // Reuse your test2 "generateLargeRoomsMap" internals,
+          // but return both the grid and normalized room descriptors.
+          const out = generateLargeRoomsMap({
+            roomCountRange: cfg.roomCountRange,
+            areaRange: cfg.areaRange,
+            minSide: cfg.minSide,
+            minL1EdgeSpacing: cfg.minL1EdgeSpacing,
+            border: cfg.border,
+            maxAttemptsPerRoom: cfg.maxAttemptsPerRoom,
+          });
+          // Normalize large rooms to a common format
+          const largeRooms = out.rooms.map(r => ({
+            kind: r.kind,
+            x0: r.bbox.x0,
+            y0: r.bbox.y0,
+            x1: r.bbox.x1,
+            y1: r.bbox.y1,
+            w: r.bbox.x1 - r.bbox.x0 + 1,
+            h: r.bbox.y1 - r.bbox.y0 + 1,
+            center: { x: r.center.x, y: r.center.y }
+          }));
+          return {
+            grid: out.grid,
+            width: out.width,
+            height: out.height,
+            border: cfg.border,
+            largeRooms
+          };
+        }
+        // -------------------------
+        // Phase B: Fill with small rooms
+        // -------------------------
+        function rectsGenerateCandidates(count, sizeMin, sizeMax, spawnRadius) {
+          // Similar to test.html: biased sizes, later rounded
+          const normal = () => (Math.random() + Math.random() + Math.random()) / 3; // 0..1
+          const rects = [];
+          for (let i = 0; i < count; i++) {
+            const w = sizeMin.w + Math.round(normal() * (sizeMax.w - sizeMin.w));
+            const h = sizeMin.h + Math.round(normal() * (sizeMax.h - sizeMin.h));
+            rects.push({
+              x: Math.random() * spawnRadius - spawnRadius / 2,
+              y: Math.random() * spawnRadius - spawnRadius / 2,
+              w: Math.max(sizeMin.w, w),
+              h: Math.max(sizeMin.h, h),
+            });
+          }
+          return rects;
+        }
+        function rectsSeparate(rects, iterations = 80) {
+          // Push-apart pass, then round to ints
+          for (let iter = 0; iter < iterations; iter++) {
+            let moved = false;
+            for (let j = 0; j < rects.length; j++) {
+              const r1 = rects[j];
+              for (let k = j + 1; k < rects.length; k++) {
+                const r2 = rects[k];
+                const dx = (r1.x + r1.w / 2) - (r2.x + r2.w / 2);
+                const dy = (r1.y + r1.h / 2) - (r2.y + r2.h / 2);
+                const halfW = (r1.w + r2.w) / 2;
+                const halfH = (r1.h + r2.h) / 2;
+                if (Math.abs(dx) < halfW && Math.abs(dy) < halfH) {
+                  moved = true;
+                  const ox = halfW - Math.abs(dx);
+                  const oy = halfH - Math.abs(dy);
+                  if (ox < oy) {
+                    const m = (ox / 2) * (dx > 0 ? 1 : -1);
+                    r1.x += m; r2.x -= m;
+                  } else {
+                    const m = (oy / 2) * (dy > 0 ? 1 : -1);
+                    r1.y += m; r2.y -= m;
+                  }
+                }
+              }
+            }
+            if (!moved && iter > 10) break;
+          }
+          // Round to integer grid
+          return rects.map(r => ({
+            x: Math.round(r.x),
+            y: Math.round(r.y),
+            w: Math.max(1, Math.round(r.w)),
+            h: Math.max(1, Math.round(r.h)),
+          }));
+        }
+        function rectIntersects(a, b) {
+          return !(a.x + a.w - 1 < b.x || b.x + b.w - 1 < a.x || a.y + a.h - 1 < b.y || b.y + b.h - 1 < a.y);
+        }
+        function inflateRect(r, d) { return { x: r.x - d, y: r.y - d, w: r.w + 2*d, h: r.h + 2*d }; }
+        function carveRoomIntoGrid(grid, r) {
+            const H = grid.length, W = grid[0].length;
+            for (let y = r.y + 1; y < r.y + r.h - 1; y++) {
+                if (y <= 0 || y >= H - 1) continue;
+                for (let x = r.x + 1; x < r.x + r.w - 1; x++) {
+                    if (x <= 0 || x >= W - 1) continue;
+                    grid[y][x] = 0; // floor
+                }
+            }
+        }
+        function smallRoomsFillIntoGrid(grid, largeRooms, border, cfg = HYBRID_CFG.small) {
+            const H = grid.length, W = grid[0].length;
+            // Build a combined forbidden mask = outside interior OR within clearance of any large room
+            const forbidden = (x, y) => {
+                if (x < border || y < border || x >= W - border || y >= H - border) return true;
+                return false;
+            };
+            // Inflate large rooms by clearance and treat them as blocked for small room placement
+            const inflatedLarge = largeRooms.map(L => inflateRect({ x: L.x0, y: L.y0, w: L.w, h: L.h }, cfg.clearanceFromLarge));
+            // Spawn candidates in a radius around map center
+            const spawnRadius = Math.max(W, H);
+            let candidates = rectsGenerateCandidates(cfg.candidateCount, cfg.minSize, cfg.maxSize, spawnRadius);
+            candidates = rectsSeparate(candidates, cfg.separationIters);
+            // Translate candidates from local space to map space: center them roughly at map center
+            const ox = Math.floor(W / 2), oy = Math.floor(H / 2);
+            candidates = candidates.map(r => ({ x: r.x + ox, y: r.y + oy, w: r.w, h: r.h }));
+            // Filter candidates:
+            const kept = [];
+            for (const r of candidates) {
+                // 1) Intersects interior?
+                const inside =
+                    r.x >= border && r.y >= border &&
+                    r.x + r.w <= W - border && r.y + r.h <= H - border;
+                if (!inside) continue;
+                // 2) Avoid overlap with any inflated large room
+                const overlapsLarge = inflatedLarge.some(L => rectIntersects(
+                  { x: r.x, y: r.y, w: r.w, h: r.h }, L
+                ));
+                if (overlapsLarge) continue;
+                // 3) Avoid carving into existing floors poorly: optional
+                // We allow overlap with empty space; it is fine to merge.
+                kept.push(r);
+            }
+            // Optionally thin out density
+            const targetCount = Math.round(kept.length * clamp01(cfg.keepRatio));
+            const smallRooms = shuffle(kept).slice(0, targetCount);
+            // Carve
+            for (const r of smallRooms) carveRoomIntoGrid(grid, r);
+            // Return normalized descriptors for graph building
+            const smallNormalized = smallRooms.map(r => ({
+              kind: 'rect',
+              x0: r.x, y0: r.y, x1: r.x + r.w - 1, y1: r.y + r.h - 1,
+              w: r.w, h: r.h,
+              center: { x: r.x + Math.floor(r.w / 2), y: r.y + Math.floor(r.h / 2) }
+            }));
+            return smallNormalized;
+        }
+        // -------------------------
+        // Phase C: Corridors and connectivity
+        // -------------------------
+        function kruskal(edges, pointCount) {
+            const mst = [];
+            const parent = Array.from({ length: pointCount }, (_, i) => i);
+            const find = i => parent[i] === i ? i : (parent[i] = find(parent[i]));
+            const unite = (i, j) => {
+                const a = find(i), b = find(j);
+                if (a !== b) { parent[a] = b; return true; }
+                return false;
+            };
+            edges.sort((a, b) => a.dist - b.dist);
+            for (const e of edges) if (unite(e.p1, e.p2)) mst.push(e);
+            return mst;
+        }
+        function buildEdgesFromDelaunay(points) {
+            const vertices = points.map((p, i) => {
+                const v = new Vertex(p.x, p.y);
+                v.id = i;
+                return v;
+            });
+            const triangleObjects = triangulate(vertices);
+            const tri = [];
+            for (const t of triangleObjects) {
+                tri.push(t.v0.id, t.v1.id, t.v2.id);
+            }
+            const set = new Map();
+            for (let i = 0; i < tri.length; i += 3) {
+                const a = tri[i], b = tri[i + 1], c = tri[i + 2];
+                const add = (i1, i2) => {
+                    const key = i1 < i2 ? `${i1}-${i2}` : `${i2}-${i1}`;
+                    if (!set.has(key)) {
+                        const p = points[i1], q = points[i2];
+                        set.set(key, { p1: i1, p2: i2, dist: Math.hypot(p.x - q.x, p.y - q.y) });
+                    }
+                };
+                add(a, b); add(b, c); add(c, a);
+            }
+            return Array.from(set.values());
+        }
+        function carveLCorridor(grid, p1, p2) {
+            let x = p1.x, y = p1.y;
+            const tx = p2.x, ty = p2.y;
+
+            if (Math.random() > 0.5) { // Go X then Y
+                while (x !== tx) {
+                    if (inBounds(grid, x, y)) grid[y][x] = 0;
+                    x += Math.sign(tx - x);
+                }
+                while (y !== ty) {
+                    if (inBounds(grid, x, y)) grid[y][x] = 0; // x is now tx
+                    y += Math.sign(ty - y);
+                }
+            } else { // Go Y then X
+                while (y !== ty) {
+                    if (inBounds(grid, x, y)) grid[y][x] = 0;
+                    y += Math.sign(ty - y);
+                }
+                while (x !== tx) {
+                    if (inBounds(grid, x, y)) grid[y][x] = 0; // y is now ty
+                    x += Math.sign(tx - x);
+                }
+            }
+            // Always carve the final destination tile to guarantee connection
+            if (inBounds(grid, tx, ty)) grid[ty][tx] = 0;
+        }
+        function floodFillOpen(grid, start) {
+            const H = grid.length, W = grid[0].length;
+            const key = (x,y)=>`${x},${y}`;
+            const seen = new Set();
+            const q = [];
+            if (start.x<0||start.y<0||start.x>=W||start.y>=H) return seen;
+            if (grid[start.y][start.x] === 1) return seen;
+            q.push(start); seen.add(key(start.x,start.y));
+            while (q.length) {
+                const p = q.shift();
+                for (const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+                    const nx = p.x+dx, ny = p.y+dy, k = key(nx,ny);
+                    if (nx<0||ny<0||nx>=W||ny>=H) continue;
+                    if (grid[ny][nx]===0 && !seen.has(k)) { seen.add(k); q.push({x:nx,y:ny}); }
+                }
+            }
+            return seen;
+        }
+        function ensureConnectivity(grid, nodes) {
+            // BFS from first node center; if a node is isolated, connect it to nearest reachable cell.
+            if (nodes.length === 0) return;
+            const start = nodes[0];
+            let reachable = floodFillOpen(grid, {x: Math.round(start.center.x), y: Math.round(start.center.y)});
+            const key = (x,y)=>`${x},${y}`;
+            const has = (p)=>reachable.has(key(Math.round(p.center.x), Math.round(p.center.y)));
+            for (const n of nodes) {
+                if (has(n)) continue;
+                // find nearest reachable cell
+                let best = null, bestD = Infinity;
+                for (const k of reachable) {
+                    const [x,y] = k.split(',').map(Number);
+                    const d = Math.abs(x - Math.round(n.center.x)) + Math.abs(y - Math.round(n.center.y));
+                    if (d < bestD) { bestD = d; best = {x, y}; }
+                }
+                if (best) {
+                    carveLCorridor(grid, {x: Math.round(n.center.x), y: Math.round(n.center.y)}, best);
+                    reachable = floodFillOpen(grid, {x: Math.round(start.center.x), y: Math.round(start.center.y)});
+                }
+            }
+        }
+        // -------------------------
+        // Master generator
+        // -------------------------
+        function generateDungeon() {
+            // Phase A: large-room scaffold
+            const largeOut = generateLargeRoomsScaffold(HYBRID_CFG.large);
+            // Adopt dynamic map sizing from scaffold
+            MAP_W = largeOut.width;
+            MAP_H = largeOut.height;
+            const grid = largeOut.grid.map(row => row.slice()); // copy
+            const allLarge = largeOut.largeRooms;
+            // Phase B: small rooms filling
+            const smallRooms = smallRoomsFillIntoGrid(grid, allLarge, largeOut.border, HYBRID_CFG.small);
+            // Unified node list (centers)
+            const allRooms = [
+                ...allLarge.map(R => ({ kind: R.kind, center: { x: R.center.x, y: R.center.y } })),
+                ...smallRooms.map(r => ({ kind: r.kind, center: r.center }))
+            ];
+            // Phase C: corridors (only now)
+            const points = allRooms.map(r => ({ x: r.center.x, y: r.center.y }));
+            const edges = buildEdgesFromDelaunay(points);
+            const mst = kruskal(edges, points.length);
+            // Add sparse extra edges
+            const extrasCount = Math.floor(edges.length * HYBRID_CFG.corridors.extraEdgeFraction);
+            const extraEdges = shuffle(edges.filter(e => !mst.includes(e))).slice(0, extrasCount);
+            const finalEdges = mst.concat(extraEdges);
+            // Carve corridors
+            for (const e of finalEdges) {
+                carveLCorridor(grid, points[e.p1], points[e.p2]);
+            }
+            // Rescue connectivity if any isolated parts remain
+            if (HYBRID_CFG.corridors.rescueConnectivity) {
+                ensureConnectivity(grid, allRooms);
+            }
+            // Choose start/end on far rooms
+            const start = allRooms[0]?.center || { x: Math.floor(MAP_W/2), y: Math.floor(MAP_H/2) };
+            let farIdx = 0, farDist = -1;
+            for (let i = 0; i < allRooms.length; i++) {
+                const d = manhattan(start, allRooms[i].center);
+                if (d > farDist) { farDist = d; farIdx = i; }
+            }
+            const end = allRooms[farIdx]?.center || start;
+            // Force floors at start/end
+            if (grid[Math.round(start.y)]?.[Math.round(start.x)] === 1) grid[Math.round(start.y)][Math.round(start.x)] = 0;
+            if (grid[Math.round(end.y)]?.[Math.round(end.x)] === 1) grid[Math.round(end.y)][Math.round(end.x)] = 0;
+            return {
+                grid,
+                start: { x: Math.round(start.x), y: Math.round(start.y) },
+                end: { x: Math.round(end.x), y: Math.round(end.y) }
+            };
+        }
+        // --- UI & RENDER FUNCTIONS ---
+        function setupDOM() {
+            viewportEl.style.width = `${VIEW_W * CELL_SIZE}px`;
+            viewportEl.style.height = `${VIEW_H * CELL_SIZE}px`;
+            canvas.width = MAP_W * CELL_SIZE;
+            canvas.height = MAP_H * CELL_SIZE;
+            equipmentSlotsDiv.innerHTML = '';
+            inventorySlotsDiv.innerHTML = '';
+            const equipSlots = ['Head', 'Body', 'Left', 'Right', 'Belt'];
+            equipSlots.forEach(slotName => {
+                const slot = document.createElement('div');
+                slot.classList.add('slot');
+                slot.id = `equip-${slotName}`;
+                slot.innerHTML = `<div class="slot-label">${slotName}</div><div class="slot-item"></div>`;
+                equipmentSlotsDiv.appendChild(slot);
+            });
+            const invCapacity = 6;
+            for (let i = 0; i < invCapacity; i++) {
+                const slot = document.createElement('div');
+                slot.classList.add('slot');
+                slot.id = `inv-${i}`;
+                inventorySlotsDiv.appendChild(slot);
+            }
+        }
+        
+        function renderUI() {
+            const rec = player.equipment.asLegacyRecord(); // Head, Body, Left, Right, Belt
+            for (const slotName of ["Head","Body","Left","Right","Belt"]) {
+                const itemDiv = document.querySelector(`#equip-${slotName} .slot-item`);
+                if (!itemDiv) continue;
+                const it = rec[slotName];
+                itemDiv.textContent = it ? it.name : '-';
+            }
+            for (let i=0; i<player.inventory.capacitySlots; i++) {
+                const slotDiv = document.getElementById(`inv-${i}`);
+                if (!slotDiv) break;
+                const st = player.inventory.stacks[i];
+                slotDiv.innerHTML = st ? `<div class="slot-item">${st.name}${st.item.stackable ? ` ×${st.qty}` : ''}</div>` : '';
+            }
+        }
+
+        function updateCamera(playerPos) {
+            const mapPxW = MAP_W * CELL_SIZE;
+            const mapPxH = MAP_H * CELL_SIZE;
+            const vw = VIEW_W * CELL_SIZE;
+            const vh = VIEW_H * CELL_SIZE;
+            const desiredX = vw / 2 - (playerPos.x + 0.5) * CELL_SIZE;
+            const desiredY = vh / 2 - (playerPos.y + 0.5) * CELL_SIZE;
+            const tx = Math.round(Math.max(vw - mapPxW, Math.min(0, desiredX)));
+            const ty = Math.round(Math.max(vh - mapPxH, Math.min(0, desiredY)));
+            canvas.style.transform = `translate3d(${tx}px, ${ty}px, 0)`;
+        }
+        function drawCell(x, y, isVisible, isPlayer = false, isStart = false, isEnd = false) {
+            const cellX = x * CELL_SIZE;
+            const cellY = y * CELL_SIZE;
+            if (!exploredGrid[y][x]) return; // Unexplored cells remain background #111
+            let bgColor = '#111';
+            let text = '';
+            let textColor = '#d3d3d3';
+            let fontWeight = '';
+            const isWall = maze[y][x] === 1;
+            if (isWall) {
+                bgColor = '#3a2a23';
+                textColor = 'transparent';
+            } else {
+                bgColor = '#222';
+                text = '·';
+                textColor = '#444';
+            }
+            if (isStart) bgColor = '#4caf50';
+            if (isEnd) bgColor = '#f44336';
+            if (isPlayer) {
+                bgColor = '#2196f3';
+                text = '@';
+                textColor = '#fff';
+                fontWeight = 'bold ';
+            }
+            ctx.fillStyle = bgColor;
+            if (isPlayer) {
+                ctx.beginPath();
+                ctx.arc(cellX + HALF_CELL, cellY + HALF_CELL, HALF_CELL, 0, 2 * Math.PI);
+                ctx.fill();
+            } else {
+                ctx.fillRect(cellX, cellY, CELL_SIZE, CELL_SIZE);
+            }
+            if (text) {
+                ctx.font = `${fontWeight}20px monospace`;
+                ctx.fillStyle = textColor;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(text, cellX + HALF_CELL, cellY + HALF_CELL);
+            }
+            if (isVisible) {
+                ctx.fillStyle = 'rgba(255,255,102,0.20)';
+                ctx.fillRect(cellX, cellY, CELL_SIZE, CELL_SIZE);
+            }
+        }
+        function updateVisionAndExploration(pos) {
+            const lightRadius = getLightRadius();
+            const minX = Math.max(0, pos.x - lightRadius - 1);
+            const maxX = Math.min(MAP_W - 1, pos.x + lightRadius + 1);
+            const minY = Math.max(0, pos.y - lightRadius - 1);
+            const maxY = Math.min(MAP_H - 1, pos.y + lightRadius + 1);
+            newlyExplored = [];
+            const losCells = new Set();
+            for (let y = minY; y <= maxY; y++) {
+                for (let x = minX; x <= maxX; x++) {
+                    if (isVisible(x, y, pos, false)) {
+                        losCells.add(posKey({x, y}));
+                    }
+                }
+            }
+            const cellsToUpdate = new Set(losCells);
+            for (const cellKey of losCells) {
+                const [x, y] = cellKey.split(',').map(Number);
+                if (maze[y][x] === 0) {
+                    const neighbors = [
+                        {x: x, y: y-1}, {x: x, y: y+1}, {x: x-1, y: y}, {x: x+1, y: y}
+                    ];
+                    for (const n of neighbors) {
+                        if (n.x >= 0 && n.x < MAP_W && n.y >= 0 && n.y < MAP_H && maze[n.y][n.x] === 1) {
+                            cellsToUpdate.add(posKey(n));
+                        }
+                    }
+                }
+            }
+            for (const cellKey of cellsToUpdate) {
+                const [x, y] = cellKey.split(',').map(Number);
+                if (!exploredGrid[y][x]) {
+                    newlyExplored.push({x, y});
+                }
+                exploredGrid[y][x] = true;
+                knownGrid[y][x] = maze[y][x];
+                if (knownGrid[y][x] === 0) {
+                    const neighbors = [
+                        {x: x, y: y-1}, {x: x, y: y+1}, {x: x-1, y: y}, {x: x+1, y: y},
+                        {x: x-1, y: y-1}, {x: x-1, y: y+1}, {x: x+1, y: y-1}, {x: x+1, y: y+1}
+                    ];
+                    const hasUnknown = neighbors.some(n =>
+                        n.x >= 0 && n.x < MAP_W && n.y >= 0 && n.y < MAP_H && knownGrid[n.y][n.x] === -1
+                    );
+                    if (hasUnknown) {
+                        frontiers.add(posKey({x, y}));
+                    } else {
+                        frontiers.delete(posKey({x, y}));
+                    }
+                }
+            }
+        }
+        function explorationScore(pos, shortTermMemory) {
+            let score = 0;
+            const lightRadius = getLightRadius();
+            const minX = Math.max(0, pos.x - lightRadius - 1);
+            const maxX = Math.min(MAP_W - 1, pos.x + lightRadius + 1);
+            const minY = Math.max(0, pos.y - lightRadius - 1);
+            const maxY = Math.min(MAP_H - 1, pos.y + lightRadius + 1);
+            for (let y = minY; y <= maxY; y++) {
+                for (let x = minX; x <= maxX; x++) {
+                    if (isVisible(x, y, pos, true) && knownGrid[y][x] === -1) {
+                        score++;
+                    }
+                }
+            }
+            if (shortTermMemory.includes(posKey(pos))) {
+                score -= 15;
+            }
+            return score;
+        }
+        function bfsToTarget(start, target, shortTermMemory) {
+            const queue = [{pos: start, path: []}];
+            const visited = new Set([posKey(start)]);
+            while (queue.length > 0) {
+                const {pos, path} = queue.shift();
+                if (pos.x === target.x && pos.y === target.y) {
+                    return path;
+                }
+                const neighbors = [
+                    {x: pos.x, y: pos.y-1}, {x: pos.x, y: pos.y+1},
+                    {x: pos.x-1, y: pos.y}, {x: pos.x+1, y: pos.y}
+                ];
+                for (const n of neighbors) {
+                    const nKey = posKey(n);
+                    if (n.x >= 0 && n.x < MAP_W && n.y >= 0 && n.y < MAP_H &&
+                        !visited.has(nKey) && knownGrid[n.y][n.x] === 0 && !shortTermMemory.includes(nKey)) {
+                        visited.add(nKey);
+                        queue.push({pos: n, path: [...path, n]});
+                    }
+                }
+            }
+            return null;
+        }
+        function renderInitial(playerPos, startPos, endPos) {
+            currentVisible = computeVisibleCells(playerPos);
+            // Draw all initially explored cells
+            for (const pos of newlyExplored) {
+                const key = posKey(pos);
+                const isVis = currentVisible.has(key);
+                const isS = pos.x === startPos.x && pos.y === startPos.y;
+                const isE = pos.x === endPos.x && pos.y === endPos.y;
+                if (isE) isEndRendered = true;
+                drawCell(pos.x, pos.y, isVis, false, isS, isE);
+            }
+            // Draw player
+            drawCell(playerPos.x, playerPos.y, true, true, true, false); // Start is player pos initially
+        }
+        function renderDelta(prevPlayerPos, playerPos, endPos) {
+            // Redraw cells where visibility turned off
+            for (const key of prevVisible) {
+                if (!currentVisible.has(key)) {
+                    const [x, y] = key.split(',').map(Number);
+                    const isS = x === player.startPos.x && y === player.startPos.y;
+                    const isE = x === endPos.x && y === endPos.y;
+                    drawCell(x, y, false, false, isS, isE);
+                }
+            }
+            // Redraw old player position (without player)
+            if (prevPlayerPos) {
+                const oldKey = posKey(prevPlayerPos);
+                const isVis = currentVisible.has(oldKey);
+                const isS = prevPlayerPos.x === player.startPos.x && prevPlayerPos.y === player.startPos.y;
+                const isE = prevPlayerPos.x === endPos.x && prevPlayerPos.y === endPos.y;
+                drawCell(prevPlayerPos.x, prevPlayerPos.y, isVis, false, isS, isE);
+            }
+            // Draw newly explored cells
+            for (const pos of newlyExplored) {
+                const key = posKey(pos);
+                const isVis = currentVisible.has(key);
+                const isS = pos.x === player.startPos.x && pos.y === player.startPos.y;
+                let isE = pos.x === endPos.x && pos.y === endPos.y;
+                if (isE && !isEndRendered) {
+                    isEndRendered = true;
+                }
+                drawCell(pos.x, pos.y, isVis, false, isS, isE);
+            }
+            // Draw newly visible cells that were already explored
+            for (const key of currentVisible) {
+                if (!prevVisible.has(key)) {
+                    const [x, y] = key.split(',').map(Number);
+                    const alreadyNew = newlyExplored.some(p => p.x === x && p.y === y);
+                    if (!alreadyNew) {
+                        const isS = x === player.startPos.x && y === player.startPos.y;
+                        const isE = x === endPos.x && y === endPos.y;
+                        drawCell(x, y, true, false, isS, isE);
+                    }
+                }
+            }
+            // Draw new player position
+            const newKey = posKey(playerPos);
+            const isVis = currentVisible.has(newKey);
+            const isS = playerPos.x === player.startPos.x && playerPos.y === player.startPos.y;
+            const isE = playerPos.x === endPos.x && playerPos.y === endPos.y;
+            drawCell(playerPos.x, playerPos.y, isVis, true, isS, isE);
+        }
+        // --- SIMULATION LOGIC ---
+        function simulate(startPos, endPos) {
+            statusDiv.textContent = 'AI exploring...';
+            restartBtn.style.display = 'none';
+            player.pos = { ...startPos };
+            const stack = [];
+            const visitedForPathfinding = new Set([posKey(player.pos)]);
+            let shortTermMemory = [];
+            frontiers.clear();
+            function gameLoop() {
+                clearTimeout(gameLoopTimeout);
+                if (!isPaused) {
+                    if (player.pos.x === endPos.x && player.pos.y === endPos.y) {
+                        clearInterval(gameLoopTimeout); statusDiv.textContent = 'Exit found!';
+                        renderDelta(prevPlayerPos, player.pos, endPos);
+                        restartBtn.style.display = 'block';
+                        return;
+                    }
+                    shortTermMemory.push(posKey(player.pos));
+                    if (shortTermMemory.length > 30) {
+                        shortTermMemory.shift();
+                    }
+                    let nextMove = null;
+                    if (knownGrid[endPos.y][endPos.x] === 0) {
+                        const pathToExit = bfsToTarget(player.pos, endPos, []); // Ignore short term memory for exit path
+                        if (pathToExit && pathToExit.length > 0) {
+                            nextMove = pathToExit[0];
+                        }
+                    }
+                    if (!nextMove) {
+                        const neighbors = [
+                            {x: player.pos.x, y: player.pos.y-1}, {x: player.pos.x, y: player.pos.y+1},
+                            {x: player.pos.x-1, y: player.pos.y}, {x: player.pos.x+1, y: player.pos.y}
+                        ];
+                        const unvisitedNeighbors = neighbors.filter(n =>
+                            n.x >= 0 && n.x < MAP_W && n.y >= 0 && n.y < MAP_H &&
+                            knownGrid[n.y][n.x] === 0 &&
+                            !visitedForPathfinding.has(posKey(n))
+                        );
+                        const potentialMoves = unvisitedNeighbors.map(n => ({pos: n, score: explorationScore(n, shortTermMemory)}));
+                        potentialMoves.sort((a, b) => b.score - a.score + (Math.random() - 0.5));
+                        if (potentialMoves.length > 0 && potentialMoves[0].score > 0) {
+                            stack.push({ ...player.pos });
+                            nextMove = potentialMoves[0].pos;
+                        }
+                    }
+                    if (!nextMove && frontiers.size > 0) {
+                        let closestFrontier = null;
+                        let minDist = Infinity;
+                        for (const fKey of frontiers) {
+                            const [fx, fy] = fKey.split(',').map(Number);
+                            const dist = Math.abs(player.pos.x - fx) + Math.abs(player.pos.y - fy);
+                            if (dist < minDist) {
+                                minDist = dist;
+                                closestFrontier = {x: fx, y: fy};
+                            }
+                        }
+                        const pathToFrontier = bfsToTarget(player.pos, closestFrontier, shortTermMemory);
+                        if (pathToFrontier && pathToFrontier.length > 0) {
+                            nextMove = pathToFrontier[0];
+                        }
+                    }
+                    if (!nextMove && stack.length > 0) {
+                        nextMove = stack.pop();
+                    }
+                    if (nextMove) {
+                        prevPlayerPos = { ...player.pos };
+                        player.pos = nextMove;
+                        const stepKey = posKey(player.pos);
+                        if (!visitedForPathfinding.has(stepKey)) {
+                            visitedForPathfinding.add(stepKey);
+                        }
+                    } else {
+                        clearTimeout(gameLoopTimeout); statusDiv.textContent = 'AI is trapped!';
+                        restartBtn.style.display = 'block'; return;
+                    }
+                    updateVisionAndExploration(player.pos);
+                    currentVisible = computeVisibleCells(player.pos);
+                    renderDelta(prevPlayerPos, player.pos, endPos);
+                    updateCamera(player.pos);
+                    prevVisible = new Set(currentVisible);
+                    minimapMaybeRefreshOnTick();
+                }
+                const delay = 1000 / simulationSpeed;
+                gameLoopTimeout = setTimeout(gameLoop, delay);
+            }
+            window.gameLoop = gameLoop;
+            gameLoop();
+        }
+        function togglePause() {
+            isPaused = !isPaused;
+            if (isPaused) {
+                pauseIndicator.textContent = 'PAUSED';
+            } else {
+                pauseIndicator.textContent = '';
+                if (typeof window.gameLoop === 'function') {
+                    gameLoopTimeout = setTimeout(window.gameLoop, 1000 / simulationSpeed); // Resume the loop
+                }
+            }
+        }
+        function init() {
+            if (initRetries > MAX_INIT_RETRIES) {
+                statusDiv.textContent = 'Fatal Error: Map generation failed repeatedly.';
+                console.error('Map generation failed after multiple retries.');
+                return;
+            }
+            clearTimeout(gameLoopTimeout);
+            isPaused = false;
+            pauseIndicator.textContent = '';
+            statusDiv.textContent = 'Generating dungeon...';
+            restartBtn.style.display = 'none';
+            
+            player = new Player({ name:"Player", x:0, y:0 });
+
+            // Wearables
+            player.equipment.equipTo(SLOT.Head,       makeItem("leather_cap"));
+            player.equipment.equipTo(SLOT.BodyArmor,  makeItem("basic_clothes"));
+            player.equipment.equipTo(SLOT.Cloak,      makeItem("cloak"));
+            player.equipment.equipTo(SLOT.Belt,       makeItem("belt_leather"));
+            player.equipment.equipTo(SLOT.Backpack,   makeItem("pack_rucksack")); // choose pack
+            player.equipment.equipTo(SLOT.LeftHand,   makeItem("torch"));
+            player.equipment.equipTo(SLOT.RightHand,  makeItem("short_sword"));
+            // Belt attachments
+            player.equipment.equipTo(SLOT.Belt1,      makeItem("pouch_small"));
+            player.equipment.equipTo(SLOT.Belt2,      makeItem("lantern"));
+            player.equipment.equipTo(SLOT.Quiver,     makeItem("quiver_std"));
+
+            // Inventory constraints come from backpack
+            player.inventory = new Inventory(20);
+            player.inventory.setConstraints(player.equipment.currentBackpackConstraints());
+
+            // Seed inventory
+            player.inventory.add(new ItemStack(makeItem("torch"), 3));
+            player.inventory.add(new ItemStack(makeItem("arrow_wood"), 20));
+
+            minimapBase = null;
+            setTimeout(() => {
+                statusDiv.textContent = 'Generating hybrid dungeon...';
+                const dungeonData = generateDungeon();
+                if (!dungeonData) {
+                    statusDiv.textContent = 'Map generation failed, retrying...';
+                    initRetries++;
+                    setTimeout(init, 100); return;
+                }
+                maze = dungeonData.grid;
+                MAP_W = maze[0].length;
+                MAP_H = maze.length;
+                const startPos = dungeonData.start;
+                const endPos = dungeonData.end;
+                // Initialize data grids now that we have dimensions
+                exploredGrid = Array.from({ length: MAP_H }, () => Array(MAP_W).fill(false));
+                knownGrid = Array.from({ length: MAP_H }, () => Array(MAP_W).fill(-1));
+                // Setup DOM elements which depend on map dimensions
+                setupDOM();
+                const path = aStarPath(maze, startPos, endPos);
+                if (!path) {
+                    statusDiv.textContent = 'Map is not fully connected, regenerating...';
+                    initRetries++;
+                    setTimeout(init, 50); return;
+                }
+                player.pos = startPos;
+                player.startPos = startPos;
+                isEndRendered = false;
+                prevVisible = new Set();
+                prevPlayerPos = null;
+                currentVisible = new Set();
+                newlyExplored = [];
+                updateVisionAndExploration(player.startPos);
+                renderInitial(player.startPos, player.startPos, endPos);
+                updateCamera(player.startPos);
+                renderUI();
+                prevVisible = computeVisibleCells(player.startPos);
+                prevPlayerPos = { ...player.startPos };
+                initRetries = 0;
+                setTimeout(() => simulate(player.startPos, endPos), 500);
+            }, 50);
+        }
+        restartBtn.addEventListener('click', init);
+        speedSlider.addEventListener('input', (e) => {
+            simulationSpeed = parseInt(e.target.value);
+            speedValue.textContent = `${simulationSpeed} tps`;
+        });
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                e.preventDefault();
+                togglePause();
+            }
+        });
+        window.onload = () => {
+            initMinimapDOM();
+            init();
+        };
+        // ===================== MINIMAP =====================
+        let minimapBase = null;      // offscreen static layer (map tiles)
+        let minimapScale = 1;        // pixels per tile inside the minimap canvas
+        let minimapPadding = 1;      // visual padding around map in tiles
+
+        // Colors match your theme
+        const MINIMAP_COLORS = {
+          wall: "#3a2a23",
+          floor: "#111",
+          floorExplored: "#1a1a1a",   // if you later want explored shading; currently unused
+          player: "#2196f3",
+          viewport: "#00bcd4"
+        };
+
+        function initMinimapDOM() {
+          minimapModalEl = document.getElementById("minimapModal");
+          minimapCanvas  = document.getElementById("minimapCanvas");
+          minimapCtx     = minimapCanvas.getContext("2d");
+          minimapCloseBtn= document.getElementById("minimapClose");
+
+          minimapCloseBtn.addEventListener("click", closeMinimap);
+          document.addEventListener("keydown", (e) => {
+            if (e.key === "m" || e.key === "M") toggleMinimap();
+            if (e.key === "Escape" && isMinimapOpen()) closeMinimap();
+          });
+        }
+
+        function isMinimapOpen() {
+          return minimapModalEl && minimapModalEl.style.display === "flex";
+        }
+
+        function openMinimap() {
+          if (!minimapModalEl) initMinimapDOM();
+          minimapModalEl.style.display = "flex";       // make it visible first
+          
+          // Defer canvas work until the browser has computed the new layout for the modal.
+          // This prevents reading stale dimensions before the CSS `display:flex` is applied.
+          requestAnimationFrame(() => {
+            prepareMinimapCanvasBackingStore(); // Sets canvas resolution from CSS size
+            renderMinimapDynamic(); // Renders map (and builds base texture if needed)
+          });
+        }
+
+        function closeMinimap() {
+          if (minimapModalEl) minimapModalEl.style.display = "none";
+        }
+
+        function toggleMinimap() {
+          if (isMinimapOpen()) closeMinimap(); else openMinimap();
+        }
+
+        function getPlayerPos() {
+          // Accept either player.x/y or player.pos.x/y
+          if (!player) return { x: 0, y: 0 };
+          if (typeof player.x === "number" && typeof player.y === "number") return { x: player.x, y: player.y };
+          if (player.pos && typeof player.pos.x === "number" && typeof player.pos.y === "number") return { x: player.pos.x, y: player.pos.y };
+          return { x: 0, y: 0 };
+        }
+
+        function prepareMinimapCanvasBackingStore() {
+          // Use visible box size when the modal is open
+          const rect = minimapCanvas.getBoundingClientRect();
+          const dpr = window.devicePixelRatio || 1;
+
+          // Fallback if somehow still zero (should not happen after display:flex)
+          const cssW = rect.width  > 0 ? rect.width  : minimapCanvas.width  || 640;
+          const cssH = rect.height > 0 ? rect.height : minimapCanvas.height || 640;
+
+          minimapCanvas.width  = Math.max(1, Math.round(cssW * dpr));
+          minimapCanvas.height = Math.max(1, Math.round(cssH * dpr));
+        }
+
+        function buildMinimapBase() {
+          if (!maze || !maze.length) return;
+
+          const pad = minimapPadding;
+          const tilesW = MAP_W + pad * 2;
+          const tilesH = MAP_H + pad * 2;
+
+          // Use current canvas backing size (already set by prepareMinimapCanvasBackingStore on open)
+          const targetW = minimapCanvas.width  || 640;
+          const targetH = minimapCanvas.height || 640;
+
+          minimapScale = Math.max(1, Math.floor(Math.min(
+            targetW / tilesW,
+            targetH / tilesH
+          )));
+
+          // Offscreen base
+          minimapBase = document.createElement("canvas");
+          minimapBase.width  = tilesW * minimapScale;
+          minimapBase.height = tilesH * minimapScale;
+          const ctx = minimapBase.getContext("2d");
+
+          // Background (floors)
+          ctx.fillStyle = MINIMAP_COLORS.floor;
+          ctx.fillRect(0, 0, minimapBase.width, minimapBase.height);
+
+          const ox = pad * minimapScale;
+          const oy = pad * minimapScale;
+
+          // Walls
+          ctx.fillStyle = MINIMAP_COLORS.wall;
+          for (let y = 0; y < MAP_H; y++) {
+            for (let x = 0; x < MAP_W; x++) {
+              if (maze[y][x] === 1) {
+                ctx.fillRect(ox + x * minimapScale, oy + y * minimapScale, minimapScale, minimapScale);
+              }
+            }
+          }
+
+          // Optional border to make the map bounds obvious
+          ctx.strokeStyle = "#333";
+          ctx.lineWidth = Math.max(1, Math.floor(minimapScale / 2));
+          ctx.strokeRect(ox, oy, MAP_W * minimapScale, MAP_H * minimapScale);
+        }
+
+        /**
+         * Draw dynamic overlay each time the minimap is shown or on demand:
+         * - base layer (blit the offscreen)
+         * - viewport rectangle
+         * - player dot
+         */
+        function renderMinimapDynamic() {
+            if (!minimapBase) buildMinimapBase();
+            const ctx = minimapCtx;
+
+            // Clear and blit base at 1:1 into the visible canvas, centered
+            ctx.clearRect(0, 0, minimapCanvas.width, minimapCanvas.height);
+
+            // Compute draw position to center the base within canvas
+            const dx = Math.floor((minimapCanvas.width  - minimapBase.width ) / 2);
+            const dy = Math.floor((minimapCanvas.height - minimapBase.height) / 2);
+
+            ctx.drawImage(minimapBase, dx, dy);
+            
+            // --- START: ACCURATE VIEWPORT CALCULATION (FIXED) ---
+            // This logic mirrors the main `updateCamera` function to find the exact
+            // top-left corner of the visible area in map coordinates.
+            const mapPxW = MAP_W * CELL_SIZE;
+            const mapPxH = MAP_H * CELL_SIZE;
+            const vw = VIEW_W * CELL_SIZE;
+            const vh = VIEW_H * CELL_SIZE;
+            const playerPos = getPlayerPos();
+
+            const desiredX = vw / 2 - (playerPos.x + 0.5) * CELL_SIZE;
+            const desiredY = vh / 2 - (playerPos.y + 0.5) * CELL_SIZE;
+            const canvasTranslateX = Math.round(Math.max(vw - mapPxW, Math.min(0, desiredX)));
+            const canvasTranslateY = Math.round(Math.max(vh - mapPxH, Math.min(0, desiredY)));
+            
+            const viewportTopLeftX_map = -canvasTranslateX / CELL_SIZE;
+            const viewportTopLeftY_map = -canvasTranslateY / CELL_SIZE;
+
+            // Overlay: viewport rectangle
+            const pad = minimapPadding;
+            const px0 = dx + (pad + viewportTopLeftX_map) * minimapScale;
+            const py0 = dy + (pad + viewportTopLeftY_map) * minimapScale;
+            // --- END: ACCURATE VIEWPORT CALCULATION ---
+            
+            const pw  = VIEW_W * minimapScale;
+            const ph  = VIEW_H * minimapScale;
+
+            ctx.lineWidth = Math.max(1, Math.floor(minimapScale / 2));
+            ctx.strokeStyle = MINIMAP_COLORS.viewport;
+            ctx.strokeRect(px0, py0, pw, ph);
+
+            // Overlay: player
+            const p = getPlayerPos();
+            const cx = dx + (pad + p.x + 0.5) * minimapScale;
+            const cy = dy + (pad + p.y + 0.5) * minimapScale;
+            const r  = Math.max(2, Math.floor(minimapScale / 1.5));
+
+            ctx.fillStyle = MINIMAP_COLORS.player;
+            ctx.beginPath();
+            ctx.arc(cx, cy, r, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // Optional: call this after each player move to keep an open minimap fresh
+        function minimapMaybeRefreshOnTick() {
+          if (isMinimapOpen()) renderMinimapDynamic();
+        }
+
+        // ===================== END MINIMAP =====================
+    </script>
 </body>
 </html>
+
+
+
