@@ -330,7 +330,7 @@
                     id: this.id,
                     name: this.name,
                     kind: this.kind,
-                    equipSlots: Array.isArray(this.equipSlots) ? this.equipSlots.slice() : [],
+                    equipSlots: Array.isArray(this.equipSlots) ? this.equipSlots.slice() : this.equipSlots,
                     handsRequired: this.handsRequired,
                     dims: this.dims ? { ...this.dims } : undefined,
                     mass: this.mass,
@@ -342,9 +342,6 @@
 
                 if (this.container) {
                     copy.container = { ...this.container };
-                    if (typeof this.container.accepts === "function") {
-                        copy.container.accepts = this.container.accepts;
-                    }
                 }
 
                 const cloned = new Item(copy);
