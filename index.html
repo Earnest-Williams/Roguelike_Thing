@@ -828,6 +828,9 @@
             return true;
         }
         function computeVisibleCells(pos) {
+            // We only need to check tiles that fall inside the light radius (with a one tile
+            // buffer) – anything further away cannot possibly be seen. Trimming the loops to
+            // this window keeps the FOV calculation cheap even on very large maps.
             const lightRadius = getLightRadius();
             const minX = Math.max(0, pos.x - lightRadius - 1);
             const maxX = Math.min(MAP_W - 1, pos.x + lightRadius + 1);
@@ -849,6 +852,10 @@
                         {x: x, y: y-1}, {x: x, y: y+1}, {x: x-1, y: y}, {x: x+1, y: y}
                     ];
                     for (const n of neighbors) {
+                        // When a floor tile is visible we also reveal any bordering wall tiles.
+                        // This mirrors how traditional roguelikes render walls that are flush
+                        // against lit corridors, making navigation far less confusing for the
+                        // auto-explorer.
                         if (n.x >= 0 && n.x < MAP_W && n.y >= 0 && n.y < MAP_H && maze[n.y][n.x] === 1) {
                             visibleCells.add(posKey(n));
                         }
@@ -862,6 +869,9 @@
             return y >= 0 && y < grid.length && x >= 0 && x < grid[0].length;
         }
         function aStarPath(grid, start, end) {
+            // Straightforward A* over the 4-connected grid. The map generator only uses this to
+            // verify connectivity, so we prioritise readability over micro-optimisations – the
+            // grids are small enough that the classic textbook implementation is plenty fast.
             const heuristic = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
             const openSet = [];
             const closedSet = new Set();
@@ -1195,6 +1205,19 @@
         // Floors = 0, Walls = 1
         // -------------------------------------------------------------
         function generateLargeRoomsMap(options = {}) {
+            /*
+             * High level algorithm:
+             *   1. Randomly pick a target area and silhouette for each desired room (square,
+             *      round, polygonal, etc.) using the rasterize helpers above.
+             *   2. Scatter the rooms in an expanding search radius until they no longer overlap,
+             *      keeping a large Manhattan buffer so big chambers do not bleed into each other.
+             *   3. After all rooms are placed, normalise the co-ordinates so the outer border is
+             *      padded with solid walls and emit a single grid where 0 = floor, 1 = wall.
+             *
+             * The function returns both the finished tile grid and metadata about every room so
+             * downstream systems (path validation, loot placement, etc.) do not need to reverse
+             * engineer the layout again.
+             */
             const cfg = {
                 roomCountRange: [1, 11],
                 areaRange: [300, 750],
@@ -1983,12 +2006,16 @@
                         restartBtn.style.display = 'block';
                         return;
                     }
+                    // Track a short trail of recently visited tiles so the explorer does not keep
+                    // oscillating in the same small loop.
                     shortTermMemory.push(posKey(player.pos));
                     if (shortTermMemory.length > 30) {
                         shortTermMemory.shift();
                     }
                     let nextMove = null;
                     if (knownGrid[endPos.y][endPos.x] === 0) {
+                        // Once the exit has been discovered we greedily follow the fastest path to
+                        // it, ignoring the short-term memory so backtracking is allowed.
                         const pathToExit = bfsToTarget(player.pos, endPos, []); // Ignore short term memory for exit path
                         if (pathToExit && pathToExit.length > 0) {
                             nextMove = pathToExit[0];
@@ -2012,6 +2039,9 @@
                         }
                     }
                     if (!nextMove && frontiers.size > 0) {
+                        // When no enticing neighbour exists we fall back to the nearest frontier:
+                        // a lit floor tile that borders unexplored darkness. BFS charts a safe
+                        // course to the chosen frontier.
                         let closestFrontier = null;
                         let minDist = Infinity;
                         for (const fKey of frontiers) {
@@ -2028,6 +2058,8 @@
                         }
                     }
                     if (!nextMove && stack.length > 0) {
+                        // The depth-first stack gives us deterministic backtracking when every
+                        // other heuristic is exhausted.
                         nextMove = stack.pop();
                     }
                     if (nextMove) {
