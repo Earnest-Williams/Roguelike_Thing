@@ -314,7 +314,13 @@
                 this.id = o.id;
                 this.name = o.name;
                 this.kind = o.kind;
-                this.equipSlots = Array.isArray(o.equipSlots) ? o.equipSlots.slice() : [];
+                if (o.equipSlots == null) {
+                    this.equipSlots = o.equipSlots;
+                } else if (Array.isArray(o.equipSlots)) {
+                    this.equipSlots = o.equipSlots.slice();
+                } else {
+                    throw new Error(`Item.equipSlots must be an array when provided; received ${typeof o.equipSlots}`);
+                }
                 this.handsRequired = o.handsRequired ?? 0;
                 this.dims = o.dims ?? { l: 1, w: 1, h: 1 };
                 this.mass = o.mass ?? 0.1;
@@ -352,7 +358,7 @@
 
                 return cloned;
             }
-            canEquipTo(slot) { return this.equipSlots.includes(slot); }
+            canEquipTo(slot) { return Array.isArray(this.equipSlots) && this.equipSlots.includes(slot); }
             volumeLPerUnit() { return dimsVolumeL(this.dims); }
             longestCm() { return dimsLongest(this.dims); }
         }
