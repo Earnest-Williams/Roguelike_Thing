@@ -297,6 +297,33 @@
             SLOT.Quiver,
         ];
 
+        const SLOT_LABELS = {
+            [SLOT.Head]: 'Head',
+            [SLOT.Amulet]: 'Amulet',
+            [SLOT.LeftRing]: 'Left Ring',
+            [SLOT.RightRing]: 'Right Ring',
+            [SLOT.Cloak]: 'Cloak',
+            [SLOT.BodyArmor]: 'Body',
+            [SLOT.Gloves]: 'Gloves',
+            [SLOT.Boots]: 'Boots',
+            [SLOT.LeftHand]: 'Left Hand',
+            [SLOT.RightHand]: 'Right Hand',
+            [SLOT.Belt]: 'Belt',
+            [SLOT.Belt1]: 'Belt Slot 1',
+            [SLOT.Belt2]: 'Belt Slot 2',
+            [SLOT.Belt3]: 'Belt Slot 3',
+            [SLOT.Belt4]: 'Belt Slot 4',
+            [SLOT.Backpack]: 'Backpack',
+            [SLOT.Quiver]: 'Quiver',
+        };
+
+        function labelForSlot(slot) {
+            if (SLOT_LABELS[slot]) return SLOT_LABELS[slot];
+            return slot
+                .replace(/([a-z])([A-Z])/g, '$1 $2')
+                .replace(/\b(\w)/g, (_, c) => c.toUpperCase());
+        }
+
         // ---- Physical helpers (dimensions in cm, mass in kg)
         function dimsVolumeL(d) { return (d.l * d.w * d.h) / 1000.0; } // cm^3 to liters
         function dimsLongest(d) { return Math.max(d.l, d.w, d.h); }
@@ -1673,12 +1700,13 @@
             canvas.height = MAP_H * CELL_SIZE;
             equipmentSlotsDiv.innerHTML = '';
             inventorySlotsDiv.innerHTML = '';
-            const equipSlots = ['Head', 'Body', 'Left', 'Right', 'Belt'];
-            equipSlots.forEach(slotName => {
+            ALL_SLOTS_ORDER.forEach(slotName => {
                 const slot = document.createElement('div');
                 slot.classList.add('slot');
                 slot.id = `equip-${slotName}`;
-                slot.innerHTML = `<div class="slot-label">${slotName}</div><div class="slot-item"></div>`;
+                slot.dataset.slot = slotName;
+                const label = labelForSlot(slotName);
+                slot.innerHTML = `<div class="slot-label">${label}</div><div class="slot-item"></div>`;
                 equipmentSlotsDiv.appendChild(slot);
             });
             const inventory = player?.inventory;
@@ -1692,13 +1720,12 @@
                 inventorySlotsDiv.appendChild(slot);
             }
         }
-        
+
         function renderUI() {
-            const rec = player.equipment.asLegacyRecord(); // Head, Body, Left, Right, Belt
-            for (const slotName of ["Head","Body","Left","Right","Belt"]) {
+            for (const slotName of ALL_SLOTS_ORDER) {
                 const itemDiv = document.querySelector(`#equip-${slotName} .slot-item`);
                 if (!itemDiv) continue;
-                const it = rec[slotName];
+                const it = player.equipment.get(slotName);
                 itemDiv.textContent = it ? it.name : '-';
             }
             for (let i=0; i<player.inventory.capacitySlots; i++) {
@@ -2268,17 +2295,24 @@
             const canvasTranslateX = Math.round(Math.max(vw - mapPxW, Math.min(0, desiredX)));
             const canvasTranslateY = Math.round(Math.max(vh - mapPxH, Math.min(0, desiredY)));
             
-            const viewportTopLeftX_map = -canvasTranslateX / CELL_SIZE;
-            const viewportTopLeftY_map = -canvasTranslateY / CELL_SIZE;
+            const rawViewportX = -canvasTranslateX / CELL_SIZE;
+            const rawViewportY = -canvasTranslateY / CELL_SIZE;
+            const maxViewportX = Math.max(0, MAP_W - VIEW_W);
+            const maxViewportY = Math.max(0, MAP_H - VIEW_H);
+            const viewportTopLeftX_map = Math.min(Math.max(0, rawViewportX), maxViewportX);
+            const viewportTopLeftY_map = Math.min(Math.max(0, rawViewportY), maxViewportY);
+
+            const viewportTilesWide = Math.min(VIEW_W, MAP_W);
+            const viewportTilesHigh = Math.min(VIEW_H, MAP_H);
 
             // Overlay: viewport rectangle
             const pad = minimapPadding;
             const px0 = dx + (pad + viewportTopLeftX_map) * minimapScale;
             const py0 = dy + (pad + viewportTopLeftY_map) * minimapScale;
             // --- END: ACCURATE VIEWPORT CALCULATION ---
-            
-            const pw  = VIEW_W * minimapScale;
-            const ph  = VIEW_H * minimapScale;
+
+            const pw  = viewportTilesWide * minimapScale;
+            const ph  = viewportTilesHigh * minimapScale;
 
             ctx.lineWidth = Math.max(1, Math.floor(minimapScale / 2));
             ctx.strokeStyle = MINIMAP_COLORS.viewport;
