@@ -2239,8 +2239,9 @@
             }, 50);
         }
         function bootstrap() {
-            speedSlider.value = CONFIG.ai.ticksPerSecond;
-            speedValue.textContent = `${CONFIG.ai.ticksPerSecond} tps`;
+            const ticksPerSecond = CONFIG.ai.ticksPerSecond;
+            speedSlider.value = ticksPerSecond;
+            speedValue.textContent = `${ticksPerSecond} tps`;
             restartBtn.addEventListener('click', init);
             speedSlider.addEventListener('input', (e) => {
                 simulationSpeed = parseInt(e.target.value, 10);
