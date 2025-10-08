@@ -118,6 +118,11 @@
         .equipment-slots {
             grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
         }
+        @media (max-width: 600px) {
+            .equipment-slots {
+                grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+            }
+        }
         .inventory-slots {
             grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
             grid-auto-rows: minmax(60px, auto);
