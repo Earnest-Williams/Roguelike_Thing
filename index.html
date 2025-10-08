@@ -282,6 +282,22 @@
                 maxInitRetries: 10
             }
         };
+
+        const TILE_FLOOR = 0;
+        const TILE_WALL = 1;
+        const DEFAULT_LIGHT_RADIUS = 1;
+        const DEFAULT_MOB_HP = 10;
+        const DEFAULT_MOB_SPEED = 1;
+        const DEFAULT_INVENTORY_CAPACITY = 20;
+        const DEFAULT_MONSTER_AGGRO_RANGE = 8;
+        const SHORT_TERM_MEMORY_PENALTY = 15;
+        const MINIMAP_DEFAULT_DIMENSION = 640;
+        const CARDINAL_DIRECTIONS = Object.freeze([
+            { dx: 1, dy: 0 },
+            { dx: -1, dy: 0 },
+            { dx: 0, dy: 1 },
+            { dx: 0, dy: -1 },
+        ]);
         const Game = (() => {
         const viewportEl = document.getElementById('maze-viewport');
         const canvas = document.getElementById('maze-canvas');
@@ -645,7 +661,7 @@
             }
 
             getLightRadius() {
-                let r = 1;
+                let r = DEFAULT_LIGHT_RADIUS;
                 for (const [, it] of this.slots) if (it && it.lightRadius) r = Math.max(r, it.lightRadius);
                 return r;
             }
@@ -672,13 +688,13 @@
                 this.name = o.name;
                 this.x = o.x | 0;
                 this.y = o.y | 0;
-                this.hp = o.hp ?? 10;
+                this.hp = o.hp ?? DEFAULT_MOB_HP;
                 this.maxHp = this.hp;
-                this.speed = o.speed ?? 1;
+                this.speed = o.speed ?? DEFAULT_MOB_SPEED;
                 this.glyph = o.glyph ?? "?";
                 this.color = o.color ?? "#fff";
                 this.equipment = new Equipment();
-                this.inventory = new Inventory(20);
+                this.inventory = new Inventory(DEFAULT_INVENTORY_CAPACITY);
             }
             get pos() { return { x: this.x, y: this.y }; }
             set pos(p) { this.x = p.x | 0; this.y = p.y | 0; }
@@ -686,7 +702,7 @@
 
             canOccupy(x, y, maze, mobManager = null) {
                 if (y < 0 || y >= maze.length || x < 0 || x >= maze[0].length) return false;
-                if (maze[y][x] === 1) return false;
+                if (maze[y][x] === TILE_WALL) return false;
                 if (mobManager && mobManager.getMobAt(x, y)) return false;
                 return true;
             }
@@ -705,7 +721,7 @@
         class Monster extends Mob {
             constructor(o) {
                 super({ kind: "monster", glyph: "m", color: "#f99", ...o });
-                this.aggroRange = o.aggroRange ?? 8;
+                this.aggroRange = o.aggroRange ?? DEFAULT_MONSTER_AGGRO_RANGE;
             }
             takeTurn(gameCtx) {
                 const { player, maze } = gameCtx;
@@ -719,9 +735,8 @@
                         this.tryMove(alt.dx, alt.dy, maze, gameCtx.mobManager);
                     }
                 } else {
-                    const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
-                    const [mx, my] = dirs[(Math.random() * dirs.length) | 0];
-                    this.tryMove(mx, my, maze, gameCtx.mobManager);
+                    const { dx, dy } = CARDINAL_DIRECTIONS[(Math.random() * CARDINAL_DIRECTIONS.length) | 0];
+                    this.tryMove(dx, dy, maze, gameCtx.mobManager);
                 }
             }
         }
@@ -865,7 +880,7 @@
         const randChoice = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
         function getLightRadius() {
-            return player && player.equipment ? player.equipment.getLightRadius() : 1;
+            return player && player.equipment ? player.equipment.getLightRadius() : DEFAULT_LIGHT_RADIUS;
         }
 
         function bresenhamLine(x0, y0, x1, y1) {
@@ -891,7 +906,7 @@
             for (const pt of line) {
                 if (pt.x < 0 || pt.x >= MAP_W || pt.y < 0 || pt.y >= MAP_H) return false;
                 const val = sim ? knownGrid[pt.y][pt.x] : maze[pt.y][pt.x];
-                if (val === 1) return false;
+                if (val === TILE_WALL) return false;
             }
             return true;
         }
@@ -915,17 +930,15 @@
             const visibleCells = new Set(losCells);
             for (const cellKey of losCells) {
                 const [x, y] = cellKey.split(',').map(Number);
-                if (maze[y][x] === 0) {
-                    const neighbors = [
-                        {x: x, y: y-1}, {x: x, y: y+1}, {x: x-1, y: y}, {x: x+1, y: y}
-                    ];
-                    for (const n of neighbors) {
+                if (maze[y][x] === TILE_FLOOR) {
+                    for (const { dx, dy } of CARDINAL_DIRECTIONS) {
+                        const n = { x: x + dx, y: y + dy };
                         // When a floor tile is visible we also reveal any bordering wall tiles.
                         // This mirrors how traditional roguelikes render walls that are flush
                         // against lit corridors, making navigation far less confusing for the
                         // auto-explorer.
                         const withinRadius = Math.hypot(n.x - pos.x, n.y - pos.y) <= lightRadius;
-                        if (withinRadius && n.x >= 0 && n.x < MAP_W && n.y >= 0 && n.y < MAP_H && maze[n.y][n.x] === 1) {
+                        if (withinRadius && n.x >= 0 && n.x < MAP_W && n.y >= 0 && n.y < MAP_H && maze[n.y][n.x] === TILE_WALL) {
                             visibleCells.add(posKey(n));
                         }
                     }
@@ -977,7 +990,7 @@
                     {x: current.x - 1, y: current.y}, {x: current.x + 1, y: current.y}
                 ];
                 for (const neighbor of neighbors) {
-                    if (!inBounds(grid, neighbor.x, neighbor.y) || grid[neighbor.y][neighbor.x] === 1) {
+                    if (!inBounds(grid, neighbor.x, neighbor.y) || grid[neighbor.y][neighbor.x] === TILE_WALL) {
                         continue;
                     }
                     const neighborKey = posKey(neighbor);
@@ -1321,7 +1334,11 @@
                 }
             }
             if (placed.length === 0) {
-                const fallback = rasterizeRectLike(clamp((cfg.areaRange[0] + cfg.areaRange[1]) >> 1, 300, 750), cfg.minSide, 'square');
+                const fallback = rasterizeRectLike(
+                    clamp((cfg.areaRange[0] + cfg.areaRange[1]) >> 1, 300, 750),
+                    cfg.minSide,
+                    'square'
+                );
                 placed.push({ kind: 'square', ...fallback, x0: 0, y0: 0, x1: fallback.width - 1, y1: fallback.height - 1, tiles: fallback.tiles.map(t => ({ x: t.x, y: t.y })), });
             }
             let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -1331,12 +1348,12 @@
             }
             const innerW = maxX - minX + 1; const innerH = maxY - minY + 1;
             const W = innerW + 2 * cfg.border; const H = innerH + 2 * cfg.border;
-            const grid = Array.from({ length: H }, () => Array(W).fill(1));
+            const grid = Array.from({ length: H }, () => Array(W).fill(TILE_WALL));
             const ox = -minX + cfg.border; const oy = -minY + cfg.border;
             for (const r of placed) {
                 for (const t of r.tiles) {
                     const gx = t.x + ox; const gy = t.y + oy;
-                    if (gy >= 0 && gy < H && gx >= 0 && gx < W) grid[gy][gx] = 0;
+                    if (gy >= 0 && gy < H && gx >= 0 && gx < W) grid[gy][gx] = TILE_FLOOR;
                 }
             }
             return {
@@ -1568,7 +1585,7 @@
                 if (y <= 0 || y >= H - 1) continue;
                 for (let x = r.x + 1; x < r.x + r.w - 1; x++) {
                     if (x <= 0 || x >= W - 1) continue;
-                    grid[y][x] = 0; // floor
+                    grid[y][x] = TILE_FLOOR; // floor
                 }
             }
         }
@@ -1666,25 +1683,25 @@
 
             if (Math.random() > 0.5) { // Go X then Y
                 while (x !== tx) {
-                    if (inBounds(grid, x, y)) grid[y][x] = 0;
+                    if (inBounds(grid, x, y)) grid[y][x] = TILE_FLOOR;
                     x += Math.sign(tx - x);
                 }
                 while (y !== ty) {
-                    if (inBounds(grid, x, y)) grid[y][x] = 0; // x is now tx
+                    if (inBounds(grid, x, y)) grid[y][x] = TILE_FLOOR; // x is now tx
                     y += Math.sign(ty - y);
                 }
             } else { // Go Y then X
                 while (y !== ty) {
-                    if (inBounds(grid, x, y)) grid[y][x] = 0;
+                    if (inBounds(grid, x, y)) grid[y][x] = TILE_FLOOR;
                     y += Math.sign(ty - y);
                 }
                 while (x !== tx) {
-                    if (inBounds(grid, x, y)) grid[y][x] = 0; // y is now ty
+                    if (inBounds(grid, x, y)) grid[y][x] = TILE_FLOOR; // y is now ty
                     x += Math.sign(tx - x);
                 }
             }
             // Always carve the final destination tile to guarantee connection
-            if (inBounds(grid, tx, ty)) grid[ty][tx] = 0;
+            if (inBounds(grid, tx, ty)) grid[ty][tx] = TILE_FLOOR;
         }
         function floodFillOpen(grid, start) {
             const H = grid.length, W = grid[0].length;
@@ -1692,14 +1709,19 @@
             const seen = new Set();
             const q = [];
             if (start.x<0||start.y<0||start.x>=W||start.y>=H) return seen;
-            if (grid[start.y][start.x] === 1) return seen;
+            if (grid[start.y][start.x] === TILE_WALL) return seen;
             q.push(start); seen.add(key(start.x,start.y));
             while (q.length) {
                 const p = q.shift();
-                for (const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]) {
-                    const nx = p.x+dx, ny = p.y+dy, k = key(nx,ny);
-                    if (nx<0||ny<0||nx>=W||ny>=H) continue;
-                    if (grid[ny][nx]===0 && !seen.has(k)) { seen.add(k); q.push({x:nx,y:ny}); }
+                for (const { dx, dy } of CARDINAL_DIRECTIONS) {
+                    const nx = p.x + dx;
+                    const ny = p.y + dy;
+                    const k = key(nx, ny);
+                    if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+                    if (grid[ny][nx] === TILE_FLOOR && !seen.has(k)) {
+                        seen.add(k);
+                        q.push({ x: nx, y: ny });
+                    }
                 }
             }
             return seen;
@@ -1769,8 +1791,8 @@
             }
             const end = allRooms[farIdx]?.center || start;
             // Force floors at start/end
-            if (grid[Math.round(start.y)]?.[Math.round(start.x)] === 1) grid[Math.round(start.y)][Math.round(start.x)] = 0;
-            if (grid[Math.round(end.y)]?.[Math.round(end.x)] === 1) grid[Math.round(end.y)][Math.round(end.x)] = 0;
+            if (grid[Math.round(start.y)]?.[Math.round(start.x)] === TILE_WALL) grid[Math.round(start.y)][Math.round(start.x)] = TILE_FLOOR;
+            if (grid[Math.round(end.y)]?.[Math.round(end.x)] === TILE_WALL) grid[Math.round(end.y)][Math.round(end.x)] = TILE_FLOOR;
             return {
                 grid,
                 start: { x: Math.round(start.x), y: Math.round(start.y) },
@@ -1941,7 +1963,7 @@
             let text = '';
             let textColor = CONFIG.visual.colors.defaultText;
             let fontWeight = '';
-            const isWall = maze[y][x] === 1;
+            const isWall = maze[y][x] === TILE_WALL;
             if (isWall) {
                 bgColor = CONFIG.visual.colors.wall;
                 textColor = 'transparent';
@@ -2000,13 +2022,11 @@
             const cellsToUpdate = new Set(losCells);
             for (const cellKey of losCells) {
                 const [x, y] = cellKey.split(',').map(Number);
-                if (maze[y][x] === 0) {
-                    const neighbors = [
-                        {x: x, y: y-1}, {x: x, y: y+1}, {x: x-1, y: y}, {x: x+1, y: y}
-                    ];
-                    for (const n of neighbors) {
+                if (maze[y][x] === TILE_FLOOR) {
+                    for (const { dx, dy } of CARDINAL_DIRECTIONS) {
+                        const n = { x: x + dx, y: y + dy };
                         const withinRadius = Math.hypot(n.x - pos.x, n.y - pos.y) <= lightRadius;
-                        if (withinRadius && n.x >= 0 && n.x < MAP_W && n.y >= 0 && n.y < MAP_H && maze[n.y][n.x] === 1) {
+                        if (withinRadius && n.x >= 0 && n.x < MAP_W && n.y >= 0 && n.y < MAP_H && maze[n.y][n.x] === TILE_WALL) {
                             cellsToUpdate.add(posKey(n));
                         }
                     }
@@ -2019,7 +2039,7 @@
                 }
                 exploredGrid[y][x] = true;
                 knownGrid[y][x] = maze[y][x];
-                if (knownGrid[y][x] === 0) {
+                if (knownGrid[y][x] === TILE_FLOOR) {
                     const neighbors = [
                         {x: x, y: y-1}, {x: x, y: y+1}, {x: x-1, y: y}, {x: x+1, y: y},
                         {x: x-1, y: y-1}, {x: x-1, y: y+1}, {x: x+1, y: y-1}, {x: x+1, y: y+1}
@@ -2054,7 +2074,7 @@
                 }
             }
             if (shortTermMemory.includes(posKey(pos))) {
-                score -= 15;
+                score -= SHORT_TERM_MEMORY_PENALTY;
             }
             return score;
         }
@@ -2069,14 +2089,11 @@
                 if (pos.x === target.x && pos.y === target.y) {
                     return path;
                 }
-                const neighbors = [
-                    {x: pos.x, y: pos.y-1}, {x: pos.x, y: pos.y+1},
-                    {x: pos.x-1, y: pos.y}, {x: pos.x+1, y: pos.y}
-                ];
-                for (const n of neighbors) {
+                for (const { dx, dy } of CARDINAL_DIRECTIONS) {
+                    const n = { x: pos.x + dx, y: pos.y + dy };
                     const nKey = posKey(n);
                     if (n.x >= 0 && n.x < MAP_W && n.y >= 0 && n.y < MAP_H &&
-                        !visited.has(nKey) && knownGrid[n.y][n.x] === 0 && !shortTermMemory.includes(nKey)) {
+                        !visited.has(nKey) && knownGrid[n.y][n.x] === TILE_FLOOR && !shortTermMemory.includes(nKey)) {
                         visited.add(nKey);
                         queue.push({pos: n, path: [...path, n]});
                     }
@@ -2175,7 +2192,7 @@
                         shortTermMemory.shift();
                     }
                     let nextMove = null;
-                    if (knownGrid[endPos.y][endPos.x] === 0) {
+                    if (knownGrid[endPos.y][endPos.x] === TILE_FLOOR) {
                         // Once the exit has been discovered we greedily follow the fastest path to
                         // it, ignoring the short-term memory so backtracking is allowed.
                         const pathToExit = bfsToTarget(player.pos, endPos, []); // Ignore short term memory for exit path
@@ -2184,13 +2201,13 @@
                         }
                     }
                     if (!nextMove) {
-                        const neighbors = [
-                            {x: player.pos.x, y: player.pos.y-1}, {x: player.pos.x, y: player.pos.y+1},
-                            {x: player.pos.x-1, y: player.pos.y}, {x: player.pos.x+1, y: player.pos.y}
-                        ];
+                        const neighbors = CARDINAL_DIRECTIONS.map(({ dx, dy }) => ({
+                            x: player.pos.x + dx,
+                            y: player.pos.y + dy
+                        }));
                         const unvisitedNeighbors = neighbors.filter(n =>
                             n.x >= 0 && n.x < MAP_W && n.y >= 0 && n.y < MAP_H &&
-                            knownGrid[n.y][n.x] === 0 &&
+                            knownGrid[n.y][n.x] === TILE_FLOOR &&
                             !visitedForPathfinding.has(posKey(n))
                         );
                         const potentialMoves = unvisitedNeighbors.map(n => ({pos: n, score: explorationScore(n, shortTermMemory)}));
@@ -2289,7 +2306,7 @@
             player.equipment.equipTo(SLOT.Quiver,     makeItem("quiver_std"));
 
             // Inventory constraints come from backpack
-            player.inventory = new Inventory(20);
+            player.inventory = new Inventory(DEFAULT_INVENTORY_CAPACITY);
             player.inventory.setConstraints(player.equipment.currentBackpackConstraints());
 
             // Seed inventory
@@ -2421,8 +2438,8 @@
           const dpr = window.devicePixelRatio || 1;
 
           // Fallback if somehow still zero (should not happen after display:flex)
-          const cssW = rect.width  > 0 ? rect.width  : minimapCanvas.width  || 640;
-          const cssH = rect.height > 0 ? rect.height : minimapCanvas.height || 640;
+          const cssW = rect.width  > 0 ? rect.width  : minimapCanvas.width  || MINIMAP_DEFAULT_DIMENSION;
+          const cssH = rect.height > 0 ? rect.height : minimapCanvas.height || MINIMAP_DEFAULT_DIMENSION;
 
           minimapCanvas.width  = Math.max(1, Math.round(cssW * dpr));
           minimapCanvas.height = Math.max(1, Math.round(cssH * dpr));
@@ -2436,8 +2453,8 @@
           const tilesH = MAP_H + pad * 2;
 
           // Use current canvas backing size (already set by prepareMinimapCanvasBackingStore on open)
-          const targetW = minimapCanvas.width  || 640;
-          const targetH = minimapCanvas.height || 640;
+          const targetW = minimapCanvas.width  || MINIMAP_DEFAULT_DIMENSION;
+          const targetH = minimapCanvas.height || MINIMAP_DEFAULT_DIMENSION;
 
           minimapScale = Math.max(1, Math.floor(Math.min(
             targetW / tilesW,
@@ -2461,7 +2478,7 @@
           ctx.fillStyle = MINIMAP_COLORS.wall;
           for (let y = 0; y < MAP_H; y++) {
             for (let x = 0; x < MAP_W; x++) {
-              if (maze[y][x] === 1) {
+              if (maze[y][x] === TILE_WALL) {
                 ctx.fillRect(ox + x * minimapScale, oy + y * minimapScale, minimapScale, minimapScale);
               }
             }
