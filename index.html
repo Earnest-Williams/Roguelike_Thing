@@ -359,11 +359,17 @@
             { dx: 0, dy: 1 },
             { dx: 0, dy: -1 },
         ]);
+        // Transformation matrices for the eight octants used during shadowcasting
+        // field-of-view calculations. Each entry is [xx, xy, yx, yy] for one octant.
         const FOV_TRANSFORMS = [
-            [1, 0, 0, -1, -1, 0, 0, 1],
-            [0, 1, -1, 0, 0, -1, 1, 0],
-            [0, 1, 1, 0, 0, -1, -1, 0],
-            [1, 0, 0, 1, -1, 0, 0, -1],
+            [1, 0, 0, 1],
+            [0, 1, 1, 0],
+            [0, -1, 1, 0],
+            [-1, 0, 0, 1],
+            [-1, 0, 0, -1],
+            [0, -1, -1, 0],
+            [0, 1, -1, 0],
+            [1, 0, 0, -1],
         ];
         const Game = (() => {
             const viewportEl = document.getElementById('maze-viewport');
@@ -1152,10 +1158,8 @@
                 }
             }
             for (let oct = 0; oct < 8; oct++) {
-                castLight(1, 1.0, 0.0,
-                    FOV_TRANSFORMS[0][oct], FOV_TRANSFORMS[1][oct],
-                    FOV_TRANSFORMS[2][oct], FOV_TRANSFORMS[3][oct]
-                );
+                const [xx, xy, yx, yy] = FOV_TRANSFORMS[oct];
+                castLight(1, 1.0, 0.0, xx, xy, yx, yy);
             }
             return visible;
         }
