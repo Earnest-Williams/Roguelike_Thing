@@ -2312,7 +2312,14 @@
                         if (!parentKey) {
                             throw new Error(`BFS logic error: No parent found for key ${key} when reconstructing path from ${startKey} to ${targetKey}`);
                         }
+                        // Validate key format before parsing
+                        if (!/^-?\d+,-?\d+$/.test(key)) {
+                            throw new Error(`Invalid key format: "${key}". Expected "x,y" format.`);
+                        }
                         const [x, y] = key.split(',').map(Number);
+                        if (Number.isNaN(x) || Number.isNaN(y)) {
+                            throw new Error(`Invalid coordinates parsed from key: "${key}". Got x=${x}, y=${y}`);
+                        }
                         path.unshift({ x, y });
                         key = parentKey;
                     }
