@@ -1009,7 +1009,7 @@
 
         function ammoMatchesProfile(ammoProfile, stack) {
             if (!ammoProfile || !stack) return false;
-            const id = stack.id;
+            const id = stack.item.id;
             if (ammoProfile.itemId) return id === ammoProfile.itemId;
             if (ammoProfile.type) return id === ammoProfile.type;
             if (ammoProfile.typePrefix) return id.startsWith(ammoProfile.typePrefix);
