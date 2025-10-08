@@ -1075,7 +1075,10 @@
                 if (!ammoInfo) {
                     return { ok: false, reason: 'no_ammo' };
                 }
-                const consumed = attacker.inventory?.consumeAt?.(ammoInfo.index, profile.ammo.perShot ?? 1);
+                if (!attacker.inventory) {
+                    return { ok: false, reason: 'no_inventory' };
+                }
+                const consumed = attacker.inventory.consumeAt?.(ammoInfo.index, profile.ammo.perShot ?? 1);
                 if (!consumed) {
                     return { ok: false, reason: 'no_ammo' };
                 }
