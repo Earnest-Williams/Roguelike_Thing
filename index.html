@@ -292,6 +292,12 @@
                     player: '#2196f3',
                     playerGlyph: '#fff',
                     visibleOverlay: 'rgba(255,255,102,0.20)'
+                },
+                light: {
+                    fallbackColor: '#ffe9a6',
+                    fallbackFlickerRate: 0,
+                    baseOverlayAlpha: 0.20,
+                    flickerVariance: 0.12
                 }
             },
             ai: {
@@ -385,6 +391,16 @@
         let currentVisible = new Set();
         let initRetries = 0;
 
+        const rawLightConfig = CONFIG.visual.light || {};
+        const LIGHT_CONFIG = {
+            fallbackColor: rawLightConfig.fallbackColor || CONFIG.visual.colors.visibleOverlay || '#ffe9a6',
+            fallbackFlickerRate: (typeof rawLightConfig.fallbackFlickerRate === 'number') ? rawLightConfig.fallbackFlickerRate : 0,
+            baseOverlayAlpha: (typeof rawLightConfig.baseOverlayAlpha === 'number') ? rawLightConfig.baseOverlayAlpha : 0.20,
+            flickerVariance: (typeof rawLightConfig.flickerVariance === 'number') ? rawLightConfig.flickerVariance : 0.12
+        };
+
+        let currentVisibleOverlayStyle = CONFIG.visual.colors.visibleOverlay;
+
         const VIEW_W = CONFIG.visual.view.width;
         const VIEW_H = CONFIG.visual.view.height;
         const MIN_CELL_SIZE = CONFIG.visual.minCellSize;
@@ -475,7 +491,8 @@
             // handsRequired: 1 or 2 for weapons
             // dims: {l,w,h} in cm; mass: kg
             // stackable/maxStack: for things like arrows, torches
-            // lightRadius: tiles if lit (lantern/torch)
+            // lightRadius: tiles if lit (lantern/torch); lightColor: CSS color string for emitted light
+            // flickerRate: oscillations per second controlling light intensity flicker
             // container: optional { volumeL, maxMassKg, maxItemLengthCm, accepts: fn(item) -> boolean }
             constructor(o) {
                 this.id = o.id;
@@ -488,6 +505,8 @@
                 this.stackable = !!o.stackable;
                 this.maxStack = o.maxStack ?? (this.stackable ? 99 : 1);
                 this.lightRadius = o.lightRadius ?? 0;
+                this.lightColor = o.lightColor ?? null;
+                this.flickerRate = (typeof o.flickerRate === 'number') ? o.flickerRate : 0;
                 this.container = o.container ? { ...o.container } : null;
                 // Runtime state for containers (contents as stacks)
                 if (this.container) this.contents = [];
@@ -504,6 +523,8 @@
                     stackable: this.stackable,
                     maxStack: this.maxStack,
                     lightRadius: this.lightRadius,
+                    lightColor: this.lightColor,
+                    flickerRate: this.flickerRate,
                     container: null,
                 };
 
@@ -715,10 +736,39 @@
                 return it;
             }
 
+            getLightSourceProperties(defaults = null) {
+                const fallback = defaults ? { ...defaults } : {
+                    radius: DEFAULT_LIGHT_RADIUS,
+                    color: LIGHT_CONFIG.fallbackColor,
+                    flickerRate: LIGHT_CONFIG.fallbackFlickerRate
+                };
+                let best = { ...fallback };
+                let usingFallback = true;
+                for (const [, it] of this.slots) {
+                    if (!it || !it.lightRadius) continue;
+                    const candidate = {
+                        radius: it.lightRadius,
+                        color: it.lightColor || fallback.color,
+                        flickerRate: (typeof it.flickerRate === 'number') ? it.flickerRate : fallback.flickerRate
+                    };
+                    if (candidate.radius > best.radius || (usingFallback && candidate.radius === best.radius)) {
+                        best = candidate;
+                        usingFallback = false;
+                    }
+                }
+                return best;
+            }
+
             getLightRadius() {
-                let r = DEFAULT_LIGHT_RADIUS;
-                for (const [, it] of this.slots) if (it && it.lightRadius) r = Math.max(r, it.lightRadius);
-                return r;
+                return this.getLightSourceProperties().radius;
+            }
+
+            getLightColor() {
+                return this.getLightSourceProperties().color;
+            }
+
+            getLightFlickerRate() {
+                return this.getLightSourceProperties().flickerRate;
             }
 
             currentBackpackConstraints() {
@@ -860,11 +910,13 @@
         // Light sources
         registerItem({ id:"torch", name:"Torch", kind:"tool",
             equipSlots:[SLOT.LeftHand, SLOT.RightHand, SLOT.Belt1, SLOT.Belt2, SLOT.Belt3, SLOT.Belt4],
-            dims:{l:30,w:4,h:4}, mass:0.5, stackable:true, maxStack:20, lightRadius:2
+            dims:{l:30,w:4,h:4}, mass:0.5, stackable:true, maxStack:20, lightRadius:2,
+            lightColor:'#ffb347', flickerRate:3.5
         });
         registerItem({ id:"lantern", name:"Lantern", kind:"tool",
             equipSlots:[SLOT.LeftHand, SLOT.RightHand, SLOT.Belt1, SLOT.Belt2, SLOT.Belt3, SLOT.Belt4],
-            dims:{l:18,w:12,h:12}, mass:0.9, lightRadius:5
+            dims:{l:18,w:12,h:12}, mass:0.9, lightRadius:5,
+            lightColor:'#fff4c1', flickerRate:1.2
         });
 
         // Belt garment and attachments
@@ -934,8 +986,84 @@
         const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
         const randChoice = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
+        function colorStringToRgb(color) {
+            if (typeof color !== 'string') {
+                return colorStringToRgb(LIGHT_CONFIG.fallbackColor);
+            }
+            const trimmed = color.trim();
+            if (trimmed.startsWith('#')) {
+                let hex = trimmed.slice(1);
+                if (hex.length === 3) {
+                    hex = hex.split('').map(ch => ch + ch).join('');
+                }
+                if (hex.length === 6) {
+                    const value = parseInt(hex, 16);
+                    if (!Number.isNaN(value)) {
+                        return {
+                            r: (value >> 16) & 0xff,
+                            g: (value >> 8) & 0xff,
+                            b: value & 0xff,
+                        };
+                    }
+                }
+            }
+            const match = trimmed.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+            if (match) {
+                return {
+                    r: Math.max(0, Math.min(255, parseInt(match[1], 10) || 0)),
+                    g: Math.max(0, Math.min(255, parseInt(match[2], 10) || 0)),
+                    b: Math.max(0, Math.min(255, parseInt(match[3], 10) || 0)),
+                };
+            }
+            if (trimmed !== LIGHT_CONFIG.fallbackColor) {
+                return colorStringToRgb(LIGHT_CONFIG.fallbackColor);
+            }
+            return { r: 255, g: 255, b: 255 };
+        }
+
+        function getLightProperties() {
+            const defaults = {
+                radius: DEFAULT_LIGHT_RADIUS,
+                color: LIGHT_CONFIG.fallbackColor,
+                flickerRate: LIGHT_CONFIG.fallbackFlickerRate
+            };
+            if (!player || !player.equipment || typeof player.equipment.getLightSourceProperties !== 'function') {
+                return defaults;
+            }
+            return player.equipment.getLightSourceProperties(defaults);
+        }
+
+        function computeLightOverlayAlpha(flickerRate) {
+            let alpha = LIGHT_CONFIG.baseOverlayAlpha;
+            const variance = LIGHT_CONFIG.flickerVariance;
+            if (typeof flickerRate === 'number' && flickerRate > 0 && variance > 0) {
+                const now = (typeof performance !== 'undefined' && performance && typeof performance.now === 'function')
+                    ? performance.now()
+                    : Date.now();
+                const t = now / 1000;
+                const primary = Math.sin(t * flickerRate * 2 * Math.PI);
+                const secondary = Math.sin(t * flickerRate * 2 * Math.PI * 0.63 + Math.PI / 3);
+                alpha += primary * variance * 0.5;
+                alpha += secondary * variance * 0.25;
+            }
+            if (alpha < 0) alpha = 0;
+            else if (alpha > 1) alpha = 1;
+            return alpha;
+        }
+
+        function computeLightOverlayStyle() {
+            const props = getLightProperties();
+            const rgb = colorStringToRgb(props.color || LIGHT_CONFIG.fallbackColor);
+            const alpha = computeLightOverlayAlpha(props.flickerRate);
+            return `rgba(${rgb.r},${rgb.g},${rgb.b},${alpha.toFixed(3)})`;
+        }
+
+        function refreshLightingVisuals() {
+            currentVisibleOverlayStyle = computeLightOverlayStyle();
+        }
+
         function getLightRadius() {
-            return player && player.equipment ? player.equipment.getLightRadius() : DEFAULT_LIGHT_RADIUS;
+            return getLightProperties().radius;
         }
 
         function bresenhamLine(x0, y0, x1, y1) {
@@ -1927,6 +2055,7 @@
         function redrawAfterResize() {
             if (!maze || !maze.length) return;
             if (!player || !player.pos) return;
+            refreshLightingVisuals();
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             for (let y = 0; y < MAP_H; y++) {
                 for (let x = 0; x < MAP_W; x++) {
@@ -2052,7 +2181,7 @@
                 ctx.fillText(text, cellX + HALF_CELL, cellY + HALF_CELL);
             }
             if (isVisible) {
-                ctx.fillStyle = CONFIG.visual.colors.visibleOverlay;
+                ctx.fillStyle = currentVisibleOverlayStyle;
                 ctx.fillRect(cellX, cellY, CELL_SIZE, CELL_SIZE);
             }
         }
@@ -2157,6 +2286,7 @@
             return null;
         }
         function renderInitial(playerPos, startPos, endPos) {
+            refreshLightingVisuals();
             currentVisible = computeVisibleCells(playerPos);
             // Draw all initially explored cells
             for (const pos of newlyExplored) {
@@ -2171,6 +2301,7 @@
             drawCell(playerPos.x, playerPos.y, true, true, true, false); // Start is player pos initially
         }
         function renderDelta(prevPlayerPos, playerPos, endPos) {
+            refreshLightingVisuals();
             // Redraw cells where visibility turned off
             for (const key of prevVisible) {
                 if (!currentVisible.has(key)) {
