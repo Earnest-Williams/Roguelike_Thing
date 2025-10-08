@@ -616,8 +616,10 @@
             add(itemOrStack) {
                 const incoming = (itemOrStack instanceof ItemStack) ? itemOrStack : new ItemStack(itemOrStack, 1);
                 const merges = [];
+                const newSlots = [];
                 let mergedTotalQty = 0;
-                const revertMerges = () => {
+                let placedTotalQty = 0;
+                const rollback = () => {
                     for (const { index, added } of merges) {
                         const stack = this.stacks[index];
                         if (stack) {
@@ -625,9 +627,14 @@
                             if (stack.qty === 0) this.stacks[index] = null;
                         }
                     }
-                    incoming.qty += mergedTotalQty;
+                    for (const { index } of newSlots) {
+                        this.stacks[index] = null;
+                    }
+                    incoming.qty += mergedTotalQty + placedTotalQty;
                     merges.length = 0;
+                    newSlots.length = 0;
                     mergedTotalQty = 0;
+                    placedTotalQty = 0;
                 };
                 // Try merge first
                 if (incoming.stackable) {
@@ -637,7 +644,7 @@
                             const space = s.maxStack - s.qty;
                             const moved = Math.min(space, incoming.qty);
                             const tmp = new ItemStack(incoming.item.clone(), moved);
-                            if (!this.fitsConstraints(tmp)) { revertMerges(); return false; }
+                            if (!this.fitsConstraints(tmp)) { rollback(); return false; }
                             s.qty += moved;
                             merges.push({ index: i, added: moved });
                             mergedTotalQty += moved;
@@ -646,16 +653,24 @@
                     }
                     if (incoming.qty <= 0) return true;
                 }
-                // Place into a free slot
-                for (let i = 0; i < this.stacks.length; i++) {
+                // Place into free slots, respecting stack limits
+                for (let i = 0; i < this.stacks.length && incoming.qty > 0; i++) {
                     if (!this.stacks[i]) {
-                        const tmp = new ItemStack(incoming.item.clone(), incoming.qty);
-                        if (!this.fitsConstraints(tmp)) { revertMerges(); return false; }
+                        const maxPerSlot = (typeof incoming.maxStack === 'number' && incoming.maxStack > 0)
+                            ? incoming.maxStack
+                            : 1;
+                        const qtyToStore = Math.min(incoming.qty, maxPerSlot);
+                        if (qtyToStore <= 0) { rollback(); return false; }
+                        const tmp = new ItemStack(incoming.item.clone(), qtyToStore);
+                        if (!this.fitsConstraints(tmp)) { rollback(); return false; }
                         this.stacks[i] = tmp;
-                        return true;
+                        newSlots.push({ index: i });
+                        placedTotalQty += qtyToStore;
+                        incoming.qty -= qtyToStore;
                     }
                 }
-                revertMerges();
+                if (incoming.qty <= 0) return true;
+                rollback();
                 return false;
             }
 
