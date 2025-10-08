@@ -393,7 +393,7 @@
 
         const rawLightConfig = CONFIG.visual.light || {};
         const LIGHT_CONFIG = {
-            fallbackColor: rawLightConfig.fallbackColor || CONFIG.visual.colors.visibleOverlay || '#ffe9a6',
+            fallbackColor: rawLightConfig.fallbackColor || '#ffe9a6',
             fallbackFlickerRate: (typeof rawLightConfig.fallbackFlickerRate === 'number') ? rawLightConfig.fallbackFlickerRate : 0,
             baseOverlayAlpha: (typeof rawLightConfig.baseOverlayAlpha === 'number') ? rawLightConfig.baseOverlayAlpha : 0.20,
             flickerVariance: (typeof rawLightConfig.flickerVariance === 'number') ? rawLightConfig.flickerVariance : 0.12
