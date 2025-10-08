@@ -658,7 +658,7 @@
                     if (!this.stacks[i]) {
                         const maxPerSlot = (typeof incoming.maxStack === 'number' && incoming.maxStack > 0)
                             ? incoming.maxStack
-                            : incoming.qty;
+                            : 1;
                         const qtyToStore = Math.min(incoming.qty, maxPerSlot);
                         if (qtyToStore <= 0) { rollback(); return false; }
                         const tmp = new ItemStack(incoming.item.clone(), qtyToStore);
