@@ -2310,7 +2310,7 @@
                     while (key !== startKey) {
                         const parentKey = parents.get(key);
                         if (!parentKey) {
-                            return null;
+                            throw new Error(`BFS logic error: No parent found for key ${key} when reconstructing path from ${startKey} to ${targetKey}`);
                         }
                         const [x, y] = key.split(',').map(Number);
                         path.unshift({ x, y });
