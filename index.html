@@ -1335,7 +1335,7 @@
             }
             if (placed.length === 0) {
                 const fallback = rasterizeRectLike(
-                    clamp((cfg.areaRange[0] + cfg.areaRange[1]) >> 1, cfg.areaRange[0], cfg.areaRange[1]),
+                    clamp((cfg.areaRange[0] + cfg.areaRange[1]) >> 1, 300, 750),
                     cfg.minSide,
                     'square'
                 );
