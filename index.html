@@ -359,6 +359,12 @@
             { dx: 0, dy: 1 },
             { dx: 0, dy: -1 },
         ]);
+        const FOV_TRANSFORMS = [
+            [1, 0, 0, -1, -1, 0, 0, 1],
+            [0, 1, -1, 0, 0, -1, 1, 0],
+            [0, 1, 1, 0, 0, -1, -1, 0],
+            [1, 0, 0, 1, -1, 0, 0, -1],
+        ];
         const Game = (() => {
             const viewportEl = document.getElementById('maze-viewport');
             const canvas = document.getElementById('maze-canvas');
@@ -391,6 +397,7 @@
         let currentEndPos = null;
         let currentVisible = new Set();
         let initRetries = 0;
+        let lastFOVCache = { key: null, radius: null, visible: null };
 
         const rawLightConfig = CONFIG.visual.light || {};
         const LIGHT_CONFIG = {
@@ -1085,68 +1092,82 @@
             return getLightProperties().radius;
         }
 
-        function bresenhamLine(x0, y0, x1, y1) {
-            const points = [];
-            let dx = Math.abs(x1 - x0);
-            let dy = Math.abs(y1 - y0);
-            let sx = x0 < x1 ? 1 : -1;
-            let sy = y0 < y1 ? 1 : -1;
-            let err = dx - dy;
-            while (true) {
-                points.push({x: x0, y: y0});
-                if (x0 === x1 && y0 === y1) break;
-                const e2 = 2 * err;
-                if (e2 > -dy) { err -= dy; x0 += sx; }
-                if (e2 < dx) { err += dx; y0 += sy; }
-            }
-            return points;
+        function tileBlocksLight(x, y, useKnownGrid = false) {
+            if (x < 0 || x >= MAP_W || y < 0 || y >= MAP_H) return true;
+            const grid = useKnownGrid ? knownGrid : maze;
+            const row = grid[y];
+            if (!row) return true;
+            const val = row[x];
+            if (useKnownGrid && val === -1) return false;
+            return val === TILE_WALL;
         }
-        function isVisible(targetX, targetY, pos, sim = false) {
-            const lightRadius = getLightRadius();
-            if (Math.hypot(targetX - pos.x, targetY - pos.y) > lightRadius) return false;
-            const line = bresenhamLine(pos.x, pos.y, targetX, targetY).slice(1, -1);
-            for (const pt of line) {
-                if (pt.x < 0 || pt.x >= MAP_W || pt.y < 0 || pt.y >= MAP_H) return false;
-                const val = sim ? knownGrid[pt.y][pt.x] : maze[pt.y][pt.x];
-                if (val === TILE_WALL) return false;
-            }
-            return true;
-        }
-        function computeVisibleCells(pos) {
-            // We only need to check tiles that fall inside the light radius (with a one tile
-            // buffer) – anything further away cannot possibly be seen. Trimming the loops to
-            // this window keeps the FOV calculation cheap even on very large maps.
-            const lightRadius = getLightRadius();
-            const minX = Math.max(0, pos.x - lightRadius - 1);
-            const maxX = Math.min(MAP_W - 1, pos.x + lightRadius + 1);
-            const minY = Math.max(0, pos.y - lightRadius - 1);
-            const maxY = Math.min(MAP_H - 1, pos.y + lightRadius + 1);
-            const losCells = new Set();
-            for (let y = minY; y <= maxY; y++) {
-                for (let x = minX; x <= maxX; x++) {
-                    if (isVisible(x, y, pos, false)) {
-                        losCells.add(posKey({x, y}));
-                    }
-                }
-            }
-            const visibleCells = new Set(losCells);
-            for (const cellKey of losCells) {
-                const [x, y] = cellKey.split(',').map(Number);
-                if (maze[y][x] === TILE_FLOOR) {
-                    for (const { dx, dy } of CARDINAL_DIRECTIONS) {
-                        const n = { x: x + dx, y: y + dy };
-                        // When a floor tile is visible we also reveal any bordering wall tiles.
-                        // This mirrors how traditional roguelikes render walls that are flush
-                        // against lit corridors, making navigation far less confusing for the
-                        // auto-explorer.
-                        const withinRadius = Math.hypot(n.x - pos.x, n.y - pos.y) <= lightRadius;
-                        if (withinRadius && n.x >= 0 && n.x < MAP_W && n.y >= 0 && n.y < MAP_H && maze[n.y][n.x] === TILE_WALL) {
-                            visibleCells.add(posKey(n));
+        function computeFieldOfView(pos, radius, useKnownGrid = false) {
+            const visible = new Set();
+            const radiusSq = radius * radius;
+            visible.add(posKey(pos));
+            const setVisible = (x, y) => {
+                if (x < 0 || x >= MAP_W || y < 0 || y >= MAP_H) return;
+                visible.add(posKey({ x, y }));
+            };
+            function castLight(row, startSlope, endSlope, xx, xy, yx, yy) {
+                if (startSlope < endSlope) return;
+                for (let i = row; i <= radius; i++) {
+                    let dx = -i - 1;
+                    let dy = -i;
+                    let blocked = false;
+                    let newStart = startSlope;
+                    while (dx <= 0) {
+                        dx += 1;
+                        const mx = pos.x + dx * xx + dy * xy;
+                        const my = pos.y + dx * yx + dy * yy;
+                        const lSlope = (dx - 0.5) / (dy + 0.5);
+                        const rSlope = (dx + 0.5) / (dy - 0.5);
+                        if (startSlope < rSlope) {
+                            continue;
+                        }
+                        if (endSlope > lSlope) {
+                            break;
+                        }
+                        const distSq = dx * dx + dy * dy;
+                        if (distSq <= radiusSq) {
+                            setVisible(mx, my);
+                        }
+                        const blockedTile = tileBlocksLight(mx, my, useKnownGrid);
+                        if (blocked) {
+                            if (blockedTile) {
+                                newStart = rSlope;
+                                continue;
+                            }
+                            blocked = false;
+                            startSlope = newStart;
+                        } else if (blockedTile && i < radius) {
+                            blocked = true;
+                            castLight(i + 1, startSlope, lSlope, xx, xy, yx, yy);
+                            newStart = rSlope;
                         }
                     }
+                    if (blocked) {
+                        break;
+                    }
                 }
             }
-            return visibleCells;
+            for (let oct = 0; oct < 8; oct++) {
+                castLight(1, 1.0, 0.0,
+                    FOV_TRANSFORMS[0][oct], FOV_TRANSFORMS[1][oct],
+                    FOV_TRANSFORMS[2][oct], FOV_TRANSFORMS[3][oct]
+                );
+            }
+            return visible;
+        }
+        function computeVisibleCells(pos) {
+            const key = posKey(pos);
+            const radius = getLightRadius();
+            if (lastFOVCache.visible && lastFOVCache.key === key && lastFOVCache.radius === radius) {
+                return lastFOVCache.visible;
+            }
+            const visible = computeFieldOfView(pos, radius, false);
+            lastFOVCache = { key, radius, visible };
+            return visible;
         }
         // --- A* PATHFINDING FOR MAP VALIDATION ---
         function inBounds(grid, x, y) {
@@ -2209,26 +2230,17 @@
         // floor cells to "frontiers" so the explorer knows where to head next.
         function updateVisionAndExploration(pos) {
             const lightRadius = getLightRadius();
-            const minX = Math.max(0, pos.x - lightRadius - 1);
-            const maxX = Math.min(MAP_W - 1, pos.x + lightRadius + 1);
-            const minY = Math.max(0, pos.y - lightRadius - 1);
-            const maxY = Math.min(MAP_H - 1, pos.y + lightRadius + 1);
+            const radiusSq = lightRadius * lightRadius;
             newlyExplored = [];
-            const losCells = new Set();
-            for (let y = minY; y <= maxY; y++) {
-                for (let x = minX; x <= maxX; x++) {
-                    if (isVisible(x, y, pos, false)) {
-                        losCells.add(posKey({x, y}));
-                    }
-                }
-            }
-            const cellsToUpdate = new Set(losCells);
-            for (const cellKey of losCells) {
+            const visibleCells = computeFieldOfView(pos, lightRadius, false);
+            lastFOVCache = { key: posKey(pos), radius: lightRadius, visible: visibleCells };
+            const cellsToUpdate = new Set(visibleCells);
+            for (const cellKey of visibleCells) {
                 const [x, y] = cellKey.split(',').map(Number);
                 if (maze[y][x] === TILE_FLOOR) {
                     for (const { dx, dy } of CARDINAL_DIRECTIONS) {
                         const n = { x: x + dx, y: y + dy };
-                        const withinRadius = Math.hypot(n.x - pos.x, n.y - pos.y) <= lightRadius;
+                        const withinRadius = (n.x - pos.x) * (n.x - pos.x) + (n.y - pos.y) * (n.y - pos.y) <= radiusSq;
                         if (withinRadius && n.x >= 0 && n.x < MAP_W && n.y >= 0 && n.y < MAP_H && maze[n.y][n.x] === TILE_WALL) {
                             cellsToUpdate.add(posKey(n));
                         }
@@ -2265,15 +2277,11 @@
         function explorationScore(pos, shortTermMemory) {
             let score = 0;
             const lightRadius = getLightRadius();
-            const minX = Math.max(0, pos.x - lightRadius - 1);
-            const maxX = Math.min(MAP_W - 1, pos.x + lightRadius + 1);
-            const minY = Math.max(0, pos.y - lightRadius - 1);
-            const maxY = Math.min(MAP_H - 1, pos.y + lightRadius + 1);
-            for (let y = minY; y <= maxY; y++) {
-                for (let x = minX; x <= maxX; x++) {
-                    if (isVisible(x, y, pos, true) && knownGrid[y][x] === -1) {
-                        score++;
-                    }
+            const visibleCells = computeFieldOfView(pos, lightRadius, true);
+            for (const cellKey of visibleCells) {
+                const [x, y] = cellKey.split(',').map(Number);
+                if (knownGrid[y][x] === -1) {
+                    score++;
                 }
             }
             if (shortTermMemory.includes(posKey(pos))) {
@@ -2598,6 +2606,7 @@
                 prevPlayerPos = null;
                 currentVisible = new Set();
                 newlyExplored = [];
+                lastFOVCache = { key: null, radius: null, visible: null };
                 updateVisionAndExploration(player.startPos);
                 renderInitial(player.startPos, player.startPos, endPos);
                 updateCamera(player.startPos);
