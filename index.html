@@ -1033,13 +1033,16 @@
             return player.equipment.getLightSourceProperties(defaults);
         }
 
+        // Cache the best available timing function to avoid repeated feature detection
+        const getNow = (typeof performance !== 'undefined' && performance && typeof performance.now === 'function')
+            ? () => performance.now()
+            : () => Date.now();
+
         function computeLightOverlayAlpha(flickerRate) {
             let alpha = LIGHT_CONFIG.baseOverlayAlpha;
             const variance = LIGHT_CONFIG.flickerVariance;
             if (typeof flickerRate === 'number' && flickerRate > 0 && variance > 0) {
-                const now = (typeof performance !== 'undefined' && performance && typeof performance.now === 'function')
-                    ? performance.now()
-                    : Date.now();
+                const now = getNow();
                 const t = now / 1000;
                 const primary = Math.sin(t * flickerRate * 2 * Math.PI);
                 const secondary = Math.sin(t * flickerRate * 2 * Math.PI * 0.63 + Math.PI / 3);
