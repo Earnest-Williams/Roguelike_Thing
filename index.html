@@ -664,7 +664,7 @@
                         const tmp = new ItemStack(incoming.item.clone(), qtyToStore);
                         if (!this.fitsConstraints(tmp)) { rollback(); return false; }
                         this.stacks[i] = tmp;
-                        newSlots.push({ index: i, qty: qtyToStore });
+                        newSlots.push({ index: i });
                         placedTotalQty += qtyToStore;
                         incoming.qty -= qtyToStore;
                     }
