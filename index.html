@@ -360,6 +360,7 @@
             { dx: 0, dy: -1 },
         ]);
         const Game = (() => {
+            const containerEl = document.getElementById('container');
             const viewportEl = document.getElementById('maze-viewport');
             const canvas = document.getElementById('maze-canvas');
             const ctx = canvas.getContext('2d');
@@ -2000,7 +2001,7 @@
         }
         function updateResponsiveLayout(forceRedraw = true) {
             if (!MAP_W || !MAP_H) return;
-            if (!viewportEl || !canvas) return;
+            if (!containerEl || !viewportEl || !canvas) return;
             const appContainer = document.getElementById('app-container');
             const uiPanel = document.getElementById('ui-panel');
             if (!appContainer || !uiPanel) return;
