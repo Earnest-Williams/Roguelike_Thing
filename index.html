@@ -1303,18 +1303,27 @@
                 notes:"Expended on a hit unless recovered"
             }
         });
+        // Javelin ammunition item
+        registerItem({
+            id:"javelin_ammo", name:"Javelin", kind:"ammo",
+            stackable:true, maxStack:12,
+            dims:{l:150,w:5,h:5}, mass:1.0,
+            ammoFor:["javelin"],
+            description:"A throwable javelin, used as ammunition for the javelin weapon."
+        });
+        // Javelin weapon (no longer stackable, uses javelin_ammo as ammo)
         registerItem({
             id:"javelin", name:"Javelin", kind:"weapon",
             equipSlots:[SLOT.LeftHand, SLOT.RightHand, SLOT.Belt1, SLOT.Belt2],
             handsRequired:1,
-            dims:{l:150,w:5,h:5}, mass:1.0, stackable:true, maxStack:4,
+            dims:{l:150,w:5,h:5}, mass:1.0,
             weaponProfile:{
                 category:WEAPON_CATEGORY.THROWN,
                 range:{min:1, optimal:5, max:8},
                 reloadTime:0,
-                ammo:{ itemId:"javelin", perShot:1, consumesItem:true, label:"javelins" },
+                ammo:{ itemId:"javelin_ammo", perShot:1, consumesItem:true, label:"javelins" },
                 damage:{ diceCount:1, diceSides:6, bonus:2 },
-                notes:"Throws consume the held spear"
+                notes:"Throws consume a javelin from your ammo supply"
             }
         });
 
