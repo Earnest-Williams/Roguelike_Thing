@@ -1055,7 +1055,7 @@
             const props = getLightProperties();
             const rgb = colorStringToRgb(props.color || LIGHT_CONFIG.fallbackColor);
             const alpha = computeLightOverlayAlpha(props.flickerRate);
-            return `rgba(${rgb.r},${rgb.g},${rgb.b},${alpha.toFixed(3)})`;
+            return ['rgba(', rgb.r, ',', rgb.g, ',', rgb.b, ',', alpha.toFixed(3), ')'].join('');
         }
 
         function refreshLightingVisuals() {
