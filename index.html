@@ -11,15 +11,18 @@
             color: #f0f0f0;
             display: flex;
             justify-content: center;
-            align-items: center;
-            height: 100vh;
+            align-items: flex-start;
+            min-height: 100vh;
             margin: 0;
-            overflow: hidden;
+            padding: 20px 0;
+            overflow: auto;
         }
         #app-container {
             display: flex;
             gap: 20px;
             align-items: flex-start;
+            justify-content: center;
+            flex-wrap: wrap;
         }
         #container {
             text-align: center;
@@ -222,6 +225,7 @@
             visual: {
                 view: { width: 41, height: 41 },
                 cellSize: 20,
+                minCellSize: 12,
                 colors: {
                     unseen: '#111',
                     wall: '#3a2a23',
@@ -306,13 +310,15 @@
         let isEndRendered = false;
         let prevVisible = new Set();
         let prevPlayerPos = null;
+        let currentEndPos = null;
         let currentVisible = new Set();
         let initRetries = 0;
 
         const VIEW_W = CONFIG.visual.view.width;
         const VIEW_H = CONFIG.visual.view.height;
-        const CELL_SIZE = CONFIG.visual.cellSize;
-        const HALF_CELL = CELL_SIZE / 2;
+        const MIN_CELL_SIZE = CONFIG.visual.minCellSize;
+        let CELL_SIZE = CONFIG.visual.cellSize;
+        let HALF_CELL = CELL_SIZE / 2;
         const MAX_INIT_RETRIES = CONFIG.general.maxInitRetries;
         
         // ===================== EQUIPMENT MODEL =====================
@@ -918,7 +924,8 @@
                         // This mirrors how traditional roguelikes render walls that are flush
                         // against lit corridors, making navigation far less confusing for the
                         // auto-explorer.
-                        if (n.x >= 0 && n.x < MAP_W && n.y >= 0 && n.y < MAP_H && maze[n.y][n.x] === 1) {
+                        const withinRadius = Math.hypot(n.x - pos.x, n.y - pos.y) <= lightRadius;
+                        if (withinRadius && n.x >= 0 && n.x < MAP_W && n.y >= 0 && n.y < MAP_H && maze[n.y][n.x] === 1) {
                             visibleCells.add(posKey(n));
                         }
                     }
@@ -1770,12 +1777,106 @@
                 end: { x: Math.round(end.x), y: Math.round(end.y) }
             };
         }
+        function applyCellSize(size) {
+            const clamped = Math.max(MIN_CELL_SIZE, Math.floor(size));
+            CELL_SIZE = clamped;
+            HALF_CELL = CELL_SIZE / 2;
+            if (viewportEl) {
+                viewportEl.style.width = `${VIEW_W * CELL_SIZE}px`;
+                viewportEl.style.height = `${VIEW_H * CELL_SIZE}px`;
+            }
+            if (canvas) {
+                canvas.width = MAP_W * CELL_SIZE;
+                canvas.height = MAP_H * CELL_SIZE;
+            }
+        }
+        function updateResponsiveLayout(forceRedraw = true) {
+            if (!MAP_W || !MAP_H) return;
+            if (!viewportEl || !canvas) return;
+            const appContainer = document.getElementById('app-container');
+            const uiPanel = document.getElementById('ui-panel');
+            if (!appContainer || !uiPanel) return;
+
+            const measure = () => {
+                const containerRect = containerEl.getBoundingClientRect();
+                const viewportRect = viewportEl.getBoundingClientRect();
+                const appRect = appContainer.getBoundingClientRect();
+                const uiRect = uiPanel.getBoundingClientRect();
+                return { containerRect, viewportRect, appRect, uiRect };
+            };
+
+            applyCellSize(CONFIG.visual.cellSize);
+            let metrics = measure();
+            const viewportWidth = metrics.viewportRect.width || (VIEW_W * CELL_SIZE);
+            const viewportHeight = metrics.viewportRect.height || (VIEW_H * CELL_SIZE);
+            const nonViewportWidth = metrics.appRect.width - viewportWidth;
+            const nonViewportHeight = metrics.containerRect.height - viewportHeight;
+
+            const widthBudget = window.innerWidth - nonViewportWidth;
+            const heightBudget = window.innerHeight - nonViewportHeight;
+
+            const widthRatio = viewportWidth > 0 ? Math.max(0, widthBudget / viewportWidth) : 1;
+            const heightRatio = viewportHeight > 0 ? Math.max(0, heightBudget / viewportHeight) : 1;
+            let scale = Math.min(1, widthRatio, heightRatio);
+            if (!Number.isFinite(scale) || scale <= 0) {
+                const safeWidth = widthRatio > 0 ? widthRatio : 1;
+                const safeHeight = heightRatio > 0 ? heightRatio : 1;
+                scale = Math.min(1, safeWidth, safeHeight);
+            }
+
+            const targetSize = Math.max(
+                MIN_CELL_SIZE,
+                Math.min(CONFIG.visual.cellSize, Math.floor(CONFIG.visual.cellSize * scale))
+            );
+            applyCellSize(targetSize);
+            metrics = measure();
+
+            let safety = 0;
+            while (safety < 25) {
+                const totalWidth = metrics.appRect.width;
+                const totalHeight = Math.max(metrics.containerRect.height, metrics.uiRect.height);
+                if ((totalWidth <= window.innerWidth || CELL_SIZE <= MIN_CELL_SIZE) &&
+                    (totalHeight <= window.innerHeight || CELL_SIZE <= MIN_CELL_SIZE)) {
+                    break;
+                }
+                if (CELL_SIZE <= MIN_CELL_SIZE) break;
+                applyCellSize(CELL_SIZE - 1);
+                metrics = measure();
+                safety++;
+            }
+
+            if (forceRedraw) redrawAfterResize();
+        }
+        function redrawAfterResize() {
+            if (!maze || !maze.length) return;
+            if (!player || !player.pos) return;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            for (let y = 0; y < MAP_H; y++) {
+                for (let x = 0; x < MAP_W; x++) {
+                    if (!exploredGrid[y][x]) continue;
+                    const key = posKey({ x, y });
+                    const isVisible = currentVisible.has(key);
+                    const isStart = player.startPos && x === player.startPos.x && y === player.startPos.y;
+                    const isEnd = currentEndPos && x === currentEndPos.x && y === currentEndPos.y && isEndRendered;
+                    drawCell(x, y, isVisible, false, isStart, isEnd);
+                }
+            }
+            const playerKey = posKey(player.pos);
+            const isPlayerVisible = currentVisible.has(playerKey);
+            const isStart = player.startPos && player.pos.x === player.startPos.x && player.pos.y === player.startPos.y;
+            const isEnd = currentEndPos && player.pos.x === currentEndPos.x && player.pos.y === currentEndPos.y;
+            drawCell(player.pos.x, player.pos.y, isPlayerVisible, true, isStart, isEnd);
+            updateCamera(player.pos);
+            if (minimapModalEl && minimapModalEl.style.display === 'flex') {
+                renderMinimapDynamic();
+            }
+        }
+        function handleResize() {
+            if (!maze || !maze.length) return;
+            updateResponsiveLayout(true);
+        }
         // --- UI & RENDER FUNCTIONS ---
         function setupDOM() {
-            viewportEl.style.width = `${VIEW_W * CELL_SIZE}px`;
-            viewportEl.style.height = `${VIEW_H * CELL_SIZE}px`;
-            canvas.width = MAP_W * CELL_SIZE;
-            canvas.height = MAP_H * CELL_SIZE;
             equipmentSlotsDiv.innerHTML = '';
             inventorySlotsDiv.innerHTML = '';
             ALL_SLOTS_ORDER.forEach(slotName => {
@@ -1797,6 +1898,7 @@
                 slot.id = `inv-${i}`;
                 inventorySlotsDiv.appendChild(slot);
             }
+            updateResponsiveLayout(false);
         }
 
         function renderUI() {
@@ -1865,7 +1967,8 @@
                 ctx.fillRect(cellX, cellY, CELL_SIZE, CELL_SIZE);
             }
             if (text) {
-                ctx.font = `${fontWeight}20px monospace`;
+                const glyphSize = Math.max(10, Math.floor(CELL_SIZE * 0.85));
+                ctx.font = `${fontWeight}${glyphSize}px monospace`;
                 ctx.fillStyle = textColor;
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
@@ -1902,7 +2005,8 @@
                         {x: x, y: y-1}, {x: x, y: y+1}, {x: x-1, y: y}, {x: x+1, y: y}
                     ];
                     for (const n of neighbors) {
-                        if (n.x >= 0 && n.x < MAP_W && n.y >= 0 && n.y < MAP_H && maze[n.y][n.x] === 1) {
+                        const withinRadius = Math.hypot(n.x - pos.x, n.y - pos.y) <= lightRadius;
+                        if (withinRadius && n.x >= 0 && n.x < MAP_W && n.y >= 0 && n.y < MAP_H && maze[n.y][n.x] === 1) {
                             cellsToUpdate.add(posKey(n));
                         }
                     }
@@ -2167,7 +2271,8 @@
             pauseIndicator.textContent = '';
             statusDiv.textContent = 'Generating dungeon...';
             restartBtn.style.display = 'none';
-            
+            currentEndPos = null;
+
             player = new Player({ name:"Player", x:0, y:0 });
 
             // Wearables
@@ -2210,6 +2315,7 @@
                 MAP_H = maze.length;
                 const startPos = dungeonData.start;
                 const endPos = dungeonData.end;
+                currentEndPos = endPos;
                 // Initialize data grids now that we have dimensions
                 exploredGrid = Array.from({ length: MAP_H }, () => Array(MAP_W).fill(false));
                 knownGrid = Array.from({ length: MAP_H }, () => Array(MAP_W).fill(-1));
@@ -2247,6 +2353,7 @@
                 simulationSpeed = parseInt(e.target.value, 10);
                 speedValue.textContent = `${simulationSpeed} tps`;
             });
+            window.addEventListener('resize', handleResize);
             window.addEventListener('keydown', (e) => {
                 if (e.code === 'Space') {
                     e.preventDefault();
