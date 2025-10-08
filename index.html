@@ -2285,21 +2285,63 @@
         // far. We allow the caller to provide a short-term memory blacklist so
         // the AI can temporarily avoid tiles that caused recent backtracking.
         function bfsToTarget(start, target, shortTermMemory) {
-            const queue = [{pos: start, path: []}];
-            const visited = new Set([posKey(start)]);
-            while (queue.length > 0) {
-                const {pos, path} = queue.shift();
-                if (pos.x === target.x && pos.y === target.y) {
+            const startKey = posKey(start);
+            const targetKey = posKey(target);
+            if (startKey === targetKey) {
+                return [];
+            }
+
+            const restricted = (shortTermMemory && shortTermMemory.length > 0)
+                ? new Set(shortTermMemory)
+                : null;
+
+            const queue = [start];
+            let head = 0;
+            const visited = new Set([startKey]);
+            const parents = new Map();
+
+            while (head < queue.length) {
+                const current = queue[head++];
+                const currentKey = posKey(current);
+
+                if (currentKey === targetKey) {
+                    const path = [];
+                    let key = targetKey;
+                    while (key !== startKey) {
+                        const parentKey = parents.get(key);
+                        if (!parentKey) {
+                            throw new Error(`BFS logic error: No parent found for key ${key} when reconstructing path from ${startKey} to ${targetKey}`);
+                        }
+                        const [x, y] = key.split(',').map(Number);
+                        path.unshift({ x, y });
+                        key = parentKey;
+                    }
                     return path;
                 }
+
                 for (const { dx, dy } of CARDINAL_DIRECTIONS) {
-                    const n = { x: pos.x + dx, y: pos.y + dy };
-                    const nKey = posKey(n);
-                    if (n.x >= 0 && n.x < MAP_W && n.y >= 0 && n.y < MAP_H &&
-                        !visited.has(nKey) && knownGrid[n.y][n.x] === TILE_FLOOR && !shortTermMemory.includes(nKey)) {
-                        visited.add(nKey);
-                        queue.push({pos: n, path: [...path, n]});
+                    const nx = current.x + dx;
+                    const ny = current.y + dy;
+                    if (nx < 0 || nx >= MAP_W || ny < 0 || ny >= MAP_H) {
+                        continue;
                     }
+
+                    if (knownGrid[ny][nx] !== TILE_FLOOR) {
+                        continue;
+                    }
+
+                    const neighborKey = posKey({ x: nx, y: ny });
+                    if (visited.has(neighborKey)) {
+                        continue;
+                    }
+
+                    if (restricted && restricted.has(neighborKey)) {
+                        continue;
+                    }
+
+                    visited.add(neighborKey);
+                    parents.set(neighborKey, currentKey);
+                    queue.push({ x: nx, y: ny });
                 }
             }
             return null;
