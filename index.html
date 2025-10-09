@@ -660,7 +660,8 @@
             };
         }
 
-        // ===================== ITEMS =====================
+        // ===== GAME MODELS =====
+        // ---- Items ----
 
         class Item {
             // id: stable id; name: label; kind: "weapon","armor","jewelry","container","tool","ammo","misc"
@@ -757,7 +758,7 @@
             return t.clone();
         }
 
-        // ===================== INVENTORY =====================
+        // ---- Inventory ----
         // This represents the carried inventory. Capacity is enforced by the equipped Backpack.
 
         class Inventory {
@@ -895,7 +896,7 @@
             }
         }
 
-        // ===================== EQUIPMENT =====================
+        // ---- Equipment ----
         // Enforces slot compatibility and 2H weapon occupancy.
 
         class Equipment {
@@ -1017,6 +1018,79 @@
                     accepts: pack.container.accepts || null
                 } : null;
             }
+        }
+
+        // ---- Mobs ----
+
+        let __mobAutoId = 1;
+
+        class Mob {
+            constructor(o) {
+                this.id = __mobAutoId++;
+                this.kind = o.kind;
+                this.name = o.name;
+                this.x = o.x | 0;
+                this.y = o.y | 0;
+                this.hp = o.hp ?? DEFAULT_MOB_HP;
+                this.maxHp = this.hp;
+                this.speed = o.speed ?? DEFAULT_MOB_SPEED;
+                this.glyph = o.glyph ?? "?";
+                this.color = o.color ?? "#fff";
+                this.equipment = new Equipment();
+                this.inventory = new Inventory(DEFAULT_INVENTORY_CAPACITY);
+            }
+            get pos() { return { x: this.x, y: this.y }; }
+            set pos(p) { this.x = p.x | 0; this.y = p.y | 0; }
+            lightRadius() { return this.equipment.getLightRadius(); }
+
+            canOccupy(x, y, maze, mobManager = null) {
+                if (y < 0 || y >= maze.length || x < 0 || x >= maze[0].length) return false;
+                if (maze[y][x] === TILE_WALL) return false;
+                if (mobManager && mobManager.getMobAt(x, y)) return false;
+                return true;
+            }
+            tryMove(dx, dy, maze, mobManager = null) {
+                const nx = this.x + dx, ny = this.y + dy;
+                if (this.canOccupy(nx, ny, maze, mobManager)) { this.x = nx; this.y = ny; return true; }
+                return false;
+            }
+            takeTurn(gameCtx) { /* no-op base */ }
+        }
+
+        class Player extends Mob {
+            constructor(o) { super({ kind: "player", glyph: "@", color: "#fff", ...o }); }
+        }
+
+        class Monster extends Mob {
+            constructor(o) {
+                super({ kind: "monster", glyph: "m", color: "#f99", ...o });
+                this.aggroRange = o.aggroRange ?? DEFAULT_MONSTER_AGGRO_RANGE;
+            }
+            takeTurn(gameCtx) {
+                const { player, maze } = gameCtx;
+                const dx = player.x - this.x, dy = player.y - this.y;
+                const dist = Math.abs(dx) + Math.abs(dy);
+                if (dist === 0) return;
+                if (dist <= this.aggroRange) {
+                    const step = Math.abs(dx) > Math.abs(dy) ? { dx: Math.sign(dx), dy: 0 } : { dx: 0, dy: Math.sign(dy) };
+                    if (!this.tryMove(step.dx, step.dy, maze, gameCtx.mobManager)) {
+                        const alt = (step.dx !== 0) ? { dx: 0, dy: Math.sign(dy) } : { dx: Math.sign(dx), dy: 0 };
+                        this.tryMove(alt.dx, alt.dy, maze, gameCtx.mobManager);
+                    }
+                } else {
+                    const { dx, dy } = CARDINAL_DIRECTIONS[(Math.random() * CARDINAL_DIRECTIONS.length) | 0];
+                    this.tryMove(dx, dy, maze, gameCtx.mobManager);
+                }
+            }
+        }
+
+        class MobManager {
+            constructor() { this.list = []; this.index = new Map(); }
+            add(m) { this.list.push(m); this.reindex(); return m; }
+            removeById(id) { this.list = this.list.filter(x => x.id !== id); this.reindex(); }
+            getMobAt(x, y) { return this.index.get(`${x},${y}`) || null; }
+            reindex() { this.index.clear(); for (const m of this.list) this.index.set(`${m.x},${m.y}`, m); }
+            tick(gameCtx) { for (const m of this.list) if (m.kind !== "player") m.takeTurn(gameCtx); this.reindex(); }
         }
 
         // ===================== RANGED COMBAT HELPERS =====================
@@ -1375,79 +1449,6 @@
             evaluateThrow,
             performThrow,
         };
-
-        // ===================== MOB SYSTEM =====================
-
-        let __mobAutoId = 1;
-
-        class Mob {
-            constructor(o) {
-                this.id = __mobAutoId++;
-                this.kind = o.kind;
-                this.name = o.name;
-                this.x = o.x | 0;
-                this.y = o.y | 0;
-                this.hp = o.hp ?? DEFAULT_MOB_HP;
-                this.maxHp = this.hp;
-                this.speed = o.speed ?? DEFAULT_MOB_SPEED;
-                this.glyph = o.glyph ?? "?";
-                this.color = o.color ?? "#fff";
-                this.equipment = new Equipment();
-                this.inventory = new Inventory(DEFAULT_INVENTORY_CAPACITY);
-            }
-            get pos() { return { x: this.x, y: this.y }; }
-            set pos(p) { this.x = p.x | 0; this.y = p.y | 0; }
-            lightRadius() { return this.equipment.getLightRadius(); }
-
-            canOccupy(x, y, maze, mobManager = null) {
-                if (y < 0 || y >= maze.length || x < 0 || x >= maze[0].length) return false;
-                if (maze[y][x] === TILE_WALL) return false;
-                if (mobManager && mobManager.getMobAt(x, y)) return false;
-                return true;
-            }
-            tryMove(dx, dy, maze, mobManager = null) {
-                const nx = this.x + dx, ny = this.y + dy;
-                if (this.canOccupy(nx, ny, maze, mobManager)) { this.x = nx; this.y = ny; return true; }
-                return false;
-            }
-            takeTurn(gameCtx) { /* no-op base */ }
-        }
-
-        class Player extends Mob {
-            constructor(o) { super({ kind: "player", glyph: "@", color: "#fff", ...o }); }
-        }
-
-        class Monster extends Mob {
-            constructor(o) {
-                super({ kind: "monster", glyph: "m", color: "#f99", ...o });
-                this.aggroRange = o.aggroRange ?? DEFAULT_MONSTER_AGGRO_RANGE;
-            }
-            takeTurn(gameCtx) {
-                const { player, maze } = gameCtx;
-                const dx = player.x - this.x, dy = player.y - this.y;
-                const dist = Math.abs(dx) + Math.abs(dy);
-                if (dist === 0) return;
-                if (dist <= this.aggroRange) {
-                    const step = Math.abs(dx) > Math.abs(dy) ? { dx: Math.sign(dx), dy: 0 } : { dx: 0, dy: Math.sign(dy) };
-                    if (!this.tryMove(step.dx, step.dy, maze, gameCtx.mobManager)) {
-                        const alt = (step.dx !== 0) ? { dx: 0, dy: Math.sign(dy) } : { dx: Math.sign(dx), dy: 0 };
-                        this.tryMove(alt.dx, alt.dy, maze, gameCtx.mobManager);
-                    }
-                } else {
-                    const { dx, dy } = CARDINAL_DIRECTIONS[(Math.random() * CARDINAL_DIRECTIONS.length) | 0];
-                    this.tryMove(dx, dy, maze, gameCtx.mobManager);
-                }
-            }
-        }
-
-        class MobManager {
-            constructor() { this.list = []; this.index = new Map(); }
-            add(m) { this.list.push(m); this.reindex(); return m; }
-            removeById(id) { this.list = this.list.filter(x => x.id !== id); this.reindex(); }
-            getMobAt(x, y) { return this.index.get(`${x},${y}`) || null; }
-            reindex() { this.index.clear(); for (const m of this.list) this.index.set(`${m.x},${m.y}`, m); }
-            tick(gameCtx) { for (const m of this.list) if (m.kind !== "player") m.takeTurn(gameCtx); this.reindex(); }
-        }
 
         // --- ITEM TEMPLATES ---
         // Weapons
