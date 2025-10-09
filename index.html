@@ -2325,6 +2325,43 @@
             }
             return inside;
         }
+        function finalizeRoomShape(width, height, tiles) {
+            const normalizedTiles = tiles.map(t => ({ x: t.x, y: t.y }));
+            if (normalizedTiles.length === 0) {
+                const safeW = Math.max(0, typeof width === 'number' ? width : 0);
+                const safeH = Math.max(0, typeof height === 'number' ? height : 0);
+                const x1 = safeW > 0 ? safeW - 1 : 0;
+                const y1 = safeH > 0 ? safeH - 1 : 0;
+                return {
+                    w: safeW,
+                    h: safeH,
+                    tiles: normalizedTiles,
+                    center: { x: safeW > 0 ? (safeW - 1) / 2 : 0, y: safeH > 0 ? (safeH - 1) / 2 : 0 },
+                    bbox: { x0: 0, y0: 0, x1, y1 },
+                };
+            }
+            let x0 = normalizedTiles[0].x;
+            let y0 = normalizedTiles[0].y;
+            let x1 = normalizedTiles[0].x;
+            let y1 = normalizedTiles[0].y;
+            for (const t of normalizedTiles) {
+                if (t.x < x0) x0 = t.x;
+                if (t.y < y0) y0 = t.y;
+                if (t.x > x1) x1 = t.x;
+                if (t.y > y1) y1 = t.y;
+            }
+            const derivedW = x1 - x0 + 1;
+            const derivedH = y1 - y0 + 1;
+            const w = typeof width === 'number' ? width : derivedW;
+            const h = typeof height === 'number' ? height : derivedH;
+            return {
+                w,
+                h,
+                tiles: normalizedTiles,
+                center: { x: x0 + (w - 1) / 2, y: y0 + (h - 1) / 2 },
+                bbox: { x0, y0, x1, y1 },
+            };
+        }
         function rasterizeRegularPolygon(n, targetArea, minSide) {
             const twoPi = Math.PI * 2;
             const sin = Math.sin;
@@ -2348,7 +2385,7 @@
                         }
                     }
                 }
-                return { tiles, width: w, height: h };
+                return finalizeRoomShape(w, h, tiles);
             };
             let out = tryBuild(R);
             const measured = out.tiles.length;
@@ -2379,7 +2416,7 @@
                 const R2b = Math.max(R * scale, minSide);
                 return rasterizeDisc(Math.PI * R2b * R2b, minSide);
             }
-            return { tiles, width: w, height: h };
+            return finalizeRoomShape(w, h, tiles);
         }
         function rasterizeRectLike(targetArea, minSide, kind) {
             let w, h;
@@ -2397,7 +2434,7 @@
             }
             const tiles = [];
             for (let y = 0; y < h; y++) { for (let x = 0; x < w; x++) tiles.push({ x, y }); }
-            return { tiles, width: w, height: h };
+            return finalizeRoomShape(w, h, tiles);
         }
         function rasterizeCross(targetArea, minSide) {
             const armWidth = Math.max(3, Math.round(clamp(minSide / 2, 3, 10)));
@@ -2417,7 +2454,7 @@
                     }
                 }
             }
-            return { width: size, height: size, tiles };
+            return finalizeRoomShape(size, size, tiles);
         }
         function rasterizeX(targetArea, minSide) {
             let size = Math.max(minSide, Math.round(Math.sqrt(targetArea * 0.9))); // Initial guess
@@ -2463,7 +2500,7 @@
                 finalTiles.push({x, y});
             });
 
-            return { width: size, height: size, tiles: finalTiles };
+            return finalizeRoomShape(size, size, finalTiles);
         }
         function rasterizeRingHub(targetArea, minSide) {
             const orient = randChoice(['h', 'v']);
@@ -2555,7 +2592,7 @@
                 }
             }
 
-            return { width: S, height: S, tiles };
+            return finalizeRoomShape(S, S, tiles);
         }
         function makeShape(targetArea, minSide) {
             const shape = randChoice(['square', 'rectangle', 'round', 'hex', 'oct', 'cross', 'x', 'ringhub']);
@@ -2570,9 +2607,10 @@
         }
         function canPlace(bbox, placed, minSpacing) {
             for (const r of placed) {
-                const overlap = !(bbox.x1 < r.x0 || bbox.x0 > r.x1 || bbox.y1 < r.y0 || bbox.y0 > r.y1);
+                const other = r.bbox;
+                const overlap = !(bbox.x1 < other.x0 || bbox.x0 > other.x1 || bbox.y1 < other.y0 || bbox.y0 > other.y1);
                 if (overlap) return false;
-                const l1 = manhattanEdgeDistanceRect(bbox, r);
+                const l1 = manhattanEdgeDistanceRect(bbox, other);
                 if (l1 < minSpacing) return false;
             }
             return true;
@@ -2617,14 +2655,24 @@
             let searchRadius = 0;
             for (const room of bigRooms) {
                 let placedOK = false;
-                const baseR = (searchRadius += Math.max(room.width, room.height) + cfg.minL1EdgeSpacing);
+                const baseR = (searchRadius += Math.max(room.w, room.h) + cfg.minL1EdgeSpacing);
                 for (let attempt = 0; attempt < cfg.maxAttemptsPerRoom; attempt++) {
                     const R = baseR + Math.floor(attempt / 10) * 10;
                     const tx = randInt(-R, R);
                     const ty = randInt(-R, R);
-                    const bbox = { x0: tx, y0: ty, x1: tx + room.width - 1, y1: ty + room.height - 1 };
+                    const bbox = {
+                        x0: tx + room.bbox.x0,
+                        y0: ty + room.bbox.y0,
+                        x1: tx + room.bbox.x1,
+                        y1: ty + room.bbox.y1,
+                    };
                     if (!canPlace(bbox, placed, cfg.minL1EdgeSpacing)) continue;
-                    placed.push({ ...room, x0: bbox.x0, y0: bbox.y0, x1: bbox.x1, y1: bbox.y1, tiles: room.tiles.map(t => ({ x: tx + t.x, y: ty + t.y })), });
+                    placed.push({
+                        ...room,
+                        bbox,
+                        center: { x: tx + room.center.x, y: ty + room.center.y },
+                        tiles: room.tiles.map(t => ({ x: tx + t.x, y: ty + t.y })),
+                    });
                     placedOK = true;
                     break;
                 }
@@ -2635,12 +2683,17 @@
                     cfg.minSide,
                     'square'
                 );
-                placed.push({ kind: 'square', ...fallback, x0: 0, y0: 0, x1: fallback.width - 1, y1: fallback.height - 1, tiles: fallback.tiles.map(t => ({ x: t.x, y: t.y })), });
+                placed.push({
+                    kind: 'square',
+                    ...fallback,
+                    bbox: { ...fallback.bbox },
+                    tiles: fallback.tiles.map(t => ({ x: t.x, y: t.y })),
+                });
             }
             let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
             for (const r of placed) {
-                minX = Math.min(minX, r.x0); minY = Math.min(minY, r.y0);
-                maxX = Math.max(maxX, r.x1); maxY = Math.max(maxY, r.y1);
+                minX = Math.min(minX, r.bbox.x0); minY = Math.min(minY, r.bbox.y0);
+                maxX = Math.max(maxX, r.bbox.x1); maxY = Math.max(maxY, r.bbox.y1);
             }
             const innerW = maxX - minX + 1; const innerH = maxY - minY + 1;
             const W = innerW + 2 * cfg.border; const H = innerH + 2 * cfg.border;
@@ -2656,8 +2709,16 @@
                 grid, width: W, height: H,
                 rooms: placed.map(r => ({
                     kind: r.kind,
-                    bbox: { x0: r.x0 + ox, y0: r.y0 + oy, x1: r.x1 + ox, y1: r.y1 + oy },
-                    center: { x: Math.floor((r.x0 + r.x1) / 2) + ox, y: Math.floor((r.y0 + r.y1) / 2) + oy }
+                    w: r.w,
+                    h: r.h,
+                    bbox: {
+                        x0: r.bbox.x0 + ox,
+                        y0: r.bbox.y0 + oy,
+                        x1: r.bbox.x1 + ox,
+                        y1: r.bbox.y1 + oy,
+                    },
+                    center: { x: r.center.x + ox, y: r.center.y + oy },
+                    tiles: r.tiles.map(t => ({ x: t.x + ox, y: t.y + oy })),
                 })),
                 meta: {
                     border: cfg.border, minL1EdgeSpacing: cfg.minL1EdgeSpacing,
@@ -2800,13 +2861,11 @@
           // Normalize large rooms to a common format
           const largeRooms = out.rooms.map(r => ({
             kind: r.kind,
-            x0: r.bbox.x0,
-            y0: r.bbox.y0,
-            x1: r.bbox.x1,
-            y1: r.bbox.y1,
-            w: r.bbox.x1 - r.bbox.x0 + 1,
-            h: r.bbox.y1 - r.bbox.y0 + 1,
-            center: { x: r.center.x, y: r.center.y }
+            w: r.w,
+            h: r.h,
+            bbox: { x0: r.bbox.x0, y0: r.bbox.y0, x1: r.bbox.x1, y1: r.bbox.y1 },
+            center: { x: r.center.x, y: r.center.y },
+            tiles: r.tiles.map(t => ({ x: t.x, y: t.y }))
           }));
           return {
             grid: out.grid,
@@ -2888,7 +2947,7 @@
         function smallRoomsFillIntoGrid(grid, largeRooms, border, cfg = HYBRID_CFG.small) {
             const H = grid.length, W = grid[0].length;
             // Inflate large rooms by clearance and treat them as blocked for small room placement
-            const inflatedLarge = largeRooms.map(L => inflateRect({ x: L.x0, y: L.y0, w: L.w, h: L.h }, cfg.clearanceFromLarge));
+            const inflatedLarge = largeRooms.map(L => inflateRect({ x: L.bbox.x0, y: L.bbox.y0, w: L.w, h: L.h }, cfg.clearanceFromLarge));
             // Build a combined forbidden mask = outside interior OR within clearance of any large room
             const forbidden = (x, y) => {
                 if (x < border || y < border || x >= W - border || y >= H - border) return true;
@@ -2928,12 +2987,22 @@
             // Carve
             for (const r of smallRooms) carveRoomIntoGrid(grid, r);
             // Return normalized descriptors for graph building
-            const smallNormalized = smallRooms.map(r => ({
-              kind: 'rect',
-              x0: r.x, y0: r.y, x1: r.x + r.w - 1, y1: r.y + r.h - 1,
-              w: r.w, h: r.h,
-              center: { x: r.x + Math.floor(r.w / 2), y: r.y + Math.floor(r.h / 2) }
-            }));
+            const smallNormalized = smallRooms.map(r => {
+              const tiles = [];
+              for (let dy = 0; dy < r.h; dy++) {
+                for (let dx = 0; dx < r.w; dx++) {
+                  tiles.push({ x: r.x + dx, y: r.y + dy });
+                }
+              }
+              return {
+                kind: 'rect',
+                w: r.w,
+                h: r.h,
+                bbox: { x0: r.x, y0: r.y, x1: r.x + r.w - 1, y1: r.y + r.h - 1 },
+                center: { x: r.x + Math.floor(r.w / 2), y: r.y + Math.floor(r.h / 2) },
+                tiles,
+              };
+            });
             return smallNormalized;
         }
         // -------------------------
