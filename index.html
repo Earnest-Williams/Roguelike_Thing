@@ -5016,31 +5016,58 @@
           return tooltipForItem(stack.item);
         }
 
+        function updateSlotElement(
+          slotEl,
+          { item = null, stack = null, emptyText = "-", clearWhenEmpty = false } = {},
+        ) {
+          if (!slotEl) return;
+
+          const itemDiv = slotEl.querySelector(".slot-item");
+          let textContent = emptyText;
+          let title = "";
+
+          if (stack) {
+            textContent = `${stack.name}${
+              stack.item?.stackable ? ` ×${stack.qty}` : ""
+            }`;
+            title = tooltipForStack(stack);
+          } else if (item) {
+            textContent = item.name ?? emptyText;
+            title = tooltipForItem(item);
+          }
+
+          if (stack || item || !clearWhenEmpty) {
+            if (itemDiv) {
+              itemDiv.textContent = textContent;
+            } else {
+              slotEl.innerHTML = `<div class="slot-item">${textContent}</div>`;
+            }
+          } else if (clearWhenEmpty) {
+            slotEl.innerHTML = "";
+          }
+
+          if (title) {
+            slotEl.title = title;
+          } else {
+            slotEl.removeAttribute("title");
+          }
+        }
+
         function renderUI() {
           for (const slotName of ALL_SLOTS_ORDER) {
-            const itemDiv = document.querySelector(
-              `#equip-${slotName} .slot-item`,
-            );
-            if (!itemDiv) continue;
-            const it = player.equipment.get(slotName);
-            itemDiv.textContent = it ? it.name : "-";
             const slotEl = document.getElementById(`equip-${slotName}`);
-            if (slotEl) {
-              const tip = tooltipForItem(it);
-              if (tip) slotEl.title = tip;
-              else slotEl.removeAttribute("title");
-            }
+            const it = player.equipment.get(slotName);
+            updateSlotElement(slotEl, { item: it, emptyText: "-" });
           }
           for (let i = 0; i < player.inventory.capacitySlots; i++) {
-            const slotDiv = document.getElementById(`inv-${i}`);
-            if (!slotDiv) break;
+            const slotEl = document.getElementById(`inv-${i}`);
+            if (!slotEl) break;
             const st = player.inventory.stacks[i];
-            slotDiv.innerHTML = st
-              ? `<div class="slot-item">${st.name}${st.item.stackable ? ` ×${st.qty}` : ""}</div>`
-              : "";
-            const tip = tooltipForStack(st);
-            if (tip) slotDiv.title = tip;
-            else slotDiv.removeAttribute("title");
+            updateSlotElement(slotEl, {
+              stack: st,
+              emptyText: "",
+              clearWhenEmpty: true,
+            });
           }
         }
 
