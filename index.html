@@ -1133,8 +1133,7 @@
                 }
             }
             if (attacker.inventory && typeof attacker.inventory.consumeMatching === 'function') {
-                if (attacker.inventory.consumeMatching(stack => stack.item === item, 1)) return true;
-                if (attacker.inventory.consumeMatching(stack => stack.item.id === item.id, 1)) return true;
+                if (attacker.inventory.consumeMatching(stack => stack.item === item || stack.item.id === item.id, 1)) return true;
             }
             return false;
         }
