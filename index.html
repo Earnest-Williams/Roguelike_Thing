@@ -493,6 +493,29 @@
       function createDefaultModCache() {
         return {
           status: createDefaultStatusModCache(),
+          offense: {
+            affinities: Object.create(null),
+            brandAdds: [],
+            conversions: [],
+            polarity: { onHitBias: { baseMult: 0, vs: Object.create(null) } },
+          },
+          defense: {
+            resists: Object.create(null),
+            immunities: new Set(),
+          },
+          polarity: {
+            grant: {
+              order: 0,
+              growth: 0,
+              chaos: 0,
+              decay: 0,
+              void: 0,
+            },
+            defenseBias: {
+              baseResistPct: 0,
+              vs: Object.create(null),
+            },
+          },
         };
       }
 
@@ -792,70 +815,128 @@
       }
 
       function resolveAttack(ctx) {
-        const A = ctx.attacker;
-        const D = ctx.defender;
+        const S = ctx.attacker ?? ctx.S;
+        const D = ctx.defender ?? ctx.D;
         const turn = ctx.turn | 0;
-        const packets = Object.create(null);
-        const add = (type, amount) => {
-          packets[type] = (packets[type] || 0) + amount;
+
+        const packetsBeforeDefense = Object.create(null);
+        const addPacket = (type, amount) => {
+          if (!type) return;
+          const value = Math.floor(amount ?? 0);
+          if (!Number.isFinite(value) || value <= 0) return;
+          packetsBeforeDefense[type] =
+            (packetsBeforeDefense[type] || 0) + value;
         };
 
-        let basePhysical = Math.max(0, ctx.basePhysical | 0);
+        const basePhysicalDescriptor = ctx.basePhysical;
+        let basePhysicalPool = 0;
+        let bonusPhysicalPool = Math.max(0, Math.floor(ctx.bonusPhysical ?? 0));
 
-        for (const conv of ctx.conversions || []) {
-          let pool = basePhysical;
-          if (!conv.includeBaseOnly && ctx.bonusPhysical) {
-            pool += ctx.bonusPhysical;
+        if (typeof basePhysicalDescriptor === "number") {
+          basePhysicalPool = Math.max(0, Math.floor(basePhysicalDescriptor));
+        } else if (basePhysicalDescriptor && typeof basePhysicalDescriptor === "object") {
+          for (const [key, raw] of Object.entries(basePhysicalDescriptor)) {
+            const n = Math.floor(Number(raw ?? 0));
+            if (!Number.isFinite(n) || n <= 0) continue;
+            if (key === "flatFromStats") {
+              bonusPhysicalPool += n;
+            } else {
+              basePhysicalPool += n;
+            }
           }
-          const delta = Math.floor(pool * conv.pct);
-          basePhysical -= delta;
-          add(conv.to, delta);
-        }
-        if (basePhysical > 0) {
-          add("physical", basePhysical);
         }
 
-        for (const brand of ctx.brands || []) {
-          if (brand.flat) {
-            add(brand.type, brand.flat | 0);
+        const gather = (value) =>
+          Array.isArray(value)
+            ? value
+            : value && typeof value === "object"
+            ? [value]
+            : [];
+
+        const conversions = [
+          ...gather(ctx.conversions),
+          ...gather(S?.modCache?.offense?.conversions),
+        ];
+        const brands = [
+          ...gather(ctx.brands),
+          ...gather(S?.modCache?.offense?.brandAdds),
+        ];
+
+        for (const conv of conversions) {
+          if (!conv) continue;
+          const pct = Number(conv.pct ?? conv.percent ?? 0);
+          if (!Number.isFinite(pct) || pct <= 0) continue;
+          const toType = conv.to || conv.type;
+          if (!toType) continue;
+          let pool = basePhysicalPool;
+          if (!conv.includeBaseOnly) {
+            pool += bonusPhysicalPool;
           }
+          if (pool <= 0) continue;
+          let delta = Math.floor(pool * pct);
+          if (!Number.isFinite(delta) || delta <= 0) continue;
+          const baseShare = Math.min(delta, basePhysicalPool);
+          basePhysicalPool -= baseShare;
+          const bonusShare = delta - baseShare;
+          if (!conv.includeBaseOnly && bonusShare > 0) {
+            bonusPhysicalPool = Math.max(0, bonusPhysicalPool - bonusShare);
+          }
+          addPacket(toType, delta);
+        }
+
+        const remainingPhysical = basePhysicalPool + bonusPhysicalPool;
+        if (remainingPhysical > 0) {
+          addPacket("physical", remainingPhysical);
+        }
+
+        for (const brand of brands) {
+          if (!brand) continue;
+          const flat = Math.floor(Number(brand.flat ?? 0));
+          if (!Number.isFinite(flat) || flat <= 0) continue;
+          addPacket(brand.type || brand.damageType || "physical", flat);
         }
 
         const mulTyped = (packetMap, getMult) => {
           for (const type in packetMap) {
             const mult = getMult(type);
             if (mult) {
-              packetMap[type] = Math.max(
+              const next = Math.max(
                 0,
                 Math.floor(packetMap[type] * (1 + mult)),
               );
+              packetMap[type] = next;
             }
           }
         };
 
         mulTyped(
-          packets,
-          (t) => A?.modCache?.offense?.affinities?.[t] || 0,
+          packetsBeforeDefense,
+          (t) => S?.modCache?.offense?.affinities?.[t] || 0,
         );
 
-        if (A?.modCache?.polarity?.onHitBias?.baseMult) {
-          const m = A.modCache.polarity.onHitBias.baseMult;
-          for (const type in packets) {
-            packets[type] = Math.floor(packets[type] * (1 + m));
+        const onHitBias =
+          S?.modCache?.polarity?.onHitBias?.baseMult ??
+          S?.modCache?.offense?.polarity?.onHitBias?.baseMult ??
+          0;
+        if (onHitBias) {
+          for (const type in packetsBeforeDefense) {
+            packetsBeforeDefense[type] = Math.floor(
+              packetsBeforeDefense[type] * (1 + onHitBias),
+            );
           }
         }
 
         mulTyped(
-          packets,
-          (t) => A?.statusDerived?.damageDealtMult?.[t] || 0,
+          packetsBeforeDefense,
+          (t) => S?.statusDerived?.damageDealtMult?.[t] || 0,
         );
         mulTyped(
-          packets,
+          packetsBeforeDefense,
           (t) => D?.statusDerived?.damageTakenMult?.[t] || 0,
         );
 
-        const out = Object.create(null);
-        for (const type in packets) {
+        const packetsAfterDefense = Object.create(null);
+        for (const type in packetsBeforeDefense) {
           if (D?.modCache?.defense?.immunities?.has?.(type)) {
             continue;
           }
@@ -863,19 +944,33 @@
             (D?.modCache?.defense?.resists?.[type] || 0) +
             (D?.statusDerived?.resistDelta?.[type] || 0);
           const clampedRes = Math.max(-1, Math.min(0.95, baseRes));
-          out[type] = Math.max(
+          packetsAfterDefense[type] = Math.max(
             0,
-            Math.floor(packets[type] * (1 - clampedRes)),
+            Math.floor(packetsBeforeDefense[type] * (1 - clampedRes)),
           );
         }
 
-        const total = Object.values(out).reduce((acc, value) => acc + value, 0);
+        const totalDamage = Object.values(packetsAfterDefense).reduce(
+          (acc, value) => acc + value,
+          0,
+        );
 
+        let statusApplied = [];
         if (ctx.statusAttempts?.length) {
-          applyStatuses({ statusAttempts: ctx.statusAttempts }, A, D, turn);
+          statusApplied = applyStatuses(
+            { statusAttempts: ctx.statusAttempts },
+            S,
+            D,
+            turn,
+          );
         }
 
-        return { packetsByType: out, total };
+        return {
+          packetsBeforeDefense,
+          packetsAfterDefense,
+          totalDamage,
+          statusApplied,
+        };
       }
 
       class RingBuffer {
@@ -2461,11 +2556,43 @@
             }
             evaluation.ammoUsed = profile.ammo.perShot ?? 1;
           }
-          const roll = rollDamage(profile.damage);
-          evaluation.roll = roll;
-          evaluation.damageApplied = roll.total;
+          const baseRoll = rollDamage(profile.damage);
+          const diceTotal = Array.isArray(baseRoll.rolls)
+            ? baseRoll.rolls.reduce((acc, value) => acc + value, 0)
+            : 0;
+          const attackCtx = {
+            S: attacker,
+            D: target,
+            attacker,
+            defender: target,
+            turn: context.turn ?? 0,
+            basePhysical: {
+              diceTotal,
+              flatFromWeapon: baseRoll.bonus ?? 0,
+              flatFromStats: 0,
+            },
+            attackKind: "ranged",
+            source: { item: weapon, weaponProfile: profile },
+          };
+          if (Array.isArray(context.statusAttempts) && context.statusAttempts.length) {
+            attackCtx.statusAttempts = context.statusAttempts;
+          }
+          if (Array.isArray(context.conversions) && context.conversions.length) {
+            attackCtx.conversions = context.conversions;
+          }
+          if (Array.isArray(context.brands) && context.brands.length) {
+            attackCtx.brands = context.brands;
+          }
+          const attackResult = resolveAttack(attackCtx);
+          evaluation.roll = baseRoll;
+          evaluation.damageApplied = attackResult.totalDamage;
+          evaluation.packetsBeforeDefense = attackResult.packetsBeforeDefense;
+          evaluation.packetsAfterDefense = attackResult.packetsAfterDefense;
+          evaluation.statusApplied = attackResult.statusApplied;
+          evaluation.attackResult = attackResult;
+          const damageAfterDefense = attackResult.totalDamage ?? 0;
           if (typeof target.hp === "number") {
-            target.hp -= roll.total;
+            target.hp -= damageAfterDefense;
             evaluation.targetHp = target.hp;
             evaluation.targetDefeated = target.hp <= 0;
             if (evaluation.targetDefeated) {
@@ -2635,11 +2762,43 @@
           const evaluation = evaluateThrow(attacker, target, item, context);
           if (!evaluation.ok) return evaluation;
           const profile = evaluation.profile;
-          const roll = rollDamage(profile.damage);
-          evaluation.roll = roll;
-          evaluation.damageApplied = roll.total;
+          const baseRoll = rollDamage(profile.damage);
+          const diceTotal = Array.isArray(baseRoll.rolls)
+            ? baseRoll.rolls.reduce((acc, value) => acc + value, 0)
+            : 0;
+          const attackCtx = {
+            S: attacker,
+            D: target,
+            attacker,
+            defender: target,
+            turn: context.turn ?? 0,
+            basePhysical: {
+              diceTotal,
+              flatFromWeapon: baseRoll.bonus ?? 0,
+              flatFromStats: 0,
+            },
+            attackKind: "throw",
+            source: { item, throwProfile: profile },
+          };
+          if (Array.isArray(context.statusAttempts) && context.statusAttempts.length) {
+            attackCtx.statusAttempts = context.statusAttempts;
+          }
+          if (Array.isArray(context.conversions) && context.conversions.length) {
+            attackCtx.conversions = context.conversions;
+          }
+          if (Array.isArray(context.brands) && context.brands.length) {
+            attackCtx.brands = context.brands;
+          }
+          const attackResult = resolveAttack(attackCtx);
+          evaluation.roll = baseRoll;
+          evaluation.damageApplied = attackResult.totalDamage;
+          evaluation.packetsBeforeDefense = attackResult.packetsBeforeDefense;
+          evaluation.packetsAfterDefense = attackResult.packetsAfterDefense;
+          evaluation.statusApplied = attackResult.statusApplied;
+          evaluation.attackResult = attackResult;
+          const damageAfterDefense = attackResult.totalDamage ?? 0;
           if (typeof target.hp === "number") {
-            target.hp -= roll.total;
+            target.hp -= damageAfterDefense;
             evaluation.targetHp = target.hp;
             evaluation.targetDefeated = target.hp <= 0;
           }
