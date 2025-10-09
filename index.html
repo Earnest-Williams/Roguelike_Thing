@@ -3799,10 +3799,12 @@
           return Array.from(set.values());
         }
         function carveLCorridor(grid, p1, p2) {
-          let x = p1.x,
-            y = p1.y;
-          const tx = p2.x,
-            ty = p2.y;
+          let x = Math.round(p1.x),
+            y = Math.round(p1.y);
+          const tx = Math.round(p2.x),
+            ty = Math.round(p2.y);
+
+          if (inBounds(grid, x, y)) grid[y][x] = TILE_FLOOR;
 
           if (Math.random() > 0.5) {
             // Go X then Y
