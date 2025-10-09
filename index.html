@@ -11,7 +11,7 @@
             color: #f0f0f0;
             display: flex;
             justify-content: center;
-            align-items: safe center;
+            align-items: center;
             min-height: 100vh;
             margin: 0;
             padding: clamp(16px, 4vh, 40px) clamp(20px, 5vw, 80px);
@@ -1114,6 +1114,14 @@
             totalMassKg() { return this.item.mass * this.qty; }
             totalVolumeL() { return this.item.volumeLPerUnit() * this.qty; }
             canMerge(other) { return this.stackable && other.stackable && this.id === other.id; }
+            consume(n = 1) {
+                if (!this.stackable) return false;
+                const amount = Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0;
+                if (amount === 0) return true;
+                if (this.qty < amount) return false;
+                this.qty -= amount;
+                return true;
+            }
         }
 
         // Registry
