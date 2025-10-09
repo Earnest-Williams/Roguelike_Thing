@@ -2907,7 +2907,11 @@
             const kept = [];
             for (const r of candidates) {
                 // 1) Intersects interior?
-                const violatesBorder = forbidden(r.x, r.y) || forbidden(r.x + r.w - 1, r.y + r.h - 1);
+                const violatesBorder =
+                    forbidden(r.x, r.y) || // top-left
+                    forbidden(r.x + r.w - 1, r.y) || // top-right
+                    forbidden(r.x, r.y + r.h - 1) || // bottom-left
+                    forbidden(r.x + r.w - 1, r.y + r.h - 1); // bottom-right
                 if (violatesBorder) continue;
                 // 2) Avoid overlap with any inflated large room
                 const overlapsLarge = inflatedLarge.some(L => rectIntersects(
