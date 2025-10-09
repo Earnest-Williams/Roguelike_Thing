@@ -2557,8 +2557,12 @@
             target.hp -= damageAfterDefense;
             evaluation.targetHp = target.hp;
             evaluation.targetDefeated = target.hp <= 0;
-            if (evaluation.targetDefeated && typeof onTargetDefeated === "function") {
-              onTargetDefeated();
+            if (evaluation.targetDefeated) {
+              if (typeof onTargetDefeated === "function") {
+                onTargetDefeated();
+              } else {
+                handleDeath(target);
+              }
             }
           }
 
