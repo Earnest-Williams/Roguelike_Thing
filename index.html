@@ -428,7 +428,9 @@
 
         let player = {};
         let isEndRendered = false;
-        let prevPlayerPos = null;
+        const INVALID_POSITION_COORD = -1;
+        let prevPlayerPos = { x: INVALID_POSITION_COORD, y: INVALID_POSITION_COORD };
+        let hasPrevPlayerPos = false;
         let currentEndPos = null;
         let initRetries = 0;
 
@@ -3135,7 +3137,7 @@
                 if (!simState.isPaused) {
                     if (player.pos.x === endPos.x && player.pos.y === endPos.y) {
                         clearInterval(simState.timeout); statusDiv.textContent = 'Exit found!';
-                        renderDelta(prevPlayerPos, player.pos, endPos);
+                        renderDelta(hasPrevPlayerPos ? prevPlayerPos : null, player.pos, endPos);
                         restartBtn.style.display = 'block';
                         return;
                     }
@@ -3196,7 +3198,9 @@
                         nextMove = stack.pop();
                     }
                     if (nextMove) {
-                        prevPlayerPos = { ...player.pos };
+                        prevPlayerPos.x = player.pos.x;
+                        prevPlayerPos.y = player.pos.y;
+                        if (!hasPrevPlayerPos) hasPrevPlayerPos = true;
                         player.pos = nextMove;
                         const stepKey = posKey(player.pos);
                         if (!visitedForPathfinding.has(stepKey)) {
@@ -3208,7 +3212,7 @@
                     }
                     updateVisionAndExploration(player.pos);
                     fovState.currentVisible = computeVisibleCells(player.pos);
-                    renderDelta(prevPlayerPos, player.pos, endPos);
+                    renderDelta(hasPrevPlayerPos ? prevPlayerPos : null, player.pos, endPos);
                     updateCamera(player.pos);
                     fovState.prevVisible = new Set(fovState.currentVisible);
                     minimapMaybeRefreshOnTick();
@@ -3238,6 +3242,7 @@
             statusDiv.textContent = 'Generating dungeon...';
             restartBtn.style.display = 'none';
             currentEndPos = null;
+            hasPrevPlayerPos = false;
         }
 
         function setupPlayer() {
@@ -3323,7 +3328,7 @@
             player.startPos = startPos;
             isEndRendered = false;
             fovState.prevVisible = new Set();
-            prevPlayerPos = null;
+            hasPrevPlayerPos = false;
             fovState.currentVisible = new Set();
             explorationState.newlyExplored = [];
             fovState.lastCache = { key: null, radius: null, visible: null };
@@ -3333,7 +3338,9 @@
             updateCamera(player.startPos);
             renderUI();
             fovState.prevVisible = computeVisibleCells(player.startPos);
-            prevPlayerPos = { ...player.startPos };
+            prevPlayerPos.x = player.startPos.x;
+            prevPlayerPos.y = player.startPos.y;
+            hasPrevPlayerPos = true;
             initRetries = 0;
 
             setTimeout(() => simulate(player.startPos, endPos), 500);
