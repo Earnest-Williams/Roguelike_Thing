@@ -3518,9 +3518,7 @@
             simState.turnCounter = 0;
             if (!mobManager) {
                 mobManager = new MobManager();
-                if (player) {
-                    mobManager.add(player);
-                }
+                // Removed redundant mobManager.add(player); to prevent duplicate addition
             }
             const gameCtx = {
                 player,
