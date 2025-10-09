@@ -3314,12 +3314,19 @@
                 y1: ty + room.bbox.y1,
               };
               if (!canPlace(bbox, placed, cfg.minL1EdgeSpacing)) continue;
-              placed.push({
-                ...room,
+              const translatedTiles = room.tiles.map((t) => ({
+                x: tx + t.x,
+                y: ty + t.y,
+              }));
+              const placedRoom = {
+                kind: room.kind,
+                w: room.w,
+                h: room.h,
                 bbox,
                 center: { x: tx + room.center.x, y: ty + room.center.y },
-                tiles: room.tiles.map((t) => ({ x: tx + t.x, y: ty + t.y })),
-              });
+                tiles: translatedTiles,
+              };
+              placed.push(placedRoom);
               placedOK = true;
               break;
             }
@@ -3330,11 +3337,20 @@
               cfg.minSide,
               "square",
             );
-            placed.push({
-              ...fallback,
-              bbox: { ...fallback.bbox },
+            const fallbackRoom = {
+              kind: fallback.kind,
+              w: fallback.w,
+              h: fallback.h,
+              bbox: {
+                x0: fallback.bbox.x0,
+                y0: fallback.bbox.y0,
+                x1: fallback.bbox.x1,
+                y1: fallback.bbox.y1,
+              },
+              center: { x: fallback.center.x, y: fallback.center.y },
               tiles: fallback.tiles.map((t) => ({ x: t.x, y: t.y })),
-            });
+            };
+            placed.push(fallbackRoom);
           }
           let minX = Infinity,
             minY = Infinity,
@@ -3914,13 +3930,15 @@
             HYBRID_CFG.small,
           );
           // Unified node list (centers)
-          const allRooms = [
-            ...allLarge.map((R) => ({
-              kind: R.kind,
-              center: { x: R.center.x, y: R.center.y },
-            })),
-            ...smallRooms.map((r) => ({ kind: r.kind, center: r.center })),
-          ];
+          const largeRoomNodes = allLarge.map((R) => ({
+            kind: R.kind,
+            center: { x: R.center.x, y: R.center.y },
+          }));
+          const smallRoomNodes = smallRooms.map((r) => ({
+            kind: r.kind,
+            center: { x: r.center.x, y: r.center.y },
+          }));
+          const allRooms = largeRoomNodes.concat(smallRoomNodes);
           // Phase C: corridors (only now)
           const points = allRooms.map((r) => ({
             x: r.center.x,
