@@ -1479,11 +1479,12 @@
                 for (const m of this.list) {
                     if (m.kind === "player") continue;
 
-
-
+                    const prevKey = `${m.x},${m.y}`;
                     tickStatusesAtTurnStart(m, turn);
                     m.takeTurn(gameCtx);
-                    // Index is rebuilt at the start of each tick, so no need to update per-monster here.
+                    const newKey = `${m.x},${m.y}`;
+                    if (prevKey !== newKey) this.index.delete(prevKey);
+                    this.index.set(newKey, m);
                 }
             }
         }
@@ -2886,13 +2887,15 @@
         }
         function smallRoomsFillIntoGrid(grid, largeRooms, border, cfg = HYBRID_CFG.small) {
             const H = grid.length, W = grid[0].length;
+            // Inflate large rooms by clearance and treat them as blocked for small room placement
+            const inflatedLarge = largeRooms.map(L => inflateRect({ x: L.x0, y: L.y0, w: L.w, h: L.h }, cfg.clearanceFromLarge));
             // Build a combined forbidden mask = outside interior OR within clearance of any large room
             const forbidden = (x, y) => {
                 if (x < border || y < border || x >= W - border || y >= H - border) return true;
-                return false;
+                return inflatedLarge.some(L =>
+                    x >= L.x && x <= L.x + L.w - 1 && y >= L.y && y <= L.y + L.h - 1
+                );
             };
-            // Inflate large rooms by clearance and treat them as blocked for small room placement
-            const inflatedLarge = largeRooms.map(L => inflateRect({ x: L.x0, y: L.y0, w: L.w, h: L.h }, cfg.clearanceFromLarge));
             // Spawn candidates in a radius around map center
             const spawnRadius = Math.max(W, H);
             let candidates = rectsGenerateCandidates(cfg.candidateCount, cfg.minSize, cfg.maxSize, spawnRadius);
@@ -2904,10 +2907,8 @@
             const kept = [];
             for (const r of candidates) {
                 // 1) Intersects interior?
-                const inside =
-                    r.x >= border && r.y >= border &&
-                    r.x + r.w <= W - border && r.y + r.h <= H - border;
-                if (!inside) continue;
+                const violatesBorder = forbidden(r.x, r.y) || forbidden(r.x + r.w - 1, r.y + r.h - 1);
+                if (violatesBorder) continue;
                 // 2) Avoid overlap with any inflated large room
                 const overlapsLarge = inflatedLarge.some(L => rectIntersects(
                   { x: r.x, y: r.y, w: r.w, h: r.h }, L
