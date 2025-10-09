@@ -1470,12 +1470,28 @@
             getMobAt(x, y) { return this.index.get(`${x},${y}`) || null; }
             reindex() { this.index.clear(); for (const m of this.list) this.index.set(`${m.x},${m.y}`, m); }
             tick(gameCtx, turn) {
+                // Ensure our spatial index reflects any changes that happened between
+                // ticks (for example actors being added or removed externally).
+                this.reindex();
+
                 for (const m of this.list) {
                     if (m.kind === "player") continue;
+
+                    const prevKey = `${m.x},${m.y}`;
+
                     tickStatusesAtTurnStart(m, turn);
                     m.takeTurn(gameCtx);
+
+                    const nextKey = `${m.x},${m.y}`;
+
+                    if (nextKey !== prevKey) {
+                        if (this.index.get(prevKey) === m) {
+                            this.index.delete(prevKey);
+                        }
+                    }
+
+                    this.index.set(nextKey, m);
                 }
-                this.reindex();
             }
         }
 
