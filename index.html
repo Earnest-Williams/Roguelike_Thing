@@ -3533,8 +3533,6 @@
                     const turn = ++simState.turnCounter;
                     tickStatusesAtTurnStart(player, turn);
                     if (mobManager) {
-                        gameCtx.mobManager = mobManager;
-                        gameCtx.maze = mapState.grid;
                         mobManager.tick(gameCtx, turn);
                     }
                     const currentPlayerX = player.x;
