@@ -543,6 +543,14 @@
         actor.statusDerived = agg;
       }
 
+      function computeActorDelay(actor) {
+        if (!actor) return 1;
+        const base = typeof actor.baseDelay === "number" ? actor.baseDelay : 1;
+        const pct = actor.statusDerived?.actionSpeedPct ?? 0;
+        const delay = base * (1 + pct);
+        return delay > 0 ? delay : 0.1;
+      }
+
       function handleDeath(gameCtx, actor) {
         if (!actor || actor.hp > 0) return false;
         if (actor.__dead) return true;
@@ -1556,39 +1564,57 @@
             if (!(item instanceof Item)) return false;
             if (!this.slots.has(slot)) return false;
             if (!item.canEquipTo(slot)) return false;
-            // Two-handed weapon needs both hands free
-            if (
-              (slot === SLOT.LeftHand || slot === SLOT.RightHand) &&
-              item.handsRequired === 2
-            ) {
+            const isHandSlot =
+              slot === SLOT.LeftHand || slot === SLOT.RightHand;
+            if (!isHandSlot) return true;
+
+            const left = this.get(SLOT.LeftHand);
+            const right = this.get(SLOT.RightHand);
+            const hasTwoHandEquipped =
+              (left && left.handsRequired === 2 && left !== item) ||
+              (right && right.handsRequired === 2 && right !== item);
+
+            if (item.handsRequired === 2) {
               const other =
                 slot === SLOT.LeftHand ? SLOT.RightHand : SLOT.LeftHand;
-              if (this.get(other)) return false;
+              if (
+                (this.get(slot) && this.get(slot) !== item) ||
+                (this.get(other) && this.get(other) !== item)
+              ) {
+                return false;
+              }
+              if (
+                (left && left !== item) ||
+                (right && right !== item)
+              ) {
+                return false;
+              }
+            } else if (hasTwoHandEquipped) {
+              return false;
             }
             return true;
           }
 
           equipTo(slot, item) {
             if (!this.canEquipTo(slot, item)) return false;
-            // Clear any two-hand occupancy first
-            if (
-              this._twoHandOccupantId &&
-              (slot === SLOT.LeftHand || slot === SLOT.RightHand)
-            ) {
-              this.slots.set(SLOT.LeftHand, null);
-              this.slots.set(SLOT.RightHand, null);
-              this._twoHandOccupantId = null;
-            }
-            this.slots.set(slot, item);
-            // If 2H, occupy both hands
-            if (
-              (slot === SLOT.LeftHand || slot === SLOT.RightHand) &&
-              item.handsRequired === 2
-            ) {
-              const other =
-                slot === SLOT.LeftHand ? SLOT.RightHand : SLOT.LeftHand;
-              this.slots.set(other, item); // same reference
+            const isHandSlot =
+              slot === SLOT.LeftHand || slot === SLOT.RightHand;
+
+            if (isHandSlot && item.handsRequired === 2) {
+              this.slots.set(SLOT.LeftHand, item);
+              this.slots.set(SLOT.RightHand, item);
               this._twoHandOccupantId = item.id;
+              return true;
+            }
+
+            if (isHandSlot && this._twoHandOccupantId) {
+              // Unequip the two-handed item before equipping the one-handed item
+              this.unequip(SLOT.LeftHand);
+            }
+
+            this.slots.set(slot, item);
+            if (isHandSlot) {
+              this._twoHandOccupantId = null;
             }
             return true;
           }
@@ -1690,6 +1716,8 @@
             this.hp = o.hp ?? DEFAULT_MOB_HP;
             this.maxHp = this.hp;
             this.speed = o.speed ?? DEFAULT_MOB_SPEED;
+            this.baseDelay = o.baseDelay ?? 1;
+            this.nextActAt = o.nextActAt ?? 0;
             this.glyph = o.glyph ?? "?";
             this.color = o.color ?? "#fff";
             this.equipment = new Equipment();
@@ -1839,6 +1867,21 @@
                 continue;
               }
 
+              if (handleDeath(gameCtx, m)) {
+                startIndex.delete(startKey);
+                continue;
+              }
+
+              if (m.statusDerived?.canAct === false) {
+                continue;
+              }
+
+              const nextActAt =
+                typeof m.nextActAt === "number" ? m.nextActAt : 0;
+              if (turn < nextActAt) {
+                continue;
+              }
+
               const from = { x: m.x, y: m.y };
               const turnCtx = { ...gameCtx, mobManager: occupancyView };
               m.takeTurn(turnCtx);
@@ -1847,6 +1890,9 @@
               if (to.x !== from.x || to.y !== from.y) {
                 plannedMoves.push({ mob: m, from, to });
               }
+
+              const delay = computeActorDelay(m);
+              m.nextActAt = turn + delay;
             }
 
             const occupancy = new Map(startIndex);
@@ -4737,11 +4783,14 @@
           restartBtn.style.display = "none";
           player.x = startPos.x;
           player.y = startPos.y;
-          const stack = [];
-          const visitedForPathfinding = new Set([
-            posKeyFromCoords(player.x, player.y),
-          ]);
-          let shortTermMemory = [];
+          player.nextActAt = 0;
+          const aiState = {
+            stack: [],
+            visitedForPathfinding: new Set([
+              posKeyFromCoords(player.x, player.y),
+            ]),
+            shortTermMemory: [],
+          };
           explorationState.frontiers.clear();
           simState.turnCounter = 0;
           if (!mobManager) {
@@ -4753,6 +4802,130 @@
             mobManager,
             maze: mapState.grid,
           };
+
+          function processPlayerTurn() {
+            const currentPlayerX = player.x;
+            const currentPlayerY = player.y;
+            const currentPos = { x: currentPlayerX, y: currentPlayerY };
+
+            const currentKey = posKeyFromCoords(
+              currentPlayerX,
+              currentPlayerY,
+            );
+            aiState.shortTermMemory.push(currentKey);
+            if (aiState.shortTermMemory.length > CONFIG.ai.shortTermMemory) {
+              aiState.shortTermMemory.shift();
+            }
+
+            let nextMove = null;
+            let nextPos = currentPos;
+
+            if (mapState.known[endPos.y][endPos.x] === TILE_FLOOR) {
+              const pathToExit = bfsToTarget(
+                currentPos,
+                endPos,
+                aiState.shortTermMemory,
+                { ignoreShortTermMemory: true },
+              );
+              if (pathToExit && pathToExit.length > 0) {
+                nextMove = pathToExit[0];
+              }
+            }
+
+            if (!nextMove) {
+              const neighbors = CARDINAL_DIRECTIONS.map(({ dx, dy }) => ({
+                x: currentPlayerX + dx,
+                y: currentPlayerY + dy,
+              }));
+              const unvisitedNeighbors = neighbors.filter(
+                (n) =>
+                  n.x >= 0 &&
+                  n.x < mapState.width &&
+                  n.y >= 0 &&
+                  n.y < mapState.height &&
+                  mapState.known[n.y][n.x] === TILE_FLOOR &&
+                  !aiState.visitedForPathfinding.has(posKey(n)),
+              );
+              const potentialMoves = unvisitedNeighbors.map((n) => ({
+                pos: n,
+                score: explorationScore(n, aiState.shortTermMemory),
+              }));
+              potentialMoves.sort(
+                (a, b) => b.score - a.score + (Math.random() - 0.5),
+              );
+              if (potentialMoves.length > 0 && potentialMoves[0].score > 0) {
+                aiState.stack.push({ x: currentPlayerX, y: currentPlayerY });
+                nextMove = potentialMoves[0].pos;
+              }
+            }
+
+            if (!nextMove && explorationState.frontiers.size > 0) {
+              let closestFrontier = null;
+              let minDist = Infinity;
+              for (const fKey of explorationState.frontiers) {
+                const [fx, fy] = fKey.split(",").map(Number);
+                const dist =
+                  Math.abs(currentPlayerX - fx) +
+                  Math.abs(currentPlayerY - fy);
+                if (dist < minDist) {
+                  minDist = dist;
+                  closestFrontier = { x: fx, y: fy };
+                }
+              }
+              const pathToFrontier = bfsToTarget(
+                currentPos,
+                closestFrontier,
+                aiState.shortTermMemory,
+                { ignoreShortTermMemory: true },
+              );
+              if (pathToFrontier && pathToFrontier.length > 0) {
+                nextMove = pathToFrontier[0];
+              }
+            }
+
+            if (!nextMove && aiState.stack.length > 0) {
+              nextMove = aiState.stack.pop();
+            }
+
+            if (!nextMove) {
+              clearTimeout(simState.timeout);
+              simState.timeout = null;
+              simState.loopFn = null;
+              statusDiv.textContent = "AI is trapped!";
+              restartBtn.style.display = "block";
+              return { ended: true };
+            }
+
+            prevPlayerPos.x = currentPlayerX;
+            prevPlayerPos.y = currentPlayerY;
+            if (!hasPrevPlayerPos) hasPrevPlayerPos = true;
+            player.pos = nextMove;
+            player.x = nextMove.x;
+            player.y = nextMove.y;
+            if (mobManager) {
+              mobManager.reindex();
+            }
+            const nextX = player.x;
+            const nextY = player.y;
+            nextPos = { x: nextX, y: nextY };
+            const stepKey = posKeyFromCoords(nextX, nextY);
+            if (!aiState.visitedForPathfinding.has(stepKey)) {
+              aiState.visitedForPathfinding.add(stepKey);
+            }
+
+            updateVisionAndExploration(nextPos);
+            fovState.currentVisible = computeVisibleCells(nextPos);
+            renderDelta(
+              hasPrevPlayerPos ? prevPlayerPos : null,
+              nextPos,
+              endPos,
+            );
+            updateCamera(nextPos);
+            fovState.prevVisible = new Set(fovState.currentVisible);
+            minimapMaybeRefreshOnTick();
+
+            return { acted: true };
+          }
           function gameLoop() {
             clearTimeout(simState.timeout);
             if (!simState.isPaused) {
@@ -4787,135 +4960,26 @@
                 restartBtn.style.display = "block";
                 return;
               }
-              // Track a short trail of recently visited tiles so the explorer does not keep
-              // oscillating in the same small loop.
-              const currentKey = posKeyFromCoords(
-                currentPlayerX,
-                currentPlayerY,
-              );
-              shortTermMemory.push(currentKey);
-              if (shortTermMemory.length > CONFIG.ai.shortTermMemory) {
-                shortTermMemory.shift();
-              }
-              let nextMove = null;
-              let nextX = currentPlayerX;
-              let nextY = currentPlayerY;
-              let nextPos = currentPos;
-              if (mapState.known[endPos.y][endPos.x] === TILE_FLOOR) {
-                // Once the exit has been discovered we greedily follow the fastest path to
-                // it, ignoring the short-term memory so backtracking is allowed.
-                const pathToExit = bfsToTarget(
-                  currentPos,
-                  endPos,
-                  shortTermMemory,
-                  { ignoreShortTermMemory: true },
-                );
-                if (pathToExit && pathToExit.length > 0) {
-                  nextMove = pathToExit[0];
+
+              const playerCanAct =
+                (player.statusDerived?.canAct ?? true) &&
+                turn >=
+                  (typeof player.nextActAt === "number"
+                    ? player.nextActAt
+                    : 0);
+
+              if (playerCanAct) {
+                const result = processPlayerTurn();
+                if (result?.ended) {
+                  return;
+                }
+                if (result?.acted) {
+                  const delay = computeActorDelay(player);
+                  player.nextActAt = turn + delay;
                 }
               }
-              if (!nextMove) {
-                const neighbors = CARDINAL_DIRECTIONS.map(({ dx, dy }) => ({
-                  x: currentPlayerX + dx,
-                  y: currentPlayerY + dy,
-                }));
-                const unvisitedNeighbors = neighbors.filter(
-                  (n) =>
-                    n.x >= 0 &&
-                    n.x < mapState.width &&
-                    n.y >= 0 &&
-                    n.y < mapState.height &&
-                    mapState.known[n.y][n.x] === TILE_FLOOR &&
-                    !visitedForPathfinding.has(posKey(n)),
-                );
-                const potentialMoves = unvisitedNeighbors.map((n) => ({
-                  pos: n,
-                  score: explorationScore(n, shortTermMemory),
-                }));
-                potentialMoves.sort(
-                  (a, b) => b.score - a.score + (Math.random() - 0.5),
-                );
-                if (potentialMoves.length > 0 && potentialMoves[0].score > 0) {
-                  stack.push({ x: currentPlayerX, y: currentPlayerY });
-                  nextMove = potentialMoves[0].pos;
-                }
-              }
-              if (!nextMove && explorationState.frontiers.size > 0) {
-                // When no enticing neighbour exists we fall back to the nearest frontier:
-                // a lit floor tile that borders unexplored darkness. BFS charts a safe
-                // course to the chosen frontier.
-                let closestFrontier = null;
-                let minDist = Infinity;
-                for (const fKey of explorationState.frontiers) {
-                  const [fx, fy] = fKey.split(",").map(Number);
-                  const dist =
-                    Math.abs(currentPlayerX - fx) +
-                    Math.abs(currentPlayerY - fy);
-                  if (dist < minDist) {
-                    minDist = dist;
-                    closestFrontier = { x: fx, y: fy };
-                  }
-                }
-                // When traveling to a distant frontier we must allow full backtracking,
-                // so ignore the short-term memory penalty during pathfinding.
-                const pathToFrontier = bfsToTarget(
-                  currentPos,
-                  closestFrontier,
-                  shortTermMemory,
-                  { ignoreShortTermMemory: true },
-                );
-                if (pathToFrontier && pathToFrontier.length > 0) {
-                  nextMove = pathToFrontier[0];
-                }
-              }
-              if (!nextMove && stack.length > 0) {
-                // The depth-first stack gives us deterministic backtracking when every
-                // other heuristic is exhausted.
-                nextMove = stack.pop();
-              }
-              if (nextMove) {
-                prevPlayerPos.x = currentPlayerX;
-                prevPlayerPos.y = currentPlayerY;
-                if (!hasPrevPlayerPos) hasPrevPlayerPos = true;
-                player.pos = nextMove;
-                player.x = nextMove.x;
-                player.y = nextMove.y;
-                if (mobManager) {
-                  mobManager.reindex();
-                }
-                nextX = player.x;
-                nextY = player.y;
-                nextPos = { x: nextX, y: nextY };
-                const stepKey = posKeyFromCoords(nextX, nextY);
-                if (!visitedForPathfinding.has(stepKey)) {
-                  visitedForPathfinding.add(stepKey);
-                }
-              } else {
-                clearTimeout(simState.timeout);
-                simState.timeout = null;
-                simState.loopFn = null;
-                statusDiv.textContent = "AI is trapped!";
-                restartBtn.style.display = "block";
-                return;
-              }
-              updateVisionAndExploration(nextPos);
-              fovState.currentVisible = computeVisibleCells(nextPos);
-              renderDelta(
-                hasPrevPlayerPos ? prevPlayerPos : null,
-                nextPos,
-                endPos,
-              );
-              updateCamera(nextPos);
-              fovState.prevVisible = new Set(fovState.currentVisible);
-              minimapMaybeRefreshOnTick();
             }
-            const speedMultiplier =
-              1 - (player.statusDerived?.actionSpeedPct ?? 0);
-            const safeMultiplier = Math.max(0.1, speedMultiplier);
-            const delay = Math.max(
-              16,
-              (1000 / simState.speed) * safeMultiplier,
-            );
+            const delay = Math.max(16, 1000 / simState.speed);
             simState.timeout = setTimeout(gameLoop, delay);
           }
           simState.loopFn = gameLoop;
