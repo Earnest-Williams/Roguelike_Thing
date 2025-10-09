@@ -3200,7 +3200,7 @@
                     if (nextMove) {
                         prevPlayerPos.x = player.pos.x;
                         prevPlayerPos.y = player.pos.y;
-                        hasPrevPlayerPos = true;
+                        if (!hasPrevPlayerPos) hasPrevPlayerPos = true;
                         player.pos = nextMove;
                         const stepKey = posKey(player.pos);
                         if (!visitedForPathfinding.has(stepKey)) {
