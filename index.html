@@ -2607,7 +2607,13 @@
         }
         function canPlace(bbox, placed, minSpacing) {
             for (const r of placed) {
-                const other = r.bbox ?? r;
+                let other;
+                if (r && typeof r === 'object' && r.bbox && typeof r.bbox === 'object'
+                    && ['x0', 'y0', 'x1', 'y1'].every(k => k in r.bbox)) {
+                    other = r.bbox;
+                } else {
+                    other = r;
+                }
                 const overlap = !(bbox.x1 < other.x0 || bbox.x0 > other.x1 || bbox.y1 < other.y0 || bbox.y0 > other.y1);
                 if (overlap) return false;
                 const l1 = manhattanEdgeDistanceRect(bbox, other);
