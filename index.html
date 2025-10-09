@@ -593,7 +593,7 @@
         return delay > 0 ? delay : 0.1;
       }
 
-      function handleDeath(gameCtx, actor) {
+      function handleDeath(gameCtx, actor, ui = null) {
         if (!actor || actor.hp > 0) return false;
         if (actor.__dead) return true;
         actor.__dead = true;
@@ -603,13 +603,19 @@
           manager.removeById(actor.id);
         }
 
-        if (actor.kind === "player") {
-          clearTimeout(simState.timeout);
-          simState.timeout = null;
-          simState.loopFn = null;
-          simState.isPaused = true;
-          statusDiv.textContent = "You died";
-          restartBtn.style.display = "block";
+        if (actor.kind === "player" && ui) {
+          clearTimeout(ui.simState?.timeout);
+          if (ui.simState) {
+            ui.simState.timeout = null;
+            ui.simState.loopFn = null;
+            ui.simState.isPaused = true;
+          }
+          if (ui.statusDiv) {
+            ui.statusDiv.textContent = "You died";
+          }
+          if (ui.restartBtn) {
+            ui.restartBtn.style.display = "block";
+          }
         }
 
         return true;
@@ -639,7 +645,7 @@
                 potency: st.potency,
               });
               st.nextTickAt += def.tickEvery;
-              if (gameCtx && handleDeath(gameCtx, actor)) {
+              if (gameCtx && handleDeath(gameCtx, actor, gameCtx.ui)) {
                 return;
               }
             }
@@ -1096,6 +1102,8 @@
           isReady: false,
           turnCounter: 0,
         };
+
+        const uiHooks = { simState, statusDiv, restartBtn };
 
         const mapState = {
           width: 0,
@@ -2244,7 +2252,7 @@
               }
               if (m.kind === "player") continue;
 
-              if (handleDeath(gameCtx, m)) {
+              if (handleDeath(gameCtx, m, gameCtx?.ui)) {
                 startIndex.delete(startKey);
                 continue;
               }
@@ -2256,7 +2264,7 @@
                 continue;
               }
 
-              if (handleDeath(gameCtx, m)) {
+              if (handleDeath(gameCtx, m, gameCtx?.ui)) {
                 startIndex.delete(startKey);
                 continue;
               }
@@ -2600,7 +2608,7 @@
                 context?.gameCtx ||
                 (context?.mobManager ? { mobManager: context.mobManager } : context) ||
                 null;
-              handleDeath(deathCtx, target);
+              handleDeath(deathCtx, target, deathCtx?.ui);
             }
           }
           if (
@@ -5528,6 +5536,7 @@
             player,
             mobManager,
             maze: mapState.grid,
+            ui: uiHooks,
           };
 
           function processPlayerTurn() {
@@ -5770,19 +5779,19 @@
           function gameLoop() {
             clearTimeout(simState.timeout);
             if (!simState.isPaused) {
-              if (handleDeath(gameCtx, player)) {
+              if (handleDeath(gameCtx, player, gameCtx.ui)) {
                 return;
               }
 
               const turn = ++simState.turnCounter;
               tickStatusesAtTurnStart(player, turn, gameCtx);
-              if (handleDeath(gameCtx, player)) {
+              if (handleDeath(gameCtx, player, gameCtx.ui)) {
                 return;
               }
               if (mobManager) {
                 mobManager.tick(gameCtx, turn);
               }
-              if (handleDeath(gameCtx, player)) {
+              if (handleDeath(gameCtx, player, gameCtx.ui)) {
                 return;
               }
               const currentPlayerX = player.x;
