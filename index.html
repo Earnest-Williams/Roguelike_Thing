@@ -4917,12 +4917,12 @@
           if (reason === "generation") {
             statusDiv.textContent = "Map generation failed, retrying...";
             initRetries++;
-            setTimeout(init, 100);
+            setTimeout(startNewSimulation, 100);
           } else if (reason === "connectivity") {
             statusDiv.textContent =
               "Map is not fully connected, regenerating...";
             initRetries++;
-            setTimeout(init, 50);
+            setTimeout(startNewSimulation, 50);
           }
         }
 
@@ -4963,7 +4963,7 @@
           setTimeout(() => simulate(player.startPos, endPos), 500);
         }
 
-        function init() {
+        function startNewSimulation() {
           if (initRetries > MAX_INIT_RETRIES) {
             statusDiv.textContent =
               "Fatal Error: Map generation failed repeatedly.";
@@ -4991,7 +4991,7 @@
           const ticksPerSecond = CONFIG.ai.ticksPerSecond;
           speedSlider.value = ticksPerSecond;
           speedValue.textContent = `${ticksPerSecond} tps`;
-          restartBtn.addEventListener("click", init);
+          restartBtn.addEventListener("click", startNewSimulation);
           speedSlider.addEventListener("input", (e) => {
             simState.speed = parseInt(e.target.value, 10);
             speedValue.textContent = `${simState.speed} tps`;
@@ -5004,7 +5004,7 @@
             }
           });
           initMinimapDOM();
-          init();
+          startNewSimulation();
         }
         // ===================== MINIMAP =====================
         let minimapBase = null; // offscreen static layer (map tiles)
