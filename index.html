@@ -2881,25 +2881,26 @@
             const cellX = x * CELL_SIZE;
             const cellY = y * CELL_SIZE;
             if (!mapState.explored[y][x]) return; // Unexplored cells retain the base background color
-            let bgColor = CONFIG.visual.colors.unseen;
+            const { colors } = CONFIG.visual;
+            let bgColor = colors.unseen;
             let text = '';
-            let textColor = CONFIG.visual.colors.defaultText;
+            let textColor = colors.defaultText;
             let fontWeight = '';
             const isWall = mapState.grid[y][x] === TILE_WALL;
             if (isWall) {
-                bgColor = CONFIG.visual.colors.wall;
+                bgColor = colors.wall;
                 textColor = 'transparent';
             } else {
-                bgColor = CONFIG.visual.colors.floor;
+                bgColor = colors.floor;
                 text = '·';
-                textColor = CONFIG.visual.colors.floorGlyph;
+                textColor = colors.floorGlyph;
             }
-            if (isStart) bgColor = CONFIG.visual.colors.start;
-            if (isEnd) bgColor = CONFIG.visual.colors.end;
+            if (isStart) bgColor = colors.start;
+            if (isEnd) bgColor = colors.end;
             if (isPlayer) {
-                bgColor = CONFIG.visual.colors.player;
+                bgColor = colors.player;
                 text = '@';
-                textColor = CONFIG.visual.colors.playerGlyph;
+                textColor = colors.playerGlyph;
                 fontWeight = 'bold ';
             }
             ctx.fillStyle = bgColor;
