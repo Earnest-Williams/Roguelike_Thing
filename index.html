@@ -2923,7 +2923,7 @@
             }
         }
         // Updates the persistent fog-of-war state as the player moves. This both
-        // records which tiles were ever seen (mapState.explored) and promotes nearby
+        // records which tiles were ever seen (explorationState) and promotes nearby
         // floor cells to "frontiers" so the explorer knows where to head next.
         function updateVisionAndExploration(pos) {
             const lightRadius = getLightRadius();
