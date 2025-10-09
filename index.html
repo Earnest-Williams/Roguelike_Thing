@@ -3143,7 +3143,10 @@
                     const currentPlayerY = player.y;
                     const currentPos = { x: currentPlayerX, y: currentPlayerY };
                     if (currentPlayerX === endPos.x && currentPlayerY === endPos.y) {
-                        clearInterval(simState.timeout); statusDiv.textContent = 'Exit found!';
+                        clearTimeout(simState.timeout);
+                        simState.timeout = null;
+                        simState.loopFn = null;
+                        statusDiv.textContent = 'Exit found!';
                         renderDelta(hasPrevPlayerPos ? prevPlayerPos : null, currentPos, endPos);
                         restartBtn.style.display = 'block';
                         return;
@@ -3223,8 +3226,12 @@
                             visitedForPathfinding.add(stepKey);
                         }
                     } else {
-                        clearTimeout(simState.timeout); statusDiv.textContent = 'AI is trapped!';
-                        restartBtn.style.display = 'block'; return;
+                        clearTimeout(simState.timeout);
+                        simState.timeout = null;
+                        simState.loopFn = null;
+                        statusDiv.textContent = 'AI is trapped!';
+                        restartBtn.style.display = 'block';
+                        return;
                     }
                     updateVisionAndExploration(nextPos);
                     fovState.currentVisible = computeVisibleCells(nextPos);
