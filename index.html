@@ -1477,13 +1477,10 @@
                 for (const m of this.list) {
                     if (m.kind === "player") continue;
 
-                    const prevKey = `${m.x},${m.y}`;
+
 
                     tickStatusesAtTurnStart(m, turn);
                     m.takeTurn(gameCtx);
-
-                    const nextKey = `${m.x},${m.y}`;
-
                     // Index is rebuilt at the start of each tick, so no need to update per-monster here.
                 }
             }
