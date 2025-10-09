@@ -679,7 +679,7 @@
             }
             isWeapon() { return this.kind === "weapon" || !!this.weaponProfile; }
             isRangedWeapon() { return !!(this.weaponProfile && this.weaponProfile.isRanged); }
-            isThrowable() { return true; }
+            isThrowable() { return !!this.throwProfile; }
             getThrowProfile() {
                 return this.throwProfile ? cloneThrowProfile(this.throwProfile) : null;
             }
