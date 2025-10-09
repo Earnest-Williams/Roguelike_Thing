@@ -2536,6 +2536,39 @@
           return result;
         }
 
+        function applyAttackOutcome({
+          evaluation,
+          attackCtx,
+          baseRoll,
+          target,
+          onTargetDefeated,
+        }) {
+          const attackResult = resolveAttack(attackCtx);
+          evaluation.roll = baseRoll;
+          evaluation.damageApplied = attackResult.totalDamage;
+          evaluation.packetsBeforeDefense =
+            attackResult.packetsBeforeDefense;
+          evaluation.packetsAfterDefense = attackResult.packetsAfterDefense;
+          evaluation.statusApplied = attackResult.statusApplied;
+          evaluation.attackResult = attackResult;
+
+          const damageAfterDefense = attackResult.totalDamage ?? 0;
+          if (typeof target.hp === "number") {
+            target.hp -= damageAfterDefense;
+            evaluation.targetHp = target.hp;
+            evaluation.targetDefeated = target.hp <= 0;
+            if (evaluation.targetDefeated) {
+              if (typeof onTargetDefeated === "function") {
+                onTargetDefeated();
+              } else {
+                handleDeath(target);
+              }
+            }
+          }
+
+          return evaluation;
+        }
+
         function performRangedAttack(attacker, target, weapon, context = {}) {
           const evaluation = evaluateRangedAttack(
             attacker,
@@ -2591,26 +2624,17 @@
           if (Array.isArray(context.brands) && context.brands.length) {
             attackCtx.brands = context.brands;
           }
-          const attackResult = resolveAttack(attackCtx);
-          evaluation.roll = baseRoll;
-          evaluation.damageApplied = attackResult.totalDamage;
-          evaluation.packetsBeforeDefense = attackResult.packetsBeforeDefense;
-          evaluation.packetsAfterDefense = attackResult.packetsAfterDefense;
-          evaluation.statusApplied = attackResult.statusApplied;
-          evaluation.attackResult = attackResult;
-          const damageAfterDefense = attackResult.totalDamage ?? 0;
-          if (typeof target.hp === "number") {
-            target.hp -= damageAfterDefense;
-            evaluation.targetHp = target.hp;
-            evaluation.targetDefeated = target.hp <= 0;
-            if (evaluation.targetDefeated) {
-              const deathCtx =
-                context?.gameCtx ||
-                (context?.mobManager ? { mobManager: context.mobManager } : context) ||
-                null;
-              handleDeath(deathCtx, target, deathCtx?.ui);
-            }
-          }
+          const deathCtx =
+            context?.gameCtx ||
+            (context?.mobManager ? { mobManager: context.mobManager } : context) ||
+            null;
+          applyAttackOutcome({
+            evaluation,
+            attackCtx,
+            baseRoll,
+            target,
+            onTargetDefeated: () => handleDeath(deathCtx, target, deathCtx?.ui),
+          });
           if (
             profile.category === WEAPON_CATEGORY.THROWN &&
             profile.consumeWeaponOnUse
@@ -2797,19 +2821,12 @@
           if (Array.isArray(context.brands) && context.brands.length) {
             attackCtx.brands = context.brands;
           }
-          const attackResult = resolveAttack(attackCtx);
-          evaluation.roll = baseRoll;
-          evaluation.damageApplied = attackResult.totalDamage;
-          evaluation.packetsBeforeDefense = attackResult.packetsBeforeDefense;
-          evaluation.packetsAfterDefense = attackResult.packetsAfterDefense;
-          evaluation.statusApplied = attackResult.statusApplied;
-          evaluation.attackResult = attackResult;
-          const damageAfterDefense = attackResult.totalDamage ?? 0;
-          if (typeof target.hp === "number") {
-            target.hp -= damageAfterDefense;
-            evaluation.targetHp = target.hp;
-            evaluation.targetDefeated = target.hp <= 0;
-          }
+          applyAttackOutcome({
+            evaluation,
+            attackCtx,
+            baseRoll,
+            target,
+          });
           if (profile.consumesItem) {
             evaluation.itemConsumed = consumeThrownItemFromAttacker(
               attacker,
