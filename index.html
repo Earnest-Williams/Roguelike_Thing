@@ -418,6 +418,7 @@
                 actionSpeedPct: 0,
                 accuracyFlat: 0,
                 critChancePct: 0,
+                canAct: true,
                 damageDealtMult: createEmptyDamageTypeMap(),
                 damageTakenMult: createEmptyDamageTypeMap(),
                 resistDelta: createEmptyDamageTypeMap(),
@@ -467,6 +468,9 @@
                 if (!def || typeof def.derive !== "function") continue;
                 const derived = def.derive({ target: actor, stacks: st.stacks ?? 1, potency: st.potency });
                 if (!derived) continue;
+                if (typeof derived.canAct === "boolean") {
+                    agg.canAct = agg.canAct && derived.canAct;
+                }
                 if (typeof derived.moveAPDelta === "number") {
                     agg.moveAPDelta += derived.moveAPDelta;
                 }
@@ -787,6 +791,7 @@
         };
 
         let player = {};
+        let mobManager = null;
         let isEndRendered = false;
         const INVALID_POSITION_COORD = -1;
         let prevPlayerPos = { x: INVALID_POSITION_COORD, y: INVALID_POSITION_COORD };
@@ -3511,11 +3516,23 @@
             let shortTermMemory = [];
             explorationState.frontiers.clear();
             simState.turnCounter = 0;
+            if (!mobManager) {
+                mobManager = new MobManager();
+                // Removed redundant mobManager.add(player); to prevent duplicate addition
+            }
+            const gameCtx = {
+                player,
+                mobManager,
+                maze: mapState.grid,
+            };
             function gameLoop() {
                 clearTimeout(simState.timeout);
                 if (!simState.isPaused) {
                     const turn = ++simState.turnCounter;
                     tickStatusesAtTurnStart(player, turn);
+                    if (mobManager) {
+                        mobManager.tick(gameCtx, turn);
+                    }
                     const currentPlayerX = player.x;
                     const currentPlayerY = player.y;
                     const currentPos = { x: currentPlayerX, y: currentPlayerY };
@@ -3597,6 +3614,9 @@
                         player.pos = nextMove;
                         player.x = nextMove.x;
                         player.y = nextMove.y;
+                        if (mobManager) {
+                            mobManager.reindex();
+                        }
                         nextX = player.x;
                         nextY = player.y;
                         nextPos = { x: nextX, y: nextY };
@@ -3652,6 +3672,11 @@
 
         function setupPlayer() {
             const newPlayer = new Player({ name: "Player", x: 0, y: 0 });
+
+            if (!mobManager) {
+                throw new Error("mobManager is not initialized before setupPlayer() is called.");
+            }
+            mobManager.add(newPlayer);
 
             // Wearables
             newPlayer.equipment.equipTo(SLOT.Head,       makeItem("leather_cap"));
