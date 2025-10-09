@@ -731,7 +731,7 @@
             label: "Stunned",
             harmful: true,
             stacking: STACKING_RULE.REFRESH,
-            derive: () => ({ actionSpeedPct: 1.0 }),
+            derive: () => ({ canAct: false }),
         });
 
         registerStatus({
