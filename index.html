@@ -1265,7 +1265,7 @@
 
         function getThrowProfileForItem(item) {
             if (!(item instanceof Item)) return null;
-            return item.getThrowProfile?.() || item.throwProfile || null;
+            return item.getThrowProfile?.() || null;
         }
 
         function describeThrowProfile(profile) {
