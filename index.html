@@ -1749,7 +1749,7 @@
             this.index = new Map();
           }
           add(m) {
-            if (!m) return m;
+            if (!m) return null;
 
             // Avoid tracking the same instance twice. The simulation used to add the
             // player both during setup and on the first tick, which left duplicate
