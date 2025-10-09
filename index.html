@@ -5044,10 +5044,7 @@
           }
         }
 
-        // Keep the viewport centred on the player without allowing the camera to
-        // drift past the map edges. This is effectively a clamped translation
-        // that mimics a traditional roguelike "camera" following the hero.
-        function updateCamera(playerPos) {
+        function calculateViewportTransform(playerPos) {
           const mapPxW = mapState.width * CELL_SIZE;
           const mapPxH = mapState.height * CELL_SIZE;
           const vw = VIEW_W * CELL_SIZE;
@@ -5056,6 +5053,14 @@
           const desiredY = vh / 2 - (playerPos.y + 0.5) * CELL_SIZE;
           const tx = Math.round(Math.max(vw - mapPxW, Math.min(0, desiredX)));
           const ty = Math.round(Math.max(vh - mapPxH, Math.min(0, desiredY)));
+          return { tx, ty };
+        }
+
+        // Keep the viewport centred on the player without allowing the camera to
+        // drift past the map edges. This is effectively a clamped translation
+        // that mimics a traditional roguelike "camera" following the hero.
+        function updateCamera(playerPos) {
+          const { tx, ty } = calculateViewportTransform(playerPos);
           canvas.style.transform = `translate3d(${tx}px, ${ty}px, 0)`;
         }
         // Render a single map tile. The function intentionally duplicates a bit
@@ -6214,20 +6219,9 @@
           // --- START: ACCURATE VIEWPORT CALCULATION (FIXED) ---
           // This logic mirrors the main `updateCamera` function to find the exact
           // top-left corner of the visible area in map coordinates.
-          const mapPxW = mapState.width * CELL_SIZE;
-          const mapPxH = mapState.height * CELL_SIZE;
-          const vw = VIEW_W * CELL_SIZE;
-          const vh = VIEW_H * CELL_SIZE;
           const playerPos = getPlayerPos();
-
-          const desiredX = vw / 2 - (playerPos.x + 0.5) * CELL_SIZE;
-          const desiredY = vh / 2 - (playerPos.y + 0.5) * CELL_SIZE;
-          const canvasTranslateX = Math.round(
-            Math.max(vw - mapPxW, Math.min(0, desiredX)),
-          );
-          const canvasTranslateY = Math.round(
-            Math.max(vh - mapPxH, Math.min(0, desiredY)),
-          );
+          const { tx: canvasTranslateX, ty: canvasTranslateY } =
+            calculateViewportTransform(playerPos);
 
           const rawViewportX = Math.round(-canvasTranslateX / CELL_SIZE);
           const rawViewportY = Math.round(-canvasTranslateY / CELL_SIZE);
