@@ -1608,7 +1608,8 @@
             }
 
             if (isHandSlot && this._twoHandOccupantId) {
-              return false;
+              // Unequip the two-handed item before equipping the one-handed item
+              this.unequip(SLOT.LeftHand);
             }
 
             this.slots.set(slot, item);
