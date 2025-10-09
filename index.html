@@ -613,6 +613,12 @@
         const defenderStatusMods =
           D.modCache.status ?? createDefaultStatusModCache();
 
+        const getModNumber = (container, key, fallback = 0) => {
+          if (!container || typeof container !== "object") return fallback;
+          const value = container[key];
+          return typeof value === "number" ? value : fallback;
+        };
+
         for (const a of attempts) {
           const def = StatusRegistry.get(a.id);
           if (!def) continue;
@@ -620,8 +626,8 @@
           let p = a.baseChance ?? 0;
           const attackerMods =
             S.modCache.status ?? createDefaultStatusModCache();
-          p += attackerMods.inflictBonus?.[a.id] ?? 0;
-          p -= defenderStatusMods.resistBonus?.[a.id] ?? 0;
+          p += getModNumber(attackerMods.inflictBonus, a.id);
+          p -= getModNumber(defenderStatusMods.resistBonus, a.id);
           p = Math.max(0, Math.min(1, p));
           if (p <= 0) continue;
 
@@ -634,8 +640,16 @@
 
           if (Math.random() >= p) continue;
 
-          const attackerDurMult = attackerMods.inflictDurMult?.[a.id] ?? 1;
-          const defenderDurMult = defenderStatusMods.recvDurMult?.[a.id] ?? 1;
+          const attackerDurMult = getModNumber(
+            attackerMods.inflictDurMult,
+            a.id,
+            1,
+          );
+          const defenderDurMult = getModNumber(
+            defenderStatusMods.recvDurMult,
+            a.id,
+            1,
+          );
           const baseDur = Math.max(
             1,
             Math.ceil(
@@ -3911,6 +3925,19 @@
             }
           }
         }
+
+        function ensureFloorAt(grid, pos) {
+          if (!grid || !pos) return;
+          const rowIndex = Math.round(pos.y);
+          if (rowIndex < 0 || rowIndex >= grid.length) return;
+          const row = grid[rowIndex];
+          if (!Array.isArray(row)) return;
+          const colIndex = Math.round(pos.x);
+          if (colIndex < 0 || colIndex >= row.length) return;
+          if (row[colIndex] === TILE_WALL) {
+            row[colIndex] = TILE_FLOOR;
+          }
+        }
         // -------------------------
         // Master generator
         // -------------------------
@@ -3978,10 +4005,8 @@
           }
           const end = allRooms[farIdx]?.center || start;
           // Force floors at start/end
-          if (grid[Math.round(start.y)]?.[Math.round(start.x)] === TILE_WALL)
-            grid[Math.round(start.y)][Math.round(start.x)] = TILE_FLOOR;
-          if (grid[Math.round(end.y)]?.[Math.round(end.x)] === TILE_WALL)
-            grid[Math.round(end.y)][Math.round(end.x)] = TILE_FLOOR;
+          ensureFloorAt(grid, start);
+          ensureFloorAt(grid, end);
           return {
             grid,
             start: { x: Math.round(start.x), y: Math.round(start.y) },
