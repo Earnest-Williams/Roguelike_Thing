@@ -1470,12 +1470,19 @@
             getMobAt(x, y) { return this.index.get(`${x},${y}`) || null; }
             reindex() { this.index.clear(); for (const m of this.list) this.index.set(`${m.x},${m.y}`, m); }
             tick(gameCtx, turn) {
+                // Ensure our spatial index reflects any changes that happened between
+                // ticks (for example actors being added or removed externally).
+                this.reindex();
+
                 for (const m of this.list) {
                     if (m.kind === "player") continue;
+
+
+
                     tickStatusesAtTurnStart(m, turn);
                     m.takeTurn(gameCtx);
+                    // Index is rebuilt at the start of each tick, so no need to update per-monster here.
                 }
-                this.reindex();
             }
         }
 
