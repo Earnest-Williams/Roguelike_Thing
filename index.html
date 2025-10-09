@@ -739,7 +739,7 @@
             label: "Haste",
             harmful: false,
             stacking: STACKING_RULE.REFRESH,
-            derive: ({ stacks = 1 }) => ({ actionSpeedPct: -0.15 * stacks }),
+            derive: ({ stacks = 1 }) => ({ actionSpeedPct: 0.15 * stacks }),
         });
 
         const Game = (() => {
