@@ -3197,6 +3197,11 @@
         function handleResize() {
             if (!mapState.grid || !mapState.grid.length) return;
             updateResponsiveLayout(true);
+            if (isMinimapOpen()) {
+                minimapBase = null;
+                prepareMinimapCanvasBackingStore();
+                renderMinimapDynamic();
+            }
         }
         // --- UI & RENDER FUNCTIONS ---
         function setupDOM() {
@@ -3735,7 +3740,7 @@
         }
 
         function generateAndValidateDungeon() {
-            statusDiv.textContent = 'Generating hybrid dungeon...';
+            statusDiv.textContent = 'Generating dungeon...';
             const dungeonData = generateDungeon();
             if (!dungeonData) {
                 return { success: false, reason: 'generation' };
