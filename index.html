@@ -3619,7 +3619,7 @@
                     fovState.prevVisible = new Set(fovState.currentVisible);
                     minimapMaybeRefreshOnTick();
                 }
-                const speedMultiplier = 1 + (player.statusDerived?.actionSpeedPct ?? 0);
+                const speedMultiplier = 1 - (player.statusDerived?.actionSpeedPct ?? 0);
                 const safeMultiplier = Math.max(0.1, speedMultiplier);
                 const delay = Math.max(16, (1000 / simState.speed) * safeMultiplier);
                 simState.timeout = setTimeout(gameLoop, delay);
