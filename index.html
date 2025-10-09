@@ -3288,8 +3288,8 @@
             mapState.width = mapState.grid[0].length;
             mapState.height = mapState.grid.length;
 
-            const path = aStarPath(mapState.grid, dungeonData.start, dungeonData.end);
-            if (!path) {
+            const isConnected = !!aStarPath(mapState.grid, dungeonData.start, dungeonData.end);
+            if (!isConnected) {
                 return { success: false, reason: 'connectivity' };
             }
 
