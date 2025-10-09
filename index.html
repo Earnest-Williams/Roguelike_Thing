@@ -3393,23 +3393,64 @@
                 grid[gy][gx] = TILE_FLOOR;
             }
           }
+          const deriveBBox = (tiles) => {
+            if (!tiles || tiles.length === 0)
+              return { x0: 0, y0: 0, x1: -1, y1: -1 };
+            let x0 = tiles[0].x;
+            let y0 = tiles[0].y;
+            let x1 = tiles[0].x;
+            let y1 = tiles[0].y;
+            for (const t of tiles) {
+              if (t.x < x0) x0 = t.x;
+              if (t.y < y0) y0 = t.y;
+              if (t.x > x1) x1 = t.x;
+              if (t.y > y1) y1 = t.y;
+            }
+            return { x0, y0, x1, y1 };
+          };
+          const rooms = placed.map((r) => {
+            const shape = r.room ?? r;
+            const tiles = Array.isArray(r.tiles)
+              ? r.tiles
+              : Array.isArray(shape.tiles)
+              ? shape.tiles
+              : [];
+            const rawBBox = r.bbox ?? shape.bbox ?? deriveBBox(tiles);
+            const width =
+              typeof shape.w === "number"
+                ? shape.w
+                : rawBBox.x1 >= rawBBox.x0
+                ? rawBBox.x1 - rawBBox.x0 + 1
+                : 0;
+            const height =
+              typeof shape.h === "number"
+                ? shape.h
+                : rawBBox.y1 >= rawBBox.y0
+                ? rawBBox.y1 - rawBBox.y0 + 1
+                : 0;
+            const center = r.center ?? shape.center ?? {
+              x: rawBBox.x0 + (width - 1) / 2,
+              y: rawBBox.y0 + (height - 1) / 2,
+            };
+            return {
+              kind: shape.kind ?? "unknown",
+              w: width,
+              h: height,
+              bbox: {
+                x0: rawBBox.x0 + ox,
+                y0: rawBBox.y0 + oy,
+                x1: rawBBox.x1 + ox,
+                y1: rawBBox.y1 + oy,
+              },
+              center: { x: center.x + ox, y: center.y + oy },
+              tiles: tiles.map((t) => ({ x: t.x + ox, y: t.y + oy })),
+            };
+          });
           return {
             grid,
             width: W,
             height: H,
-            rooms: placed.map((r) => ({
-              kind: r.kind,
-              w: r.w,
-              h: r.h,
-              bbox: {
-                x0: r.bbox.x0 + ox,
-                y0: r.bbox.y0 + oy,
-                x1: r.bbox.x1 + ox,
-                y1: r.bbox.y1 + oy,
-              },
-              center: { x: r.center.x + ox, y: r.center.y + oy },
-              tiles: r.tiles.map((t) => ({ x: t.x + ox, y: t.y + oy })),
-            })),
+            rooms,
             meta: {
               border: cfg.border,
               minL1EdgeSpacing: cfg.minL1EdgeSpacing,
