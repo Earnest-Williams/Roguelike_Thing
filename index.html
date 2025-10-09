@@ -1684,6 +1684,9 @@
         function posKey(pos) {
             return `${pos.x},${pos.y}`;
         }
+        function posKeyFromCoords(x, y) {
+            return `${x},${y}`;
+        }
         
         const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
         const randChoice = (arr) => arr[Math.floor(Math.random() * arr.length)];
@@ -3127,39 +3130,47 @@
         function simulate(startPos, endPos) {
             statusDiv.textContent = 'AI exploring...';
             restartBtn.style.display = 'none';
-            player.pos = { ...startPos };
+            player.x = startPos.x;
+            player.y = startPos.y;
             const stack = [];
-            const visitedForPathfinding = new Set([posKey(player.pos)]);
+            const visitedForPathfinding = new Set([posKeyFromCoords(player.x, player.y)]);
             let shortTermMemory = [];
             explorationState.frontiers.clear();
             function gameLoop() {
                 clearTimeout(simState.timeout);
                 if (!simState.isPaused) {
-                    if (player.pos.x === endPos.x && player.pos.y === endPos.y) {
+                    const currentPlayerX = player.x;
+                    const currentPlayerY = player.y;
+                    const currentPos = { x: currentPlayerX, y: currentPlayerY };
+                    if (currentPlayerX === endPos.x && currentPlayerY === endPos.y) {
                         clearInterval(simState.timeout); statusDiv.textContent = 'Exit found!';
-                        renderDelta(hasPrevPlayerPos ? prevPlayerPos : null, player.pos, endPos);
+                        renderDelta(hasPrevPlayerPos ? prevPlayerPos : null, currentPos, endPos);
                         restartBtn.style.display = 'block';
                         return;
                     }
                     // Track a short trail of recently visited tiles so the explorer does not keep
                     // oscillating in the same small loop.
-                    shortTermMemory.push(posKey(player.pos));
+                    const currentKey = posKeyFromCoords(currentPlayerX, currentPlayerY);
+                    shortTermMemory.push(currentKey);
                     if (shortTermMemory.length > CONFIG.ai.shortTermMemory) {
                         shortTermMemory.shift();
                     }
                     let nextMove = null;
+                    let nextX = currentPlayerX;
+                    let nextY = currentPlayerY;
+                    let nextPos = currentPos;
                     if (mapState.known[endPos.y][endPos.x] === TILE_FLOOR) {
                         // Once the exit has been discovered we greedily follow the fastest path to
                         // it, ignoring the short-term memory so backtracking is allowed.
-                        const pathToExit = bfsToTarget(player.pos, endPos, []); // Ignore short term memory for exit path
+                        const pathToExit = bfsToTarget(currentPos, endPos, []); // Ignore short term memory for exit path
                         if (pathToExit && pathToExit.length > 0) {
                             nextMove = pathToExit[0];
                         }
                     }
                     if (!nextMove) {
                         const neighbors = CARDINAL_DIRECTIONS.map(({ dx, dy }) => ({
-                            x: player.pos.x + dx,
-                            y: player.pos.y + dy
+                            x: currentPlayerX + dx,
+                            y: currentPlayerY + dy
                         }));
                         const unvisitedNeighbors = neighbors.filter(n =>
                             n.x >= 0 && n.x < mapState.width && n.y >= 0 && n.y < mapState.height &&
@@ -3169,7 +3180,7 @@
                         const potentialMoves = unvisitedNeighbors.map(n => ({pos: n, score: explorationScore(n, shortTermMemory)}));
                         potentialMoves.sort((a, b) => b.score - a.score + (Math.random() - 0.5));
                         if (potentialMoves.length > 0 && potentialMoves[0].score > 0) {
-                            stack.push({ ...player.pos });
+                            stack.push({ x: currentPlayerX, y: currentPlayerY });
                             nextMove = potentialMoves[0].pos;
                         }
                     }
@@ -3181,13 +3192,13 @@
                         let minDist = Infinity;
                         for (const fKey of explorationState.frontiers) {
                             const [fx, fy] = fKey.split(',').map(Number);
-                            const dist = Math.abs(player.pos.x - fx) + Math.abs(player.pos.y - fy);
+                            const dist = Math.abs(currentPlayerX - fx) + Math.abs(currentPlayerY - fy);
                             if (dist < minDist) {
                                 minDist = dist;
                                 closestFrontier = {x: fx, y: fy};
                             }
                         }
-                        const pathToFrontier = bfsToTarget(player.pos, closestFrontier, shortTermMemory);
+                        const pathToFrontier = bfsToTarget(currentPos, closestFrontier, shortTermMemory);
                         if (pathToFrontier && pathToFrontier.length > 0) {
                             nextMove = pathToFrontier[0];
                         }
@@ -3198,11 +3209,16 @@
                         nextMove = stack.pop();
                     }
                     if (nextMove) {
-                        prevPlayerPos.x = player.pos.x;
-                        prevPlayerPos.y = player.pos.y;
+                        prevPlayerPos.x = currentPlayerX;
+                        prevPlayerPos.y = currentPlayerY;
                         if (!hasPrevPlayerPos) hasPrevPlayerPos = true;
                         player.pos = nextMove;
-                        const stepKey = posKey(player.pos);
+                        player.x = nextMove.x;
+                        player.y = nextMove.y;
+                        nextX = player.x;
+                        nextY = player.y;
+                        nextPos = { x: nextX, y: nextY };
+                        const stepKey = posKeyFromCoords(nextX, nextY);
                         if (!visitedForPathfinding.has(stepKey)) {
                             visitedForPathfinding.add(stepKey);
                         }
@@ -3210,10 +3226,10 @@
                         clearTimeout(simState.timeout); statusDiv.textContent = 'AI is trapped!';
                         restartBtn.style.display = 'block'; return;
                     }
-                    updateVisionAndExploration(player.pos);
-                    fovState.currentVisible = computeVisibleCells(player.pos);
-                    renderDelta(hasPrevPlayerPos ? prevPlayerPos : null, player.pos, endPos);
-                    updateCamera(player.pos);
+                    updateVisionAndExploration(nextPos);
+                    fovState.currentVisible = computeVisibleCells(nextPos);
+                    renderDelta(hasPrevPlayerPos ? prevPlayerPos : null, nextPos, endPos);
+                    updateCamera(nextPos);
                     fovState.prevVisible = new Set(fovState.currentVisible);
                     minimapMaybeRefreshOnTick();
                 }
