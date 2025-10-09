@@ -2359,7 +2359,7 @@
                 h,
                 tiles: normalizedTiles,
                 center: { x: x0 + (w - 1) / 2, y: y0 + (h - 1) / 2 },
-                bbox: { x0, y0, x1: x0 + w - 1, y1: y0 + h - 1 },
+                bbox: { x0, y0, x1, y1 },
             };
         }
         function rasterizeRegularPolygon(n, targetArea, minSide) {
