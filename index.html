@@ -404,6 +404,7 @@
             loopFn: null,
             isPaused: false,
             speed: CONFIG.ai.ticksPerSecond,
+            isReady: false,
         };
 
         const mapState = {
@@ -3201,7 +3202,9 @@
                                 closestFrontier = {x: fx, y: fy};
                             }
                         }
-                        const pathToFrontier = bfsToTarget(currentPos, closestFrontier, shortTermMemory);
+                        // When traveling to a distant frontier we must allow full backtracking,
+                        // so ignore the short-term memory penalty during pathfinding.
+                        const pathToFrontier = bfsToTarget(currentPos, closestFrontier, []);
                         if (pathToFrontier && pathToFrontier.length > 0) {
                             nextMove = pathToFrontier[0];
                         }
@@ -3365,6 +3368,7 @@
             prevPlayerPos.y = player.startPos.y;
             hasPrevPlayerPos = true;
             initRetries = 0;
+            simState.isReady = true;
 
             setTimeout(() => simulate(player.startPos, endPos), 500);
         }
@@ -3376,6 +3380,7 @@
                 return;
             }
 
+            simState.isReady = false;
             resetSimulationStateForInit();
             minimapBase = null;
             player = setupPlayer();
@@ -3450,6 +3455,7 @@
         }
 
         function toggleMinimap() {
+          if (!simState.isReady) return;
           if (isMinimapOpen()) closeMinimap(); else openMinimap();
         }
 
@@ -3552,8 +3558,8 @@
             const canvasTranslateX = Math.round(Math.max(vw - mapPxW, Math.min(0, desiredX)));
             const canvasTranslateY = Math.round(Math.max(vh - mapPxH, Math.min(0, desiredY)));
             
-            const rawViewportX = -canvasTranslateX / CELL_SIZE;
-            const rawViewportY = -canvasTranslateY / CELL_SIZE;
+            const rawViewportX = Math.round(-canvasTranslateX / CELL_SIZE);
+            const rawViewportY = Math.round(-canvasTranslateY / CELL_SIZE);
             const maxViewportX = Math.max(0, mapState.width - VIEW_W);
             const maxViewportY = Math.max(0, mapState.height - VIEW_H);
             const viewportTopLeftX_map = Math.min(Math.max(0, rawViewportX), maxViewportX);
