@@ -3229,12 +3229,7 @@
                 }
             }
         }
-        function init() {
-            if (initRetries > MAX_INIT_RETRIES) {
-                statusDiv.textContent = 'Fatal Error: Map generation failed repeatedly.';
-                console.error('Map generation failed after multiple retries.');
-                return;
-            }
+        function resetSimulationStateForInit() {
             clearTimeout(simState.timeout);
             simState.loopFn = null;
             simState.isPaused = false;
@@ -3242,83 +3237,126 @@
             statusDiv.textContent = 'Generating dungeon...';
             restartBtn.style.display = 'none';
             currentEndPos = null;
+        }
 
-            player = new Player({ name:"Player", x:0, y:0 });
+        function setupPlayer() {
+            const newPlayer = new Player({ name: "Player", x: 0, y: 0 });
 
             // Wearables
-            player.equipment.equipTo(SLOT.Head,       makeItem("leather_cap"));
-            player.equipment.equipTo(SLOT.BodyArmor,  makeItem("basic_clothes"));
-            player.equipment.equipTo(SLOT.Cloak,      makeItem("cloak"));
-            player.equipment.equipTo(SLOT.Belt,       makeItem("belt_leather"));
-            player.equipment.equipTo(SLOT.Backpack,   makeItem("pack_rucksack")); // choose pack
-            player.equipment.equipTo(SLOT.LeftHand,   makeItem("torch"));
-            player.equipment.equipTo(SLOT.RightHand,  makeItem("short_sword"));
+            newPlayer.equipment.equipTo(SLOT.Head,       makeItem("leather_cap"));
+            newPlayer.equipment.equipTo(SLOT.BodyArmor,  makeItem("basic_clothes"));
+            newPlayer.equipment.equipTo(SLOT.Cloak,      makeItem("cloak"));
+            newPlayer.equipment.equipTo(SLOT.Belt,       makeItem("belt_leather"));
+            newPlayer.equipment.equipTo(SLOT.Backpack,   makeItem("pack_rucksack")); // choose pack
+            newPlayer.equipment.equipTo(SLOT.LeftHand,   makeItem("torch"));
+            newPlayer.equipment.equipTo(SLOT.RightHand,  makeItem("short_sword"));
             // Belt attachments
-            player.equipment.equipTo(SLOT.Belt1,      makeItem("pouch_small"));
-            player.equipment.equipTo(SLOT.Belt2,      makeItem("bow_short"));
-            player.equipment.equipTo(SLOT.Quiver,     makeItem("quiver_std"));
+            newPlayer.equipment.equipTo(SLOT.Belt1,      makeItem("pouch_small"));
+            newPlayer.equipment.equipTo(SLOT.Belt2,      makeItem("bow_short"));
+            newPlayer.equipment.equipTo(SLOT.Quiver,     makeItem("quiver_std"));
 
             // Inventory constraints come from backpack
-            player.inventory = new Inventory(DEFAULT_INVENTORY_CAPACITY);
-            player.inventory.setConstraints(player.equipment.currentBackpackConstraints());
+            newPlayer.inventory = new Inventory(DEFAULT_INVENTORY_CAPACITY);
+            newPlayer.inventory.setConstraints(newPlayer.equipment.currentBackpackConstraints());
 
             // Seed inventory
-            player.inventory.add(new ItemStack(makeItem("torch"), 3));
-            player.inventory.add(new ItemStack(makeItem("arrow_wood"), 20));
-            player.inventory.add(new ItemStack(makeItem("bolt_wood"), 15));
-            player.inventory.add(new ItemStack(makeItem("sling_stone"), 40));
-            player.inventory.add(new ItemStack(makeItem("dagger")));
-            player.inventory.add(makeItem("crossbow_light"));
-            player.inventory.add(new ItemStack(makeItem("sling_leather")));
-            player.inventory.add(new ItemStack(makeItem("throwing_knife"), 4));
-            player.inventory.add(new ItemStack(makeItem("javelin"), 3));
-            player.inventory.add(new ItemStack(makeItem("boots")));
-            player.inventory.add(new ItemStack(makeItem("gloves")));
-            player.inventory.add(new ItemStack(makeItem("amulet_simple")));
-            player.inventory.add(new ItemStack(makeItem("pouch_small")));
+            newPlayer.inventory.add(new ItemStack(makeItem("torch"), 3));
+            newPlayer.inventory.add(new ItemStack(makeItem("arrow_wood"), 20));
+            newPlayer.inventory.add(new ItemStack(makeItem("bolt_wood"), 15));
+            newPlayer.inventory.add(new ItemStack(makeItem("sling_stone"), 40));
+            newPlayer.inventory.add(new ItemStack(makeItem("dagger")));
+            newPlayer.inventory.add(makeItem("crossbow_light"));
+            newPlayer.inventory.add(new ItemStack(makeItem("sling_leather")));
+            newPlayer.inventory.add(new ItemStack(makeItem("throwing_knife"), 4));
+            newPlayer.inventory.add(new ItemStack(makeItem("javelin"), 3));
+            newPlayer.inventory.add(new ItemStack(makeItem("boots")));
+            newPlayer.inventory.add(new ItemStack(makeItem("gloves")));
+            newPlayer.inventory.add(new ItemStack(makeItem("amulet_simple")));
+            newPlayer.inventory.add(new ItemStack(makeItem("pouch_small")));
 
+            return newPlayer;
+        }
+
+        function generateAndValidateDungeon() {
+            statusDiv.textContent = 'Generating hybrid dungeon...';
+            const dungeonData = generateDungeon();
+            if (!dungeonData) {
+                return { success: false, reason: 'generation' };
+            }
+
+            mapState.grid = dungeonData.grid;
+            mapState.width = mapState.grid[0].length;
+            mapState.height = mapState.grid.length;
+
+            const path = aStarPath(mapState.grid, dungeonData.start, dungeonData.end);
+            if (!path) {
+                return { success: false, reason: 'connectivity' };
+            }
+
+            return { success: true, dungeonData };
+        }
+
+        function handleDungeonFailure(reason) {
+            if (reason === 'generation') {
+                statusDiv.textContent = 'Map generation failed, retrying...';
+                initRetries++;
+                setTimeout(init, 100);
+            } else if (reason === 'connectivity') {
+                statusDiv.textContent = 'Map is not fully connected, regenerating...';
+                initRetries++;
+                setTimeout(init, 50);
+            }
+        }
+
+        function initializeSimulation(dungeonData) {
+            const startPos = dungeonData.start;
+            const endPos = dungeonData.end;
+            currentEndPos = endPos;
+
+            mapState.explored = Array.from({ length: mapState.height }, () => Array(mapState.width).fill(false));
+            mapState.known = Array.from({ length: mapState.height }, () => Array(mapState.width).fill(-1));
+
+            setupDOM();
+
+            player.pos = startPos;
+            player.startPos = startPos;
+            isEndRendered = false;
+            fovState.prevVisible = new Set();
+            prevPlayerPos = null;
+            fovState.currentVisible = new Set();
+            explorationState.newlyExplored = [];
+            fovState.lastCache = { key: null, radius: null, visible: null };
+
+            updateVisionAndExploration(player.startPos);
+            renderInitial(player.startPos, player.startPos, endPos);
+            updateCamera(player.startPos);
+            renderUI();
+            fovState.prevVisible = computeVisibleCells(player.startPos);
+            prevPlayerPos = { ...player.startPos };
+            initRetries = 0;
+
+            setTimeout(() => simulate(player.startPos, endPos), 500);
+        }
+
+        function init() {
+            if (initRetries > MAX_INIT_RETRIES) {
+                statusDiv.textContent = 'Fatal Error: Map generation failed repeatedly.';
+                console.error('Map generation failed after multiple retries.');
+                return;
+            }
+
+            resetSimulationStateForInit();
             minimapBase = null;
+            player = setupPlayer();
+
             setTimeout(() => {
-                statusDiv.textContent = 'Generating hybrid dungeon...';
-                const dungeonData = generateDungeon();
-                if (!dungeonData) {
-                    statusDiv.textContent = 'Map generation failed, retrying...';
-                    initRetries++;
-                    setTimeout(init, 100); return;
+                const result = generateAndValidateDungeon();
+                if (!result.success) {
+                    handleDungeonFailure(result.reason);
+                    return;
                 }
-                mapState.grid = dungeonData.grid;
-                mapState.width = mapState.grid[0].length;
-                mapState.height = mapState.grid.length;
-                const startPos = dungeonData.start;
-                const endPos = dungeonData.end;
-                currentEndPos = endPos;
-                // Initialize data grids now that we have dimensions
-                mapState.explored = Array.from({ length: mapState.height }, () => Array(mapState.width).fill(false));
-                mapState.known = Array.from({ length: mapState.height }, () => Array(mapState.width).fill(-1));
-                // Setup DOM elements which depend on map dimensions
-                setupDOM();
-                const path = aStarPath(mapState.grid, startPos, endPos);
-                if (!path) {
-                    statusDiv.textContent = 'Map is not fully connected, regenerating...';
-                    initRetries++;
-                    setTimeout(init, 50); return;
-                }
-                player.pos = startPos;
-                player.startPos = startPos;
-                isEndRendered = false;
-                fovState.prevVisible = new Set();
-                prevPlayerPos = null;
-                fovState.currentVisible = new Set();
-                explorationState.newlyExplored = [];
-                fovState.lastCache = { key: null, radius: null, visible: null };
-                updateVisionAndExploration(player.startPos);
-                renderInitial(player.startPos, player.startPos, endPos);
-                updateCamera(player.startPos);
-                renderUI();
-                fovState.prevVisible = computeVisibleCells(player.startPos);
-                prevPlayerPos = { ...player.startPos };
-                initRetries = 0;
-                setTimeout(() => simulate(player.startPos, endPos), 500);
+
+                initializeSimulation(result.dungeonData);
             }, 50);
         }
         function bootstrap() {
