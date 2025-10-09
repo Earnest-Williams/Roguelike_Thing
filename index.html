@@ -329,6 +329,15 @@
         ai: {
           ticksPerSecond: 12,
           shortTermMemory: 60,
+          maxIdleTicks: 240,
+          fallback: {
+            unknownTileCost: 6,
+            memoryRetainFraction: 0.4,
+            randomWalk: {
+              steps: 6,
+              maxAttempts: 4,
+            },
+          },
         },
         generator: {
           hybrid: {
@@ -4701,6 +4710,156 @@
           }
           return null;
         }
+
+        function weightedSearchToTarget(
+          start,
+          target,
+          shortTermMemory,
+          options = {},
+        ) {
+          const {
+            ignoreShortTermMemory = false,
+            unknownTileCost = CONFIG.ai.fallback.unknownTileCost,
+          } = options;
+          const startKey = posKey(start);
+          const targetKey = posKey(target);
+          if (startKey === targetKey) {
+            return [];
+          }
+
+          const restricted =
+            !ignoreShortTermMemory &&
+            shortTermMemory &&
+            shortTermMemory.length > 0
+              ? new Set(shortTermMemory)
+              : null;
+
+          const open = [{ pos: start, cost: 0 }];
+          const costs = new Map([[startKey, 0]]);
+          const parents = new Map();
+          const processed = new Set();
+
+          while (open.length > 0) {
+            open.sort((a, b) => a.cost - b.cost);
+            const current = open.shift();
+            const currentKey = posKey(current.pos);
+            if (processed.has(currentKey)) {
+              continue;
+            }
+            processed.add(currentKey);
+
+            if (currentKey === targetKey) {
+              const path = [];
+              let key = targetKey;
+              while (key !== startKey) {
+                const parentKey = parents.get(key);
+                if (!parentKey) {
+                  throw new Error(
+                    `Weighted search logic error: No parent for key ${key} when reconstructing path from ${startKey} to ${targetKey}`,
+                  );
+                }
+                const [x, y] = key.split(",").map(Number);
+                path.unshift({ x, y });
+                key = parentKey;
+              }
+              return path;
+            }
+
+            for (const { dx, dy } of CARDINAL_DIRECTIONS) {
+              const nx = current.pos.x + dx;
+              const ny = current.pos.y + dy;
+              if (
+                nx < 0 ||
+                nx >= mapState.width ||
+                ny < 0 ||
+                ny >= mapState.height
+              ) {
+                continue;
+              }
+
+              if (mapState.grid[ny][nx] !== TILE_FLOOR) {
+                continue;
+              }
+
+              const neighborKey = posKey({ x: nx, y: ny });
+              if (processed.has(neighborKey)) {
+                continue;
+              }
+              if (restricted && restricted.has(neighborKey)) {
+                continue;
+              }
+
+              let stepCost = 1;
+              if (mapState.known[ny][nx] !== TILE_FLOOR) {
+                stepCost += Math.max(0, unknownTileCost);
+              }
+              const newCost = current.cost + stepCost;
+              if (!costs.has(neighborKey) || newCost < costs.get(neighborKey)) {
+                costs.set(neighborKey, newCost);
+                parents.set(neighborKey, currentKey);
+                open.push({ pos: { x: nx, y: ny }, cost: newCost });
+              }
+            }
+          }
+          return null;
+        }
+
+        function prioritizeFrontiers(origin, seed = 0) {
+          const frontiers = [];
+          for (const fKey of explorationState.frontiers) {
+            const [fx, fy] = fKey.split(",").map(Number);
+            const dist =
+              Math.abs(origin.x - fx) + Math.abs(origin.y - fy);
+            const noise =
+              Math.sin(
+                fx * 73856093 + fy * 19349663 + seed * 83492791,
+              ) * 0.5 + 0.5;
+            frontiers.push({ pos: { x: fx, y: fy }, dist, noise });
+          }
+          frontiers.sort((a, b) => {
+            if (a.dist !== b.dist) return a.dist - b.dist;
+            return a.noise - b.noise;
+          });
+          return frontiers;
+        }
+
+        function generateRandomWalkPath(start, steps, maxAttempts = 3) {
+          for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            const path = [];
+            let current = { x: start.x, y: start.y };
+            let failed = false;
+            for (let i = 0; i < steps; i++) {
+              const neighbors = CARDINAL_DIRECTIONS.map(({ dx, dy }) => ({
+                x: current.x + dx,
+                y: current.y + dy,
+              })).filter((n) => {
+                if (
+                  n.x < 0 ||
+                  n.x >= mapState.width ||
+                  n.y < 0 ||
+                  n.y >= mapState.height
+                ) {
+                  return false;
+                }
+                return mapState.grid[n.y][n.x] === TILE_FLOOR;
+              });
+
+              if (neighbors.length === 0) {
+                failed = true;
+                break;
+              }
+
+              const next = neighbors[Math.floor(Math.random() * neighbors.length)];
+              path.push(next);
+              current = next;
+            }
+
+            if (!failed && path.length > 0) {
+              return path;
+            }
+          }
+          return [];
+        }
         function renderInitial(playerPos, startPos, endPos) {
           refreshLightingVisuals();
           fovState.currentVisible = computeVisibleCells(playerPos);
@@ -4790,6 +4949,10 @@
               posKeyFromCoords(player.x, player.y),
             ]),
             shortTermMemory: [],
+            randomWalkQueue: [],
+            idleTicksWithoutProgress: 0,
+            frontierNoiseSeed: Math.random() * 1000,
+            lastProgressTurn: 0,
           };
           explorationState.frontiers.clear();
           simState.turnCounter = 0;
@@ -4819,6 +4982,7 @@
 
             let nextMove = null;
             let nextPos = currentPos;
+            let attemptedFrontiers = false;
 
             if (mapState.known[endPos.y][endPos.x] === TILE_FLOOR) {
               const pathToExit = bfsToTarget(
@@ -4829,6 +4993,23 @@
               );
               if (pathToExit && pathToExit.length > 0) {
                 nextMove = pathToExit[0];
+                aiState.randomWalkQueue = [];
+              }
+            }
+
+            if (!nextMove && aiState.randomWalkQueue.length > 0) {
+              while (aiState.randomWalkQueue.length > 0 && !nextMove) {
+                const candidate = aiState.randomWalkQueue.shift();
+                if (
+                  candidate &&
+                  candidate.x >= 0 &&
+                  candidate.x < mapState.width &&
+                  candidate.y >= 0 &&
+                  candidate.y < mapState.height &&
+                  mapState.grid[candidate.y][candidate.x] === TILE_FLOOR
+                ) {
+                  nextMove = candidate;
+                }
               }
             }
 
@@ -4860,31 +5041,99 @@
             }
 
             if (!nextMove && explorationState.frontiers.size > 0) {
-              let closestFrontier = null;
-              let minDist = Infinity;
-              for (const fKey of explorationState.frontiers) {
-                const [fx, fy] = fKey.split(",").map(Number);
-                const dist =
-                  Math.abs(currentPlayerX - fx) +
-                  Math.abs(currentPlayerY - fy);
-                if (dist < minDist) {
-                  minDist = dist;
-                  closestFrontier = { x: fx, y: fy };
+              const prioritized = prioritizeFrontiers(
+                currentPos,
+                aiState.frontierNoiseSeed,
+              );
+              const currentFrontierKey = posKey(currentPos);
+              if (explorationState.frontiers.has(currentFrontierKey)) {
+                explorationState.frontiers.delete(currentFrontierKey);
+              }
+              for (const candidate of prioritized) {
+                attemptedFrontiers = true;
+                const path = bfsToTarget(
+                  currentPos,
+                  candidate.pos,
+                  aiState.shortTermMemory,
+                  { ignoreShortTermMemory: true },
+                );
+                if (path && path.length > 0) {
+                  nextMove = path[0];
+                  break;
                 }
               }
-              const pathToFrontier = bfsToTarget(
-                currentPos,
-                closestFrontier,
-                aiState.shortTermMemory,
-                { ignoreShortTermMemory: true },
-              );
-              if (pathToFrontier && pathToFrontier.length > 0) {
-                nextMove = pathToFrontier[0];
+
+              if (!nextMove && attemptedFrontiers) {
+                for (const candidate of prioritized) {
+                  const path = weightedSearchToTarget(
+                    currentPos,
+                    candidate.pos,
+                    aiState.shortTermMemory,
+                    { ignoreShortTermMemory: true },
+                  );
+                  if (path && path.length > 0) {
+                    nextMove = path[0];
+                    break;
+                  }
+                }
+              }
+
+              if (!nextMove && attemptedFrontiers) {
+                if (aiState.shortTermMemory.length > 0) {
+                  const retain = Math.max(
+                    0,
+                    Math.floor(
+                      aiState.shortTermMemory.length *
+                        CONFIG.ai.fallback.memoryRetainFraction,
+                    ),
+                  );
+                  aiState.shortTermMemory = retain
+                    ? aiState.shortTermMemory.slice(-retain)
+                    : [];
+                }
+                for (const candidate of prioritized) {
+                  const path = bfsToTarget(
+                    currentPos,
+                    candidate.pos,
+                    aiState.shortTermMemory,
+                    { ignoreShortTermMemory: true },
+                  );
+                  if (path && path.length > 0) {
+                    nextMove = path[0];
+                    break;
+                  }
+                }
               }
             }
 
             if (!nextMove && aiState.stack.length > 0) {
               nextMove = aiState.stack.pop();
+            }
+
+            if (!nextMove) {
+              if (aiState.randomWalkQueue.length === 0) {
+                const { steps, maxAttempts } = CONFIG.ai.fallback.randomWalk;
+                const randomPath = generateRandomWalkPath(
+                  currentPos,
+                  steps,
+                  maxAttempts,
+                );
+                aiState.randomWalkQueue = randomPath.slice();
+              }
+              while (!nextMove && aiState.randomWalkQueue.length > 0) {
+                const candidate = aiState.randomWalkQueue.shift();
+                if (
+                  candidate &&
+                  candidate.x >= 0 &&
+                  candidate.x < mapState.width &&
+                  candidate.y >= 0 &&
+                  candidate.y < mapState.height &&
+                  mapState.grid[candidate.y][candidate.x] === TILE_FLOOR
+                ) {
+                  aiState.stack.push({ x: currentPlayerX, y: currentPlayerY });
+                  nextMove = candidate;
+                }
+              }
             }
 
             if (!nextMove) {
@@ -4914,6 +5163,34 @@
             }
 
             updateVisionAndExploration(nextPos);
+            if (explorationState.newlyExplored.length > 0) {
+              aiState.idleTicksWithoutProgress = 0;
+              aiState.randomWalkQueue = [];
+              aiState.lastProgressTurn = simState.turnCounter;
+            } else {
+              aiState.idleTicksWithoutProgress++;
+              if (
+                CONFIG.ai.maxIdleTicks > 0 &&
+                aiState.idleTicksWithoutProgress >= CONFIG.ai.maxIdleTicks
+              ) {
+                aiState.idleTicksWithoutProgress = 0;
+                aiState.visitedForPathfinding = new Set([posKey(nextPos)]);
+                aiState.frontierNoiseSeed = Math.random() * 1000;
+                if (aiState.shortTermMemory.length > 0) {
+                  const retain = Math.max(
+                    0,
+                    Math.floor(
+                      aiState.shortTermMemory.length *
+                        CONFIG.ai.fallback.memoryRetainFraction,
+                    ),
+                  );
+                  aiState.shortTermMemory = retain
+                    ? aiState.shortTermMemory.slice(-retain)
+                    : [];
+                }
+                aiState.randomWalkQueue = [];
+              }
+            }
             fovState.currentVisible = computeVisibleCells(nextPos);
             renderDelta(
               hasPrevPlayerPos ? prevPlayerPos : null,
