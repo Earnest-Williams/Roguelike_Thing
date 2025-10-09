@@ -1484,13 +1484,7 @@
 
                     const nextKey = `${m.x},${m.y}`;
 
-                    if (nextKey !== prevKey) {
-                        if (this.index.get(prevKey) === m) {
-                            this.index.delete(prevKey);
-                        }
-                    }
-
-                    this.index.set(nextKey, m);
+                    // Index is rebuilt at the start of each tick, so no need to update per-monster here.
                 }
             }
         }
