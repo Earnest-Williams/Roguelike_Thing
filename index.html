@@ -2779,7 +2779,7 @@
         // ----- CONFIG -----
         const HYBRID_CFG = CONFIG.generator.hybrid;
         // Utility
-        const clamp01 = (v) => Math.max(0, Math.min(1, v));
+        // clamp01 helper declared earlier handles the normalization; reuse it here.
         const manhattan = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
         // -------------------------
         // Phase A: Large rooms
