@@ -428,7 +428,8 @@
 
         let player = {};
         let isEndRendered = false;
-        let prevPlayerPos = { x: -1, y: -1 };
+        const INVALID_POSITION_COORD = -1;
+        let prevPlayerPos = { x: INVALID_POSITION_COORD, y: INVALID_POSITION_COORD };
         let hasPrevPlayerPos = false;
         let currentEndPos = null;
         let initRetries = 0;
