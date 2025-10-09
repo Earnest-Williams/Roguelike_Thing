@@ -791,6 +791,93 @@
         return applied;
       }
 
+      function resolveAttack(ctx) {
+        const A = ctx.attacker;
+        const D = ctx.defender;
+        const turn = ctx.turn | 0;
+        const packets = Object.create(null);
+        const add = (type, amount) => {
+          packets[type] = (packets[type] || 0) + amount;
+        };
+
+        let basePhysical = Math.max(0, ctx.basePhysical | 0);
+
+        for (const conv of ctx.conversions || []) {
+          let pool = basePhysical;
+          if (!conv.includeBaseOnly && ctx.bonusPhysical) {
+            pool += ctx.bonusPhysical;
+          }
+          const delta = Math.floor(pool * conv.pct);
+          basePhysical -= delta;
+          add(conv.to, delta);
+        }
+        if (basePhysical > 0) {
+          add("physical", basePhysical);
+        }
+
+        for (const brand of ctx.brands || []) {
+          if (brand.flat) {
+            add(brand.type, brand.flat | 0);
+          }
+        }
+
+        const mulTyped = (packetMap, getMult) => {
+          for (const type in packetMap) {
+            const mult = getMult(type);
+            if (mult) {
+              packetMap[type] = Math.max(
+                0,
+                Math.floor(packetMap[type] * (1 + mult)),
+              );
+            }
+          }
+        };
+
+        mulTyped(
+          packets,
+          (t) => A?.modCache?.offense?.affinities?.[t] || 0,
+        );
+
+        if (A?.modCache?.polarity?.onHitBias?.baseMult) {
+          const m = A.modCache.polarity.onHitBias.baseMult;
+          for (const type in packets) {
+            packets[type] = Math.floor(packets[type] * (1 + m));
+          }
+        }
+
+        mulTyped(
+          packets,
+          (t) => A?.statusDerived?.damageDealtMult?.[t] || 0,
+        );
+        mulTyped(
+          packets,
+          (t) => D?.statusDerived?.damageTakenMult?.[t] || 0,
+        );
+
+        const out = Object.create(null);
+        for (const type in packets) {
+          if (D?.modCache?.defense?.immunities?.has?.(type)) {
+            continue;
+          }
+          const baseRes =
+            (D?.modCache?.defense?.resists?.[type] || 0) +
+            (D?.statusDerived?.resistDelta?.[type] || 0);
+          const clampedRes = Math.max(-1, Math.min(0.95, baseRes));
+          out[type] = Math.max(
+            0,
+            Math.floor(packets[type] * (1 - clampedRes)),
+          );
+        }
+
+        const total = Object.values(out).reduce((acc, value) => acc + value, 0);
+
+        if (ctx.statusAttempts?.length) {
+          applyStatuses({ statusAttempts: ctx.statusAttempts }, A, D, turn);
+        }
+
+        return { packetsByType: out, total };
+      }
+
       class RingBuffer {
         constructor(capacity = 64) {
           this.capacity = capacity;
@@ -827,6 +914,7 @@
       window.StatusRegistry = StatusRegistry;
       window.getStatus = getStatus;
       window.applyStatuses = applyStatuses;
+      window.resolveAttack = resolveAttack;
 
       registerStatus({
         id: "burn",
