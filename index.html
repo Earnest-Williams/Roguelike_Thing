@@ -1015,6 +1015,7 @@
           prevVisible: new Set(),
           lastCache: { key: null, radius: null, visible: null },
           overlayStyle: CONFIG.visual.colors.visibleOverlay,
+          overlayRgb: null,
         };
 
         const explorationState = {
@@ -1049,6 +1050,14 @@
             typeof rawLightConfig.flickerVariance === "number"
               ? rawLightConfig.flickerVariance
               : 0.12,
+          flickerNearDeadZoneTiles:
+            typeof rawLightConfig.flickerNearDeadZoneTiles === "number"
+              ? rawLightConfig.flickerNearDeadZoneTiles
+              : 1,
+          flickerFalloffPower:
+            typeof rawLightConfig.flickerFalloffPower === "number"
+              ? rawLightConfig.flickerFalloffPower
+              : 1.75,
         };
 
         const VIEW_W = CONFIG.visual.view.width;
@@ -3244,49 +3253,82 @@
             ? () => performance.now()
             : () => Date.now();
 
-        function computeLightOverlayAlpha(flickerRate) {
-          let alpha = LIGHT_CONFIG.baseOverlayAlpha;
-          const variance = LIGHT_CONFIG.flickerVariance;
-          if (
-            typeof flickerRate === "number" &&
-            flickerRate > 0 &&
-            variance > 0
-          ) {
-            const now = getNow();
-            const t = now / 1000;
-            const primary = Math.sin(t * flickerRate * 2 * Math.PI);
-            const secondary = Math.sin(
-              t * flickerRate * 2 * Math.PI * 0.63 + Math.PI / 3,
-            );
-            alpha += primary * variance * 0.5;
-            alpha += secondary * variance * 0.25;
+        function smoothstep01(x) {
+          const t = Math.max(0, Math.min(1, x));
+          return t * t * (3 - 2 * t);
+        }
+
+        function computeTileOverlayAlpha(x, y, lightCtx) {
+          const baseA = Math.max(0, Math.min(1, LIGHT_CONFIG.baseOverlayAlpha));
+          const variance = Math.max(0, LIGHT_CONFIG.flickerVariance || 0);
+          if (!lightCtx || variance <= 0) {
+            return baseA;
           }
-          if (alpha < 0) alpha = 0;
-          else if (alpha > 1) alpha = 1;
+          const radius = Number.isFinite(lightCtx.radius)
+            ? Math.max(0, lightCtx.radius)
+            : 0;
+          if (radius <= 0) {
+            return baseA;
+          }
+          const osc = lightCtx.osc || 0;
+          if (osc === 0) {
+            return baseA;
+          }
+          const dx = x - lightCtx.playerX;
+          const dy = y - lightCtx.playerY;
+          const dist = Math.max(Math.abs(dx), Math.abs(dy));
+          const dead = LIGHT_CONFIG.flickerNearDeadZoneTiles;
+          const denom = Math.max(1e-6, radius - dead);
+          const u0 = (dist - dead) / denom;
+          const u = smoothstep01(u0);
+          const amp =
+            variance * Math.pow(u, LIGHT_CONFIG.flickerFalloffPower);
+          const alpha = baseA + osc * amp;
+          if (alpha <= 0) return 0;
+          if (alpha >= 1) return 1;
           return alpha;
         }
 
-        function computeLightOverlayStyle() {
+        function createLightOverlayContext() {
+          const radius =
+            typeof player?.lightRadius === "function"
+              ? player.lightRadius()
+              : 0;
+          const rate =
+            typeof player?.equipment?.getLightFlickerRate === "function"
+              ? player.equipment.getLightFlickerRate()
+              : 0;
+          const flickerRate =
+            typeof rate === "number" && Number.isFinite(rate) ? Math.max(0, rate) : 0;
+          const tSec = getNow() / 1000;
+          const osc =
+            flickerRate > 0 ? Math.sin(tSec * 2 * Math.PI * flickerRate) : 0;
+          const playerX = typeof player?.x === "number" ? player.x : 0;
+          const playerY = typeof player?.y === "number" ? player.y : 0;
+          return {
+            radius,
+            osc,
+            playerX,
+            playerY,
+          };
+        }
+
+        function computeLightOverlayVisuals() {
           const props = getLightProperties();
           const rgb = colorStringToRgb(
             props.color || LIGHT_CONFIG.fallbackColor,
           );
-          const alpha = computeLightOverlayAlpha(props.flickerRate);
-          return [
-            "rgba(",
-            rgb.r,
-            ",",
-            rgb.g,
-            ",",
-            rgb.b,
-            ",",
-            alpha.toFixed(3),
-            ")",
-          ].join("");
+          const baseA = Math.max(0, Math.min(1, LIGHT_CONFIG.baseOverlayAlpha));
+          return {
+            style: `rgba(${rgb.r},${rgb.g},${rgb.b},${baseA.toFixed(3)})`,
+            rgb,
+          };
         }
 
         function refreshLightingVisuals() {
-          fovState.overlayStyle = computeLightOverlayStyle();
+          const overlay = computeLightOverlayVisuals();
+          fovState.overlayStyle = overlay.style;
+          fovState.overlayRgb = overlay.rgb;
         }
 
         function getLightRadius() {
@@ -4691,6 +4733,7 @@
           if (!mapState.grid || !mapState.grid.length) return;
           if (!player || !player.pos) return;
           refreshLightingVisuals();
+          const lightCtx = createLightOverlayContext();
           ctx.clearRect(0, 0, canvas.width, canvas.height);
           for (let y = 0; y < mapState.height; y++) {
             for (let x = 0; x < mapState.width; x++) {
@@ -4706,7 +4749,7 @@
                 x === currentEndPos.x &&
                 y === currentEndPos.y &&
                 isEndRendered;
-              drawCell(x, y, isVisible, false, isStart, isEnd);
+              drawCell(x, y, isVisible, false, isStart, isEnd, lightCtx);
             }
           }
           const playerKey = posKey(player.pos);
@@ -4726,6 +4769,7 @@
             true,
             isStart,
             isEnd,
+            lightCtx,
           );
           updateCamera(player.pos);
           if (minimapModalEl && minimapModalEl.style.display === "flex") {
@@ -4840,6 +4884,7 @@
           isPlayer = false,
           isStart = false,
           isEnd = false,
+          lightCtx = null,
         ) {
           const cellX = x * CELL_SIZE;
           const cellY = y * CELL_SIZE;
@@ -4889,7 +4934,15 @@
             ctx.fillText(text, cellX + HALF_CELL, cellY + HALF_CELL);
           }
           if (isVisible) {
-            ctx.fillStyle = fovState.overlayStyle;
+            const overlayRgb = fovState.overlayRgb;
+            if (overlayRgb) {
+              const alpha = computeTileOverlayAlpha(x, y, lightCtx);
+              ctx.fillStyle = `rgba(${overlayRgb.r},${overlayRgb.g},${overlayRgb.b},${alpha.toFixed(
+                3,
+              )})`;
+            } else {
+              ctx.fillStyle = fovState.overlayStyle;
+            }
             ctx.fillRect(cellX, cellY, CELL_SIZE, CELL_SIZE);
           }
         }
@@ -5212,6 +5265,7 @@
         }
         function renderInitial(playerPos, startPos, endPos) {
           refreshLightingVisuals();
+          const lightCtx = createLightOverlayContext();
           fovState.currentVisible = computeVisibleCells(playerPos);
           // Draw all initially explored cells
           for (const pos of explorationState.newlyExplored) {
@@ -5220,20 +5274,21 @@
             const isS = pos.x === startPos.x && pos.y === startPos.y;
             const isE = pos.x === endPos.x && pos.y === endPos.y;
             if (isE) isEndRendered = true;
-            drawCell(pos.x, pos.y, isVis, false, isS, isE);
+            drawCell(pos.x, pos.y, isVis, false, isS, isE, lightCtx);
           }
           // Draw player
-          drawCell(playerPos.x, playerPos.y, true, true, true, false); // Start is player pos initially
+          drawCell(playerPos.x, playerPos.y, true, true, true, false, lightCtx); // Start is player pos initially
         }
         function renderDelta(prevPlayerPos, playerPos, endPos) {
           refreshLightingVisuals();
+          const lightCtx = createLightOverlayContext();
           // Redraw cells where visibility turned off
           for (const key of fovState.prevVisible) {
             if (!fovState.currentVisible.has(key)) {
               const [x, y] = key.split(",").map(Number);
               const isS = x === player.startPos.x && y === player.startPos.y;
               const isE = x === endPos.x && y === endPos.y;
-              drawCell(x, y, false, false, isS, isE);
+              drawCell(x, y, false, false, isS, isE, lightCtx);
             }
           }
           // Redraw old player position (without player)
@@ -5245,7 +5300,7 @@
               prevPlayerPos.y === player.startPos.y;
             const isE =
               prevPlayerPos.x === endPos.x && prevPlayerPos.y === endPos.y;
-            drawCell(prevPlayerPos.x, prevPlayerPos.y, isVis, false, isS, isE);
+            drawCell(prevPlayerPos.x, prevPlayerPos.y, isVis, false, isS, isE, lightCtx);
           }
           // Draw newly explored cells
           for (const pos of explorationState.newlyExplored) {
@@ -5257,7 +5312,7 @@
             if (isE && !isEndRendered) {
               isEndRendered = true;
             }
-            drawCell(pos.x, pos.y, isVis, false, isS, isE);
+            drawCell(pos.x, pos.y, isVis, false, isS, isE, lightCtx);
           }
           // Draw newly visible cells that were already explored
           for (const key of fovState.currentVisible) {
@@ -5269,7 +5324,7 @@
               if (!alreadyNew) {
                 const isS = x === player.startPos.x && y === player.startPos.y;
                 const isE = x === endPos.x && y === endPos.y;
-                drawCell(x, y, true, false, isS, isE);
+                drawCell(x, y, true, false, isS, isE, lightCtx);
               }
             }
           }
@@ -5280,7 +5335,7 @@
             playerPos.x === player.startPos.x &&
             playerPos.y === player.startPos.y;
           const isE = playerPos.x === endPos.x && playerPos.y === endPos.y;
-          drawCell(playerPos.x, playerPos.y, isVis, true, isS, isE);
+          drawCell(playerPos.x, playerPos.y, isVis, true, isS, isE, lightCtx);
         }
         // --- SIMULATION LOGIC ---
         // Main autonomous exploration loop. The routine alternates between three
