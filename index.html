@@ -384,6 +384,364 @@
             [0, 1, -1, 0],
             [1, 0, 0, -1],
         ];
+
+        // ===================== STATUS SYSTEM =====================
+
+        const DAMAGE_TYPE = Object.freeze({
+            PHYSICAL: "physical",
+            FIRE: "fire",
+            COLD: "cold",
+            LIGHTNING: "lightning",
+            POISON: "poison",
+            ARCANE: "arcane",
+        });
+
+        const STATUS_IDS = Object.freeze([
+            "burn", "bleed", "poisoned", "frozen", "shocked",
+            "stunned", "slowed", "silenced", "weakened", "confused",
+            "haste"
+        ]);
+
+        const STACKING_RULE = Object.freeze({
+            REFRESH: "refresh",
+            ADD_STACKS: "add_stacks",
+            INDEPENDENT: "independent",
+        });
+
+        function createEmptyDamageTypeMap() {
+            return Object.create(null);
+        }
+
+        function createEmptyStatusDerivedMods() {
+            return {
+                moveAPDelta: 0,
+                actionSpeedPct: 0,
+                accuracyFlat: 0,
+                critChancePct: 0,
+                damageDealtMult: createEmptyDamageTypeMap(),
+                damageTakenMult: createEmptyDamageTypeMap(),
+                resistDelta: createEmptyDamageTypeMap(),
+            };
+        }
+
+        function createDefaultStatusModCache() {
+            return {
+                inflictBonus: Object.create(null),
+                inflictDurMult: Object.create(null),
+                recvDurMult: Object.create(null),
+                resistBonus: Object.create(null),
+                freeAction: {
+                    ignore: new Set(),
+                },
+            };
+        }
+
+        function createDefaultModCache() {
+            return {
+                status: createDefaultStatusModCache(),
+            };
+        }
+
+        const StatusRegistry = new Map();
+
+        function registerStatus(def) {
+            if (!def || !def.id) {
+                throw new Error("registerStatus requires an id");
+            }
+            StatusRegistry.set(def.id, def);
+        }
+
+        function getStatus(id) {
+            if (!StatusRegistry.has(id)) {
+                throw new Error(`Unknown status definition: ${id}`);
+            }
+            return StatusRegistry.get(id);
+        }
+
+        function rebuildStatusDerivedCache(actor) {
+            if (!actor) return;
+            const agg = createEmptyStatusDerivedMods();
+            const statuses = Array.isArray(actor.statuses) ? actor.statuses : [];
+            for (const st of statuses) {
+                const def = StatusRegistry.get(st.id);
+                if (!def || typeof def.derive !== "function") continue;
+                const derived = def.derive({ target: actor, stacks: st.stacks ?? 1, potency: st.potency });
+                if (!derived) continue;
+                if (typeof derived.moveAPDelta === "number") {
+                    agg.moveAPDelta += derived.moveAPDelta;
+                }
+                if (typeof derived.actionSpeedPct === "number") {
+                    agg.actionSpeedPct += derived.actionSpeedPct;
+                }
+                if (typeof derived.accuracyFlat === "number") {
+                    agg.accuracyFlat += derived.accuracyFlat;
+                }
+                if (typeof derived.critChancePct === "number") {
+                    agg.critChancePct += derived.critChancePct;
+                }
+                if (derived.damageDealtMult) {
+                    for (const [k, v] of Object.entries(derived.damageDealtMult)) {
+                        if (typeof v !== "number") continue;
+                        agg.damageDealtMult[k] = (agg.damageDealtMult[k] ?? 0) + v;
+                    }
+                }
+                if (derived.damageTakenMult) {
+                    for (const [k, v] of Object.entries(derived.damageTakenMult)) {
+                        if (typeof v !== "number") continue;
+                        agg.damageTakenMult[k] = (agg.damageTakenMult[k] ?? 0) + v;
+                    }
+                }
+                if (derived.resistDelta) {
+                    for (const [k, v] of Object.entries(derived.resistDelta)) {
+                        if (typeof v !== "number") continue;
+                        agg.resistDelta[k] = (agg.resistDelta[k] ?? 0) + v;
+                    }
+                }
+            }
+            actor.statusDerived = agg;
+        }
+
+        function tickStatusesAtTurnStart(actor, turn) {
+            if (!actor) return;
+            if (!Array.isArray(actor.statuses)) {
+                actor.statuses = [];
+            }
+            const expired = [];
+            for (const st of actor.statuses) {
+                const def = StatusRegistry.get(st.id);
+                if (!def) continue;
+                if (def.tickEvery && st.nextTickAt != null) {
+                    while (turn >= st.nextTickAt) {
+                        def.onTick?.({
+                            target: actor,
+                            source: st.source,
+                            stacks: st.stacks ?? 1,
+                            potency: st.potency,
+                            turn: st.nextTickAt,
+                        });
+                        actor.__log?.statusTick?.(st.id, {
+                            turn: st.nextTickAt,
+                            stacks: st.stacks ?? 1,
+                            potency: st.potency,
+                        });
+                        st.nextTickAt += def.tickEvery;
+                    }
+                }
+                if (turn >= st.endsAtTurn) {
+                    def.onExpire?.({
+                        target: actor,
+                        source: st.source,
+                        stacks: st.stacks ?? 1,
+                        potency: st.potency,
+                        turn,
+                    });
+                    actor.__log?.statusExpire?.(st.id, {
+                        turn,
+                        stacks: st.stacks ?? 1,
+                        potency: st.potency,
+                    });
+                    expired.push(st);
+                }
+            }
+            if (expired.length) {
+                actor.statuses = actor.statuses.filter(s => !expired.includes(s));
+            }
+            rebuildStatusDerivedCache(actor);
+        }
+
+        function applyStatuses(ctx, S, D, turn) {
+            if (!D) return [];
+            if (!Array.isArray(D.statuses)) {
+                D.statuses = [];
+            }
+            if (!D.modCache) {
+                D.modCache = createDefaultModCache();
+            }
+            if (!S.modCache) {
+                S.modCache = createDefaultModCache();
+            }
+            if (!D.modCache.status) {
+                D.modCache.status = createDefaultStatusModCache();
+            }
+            if (!S.modCache.status) {
+                S.modCache.status = createDefaultStatusModCache();
+            }
+            const applied = [];
+            const attempts = ctx?.statusAttempts ?? [];
+            const defenderStatusMods = D.modCache.status ?? createDefaultStatusModCache();
+
+            for (const a of attempts) {
+                const def = StatusRegistry.get(a.id);
+                if (!def) continue;
+
+                let p = a.baseChance ?? 0;
+                const attackerMods = S.modCache.status ?? createDefaultStatusModCache();
+                p += attackerMods.inflictBonus?.[a.id] ?? 0;
+                p -= defenderStatusMods.resistBonus?.[a.id] ?? 0;
+                p = Math.max(0, Math.min(1, p));
+                if (p <= 0) continue;
+
+                if (defenderStatusMods.freeAction?.ignore instanceof Set && defenderStatusMods.freeAction.ignore.has(a.id)) {
+                    continue;
+                }
+
+                if (Math.random() >= p) continue;
+
+                const attackerDurMult = attackerMods.inflictDurMult?.[a.id] ?? 1;
+                const defenderDurMult = defenderStatusMods.recvDurMult?.[a.id] ?? 1;
+                const baseDur = Math.max(1, Math.ceil((a.baseDuration ?? 1) * attackerDurMult * defenderDurMult));
+
+                if (def.stacking === STACKING_RULE.INDEPENDENT) {
+                    const inst = {
+                        id: a.id,
+                        stacks: 1,
+                        potency: undefined,
+                        nextTickAt: def.tickEvery ? turn + def.tickEvery : undefined,
+                        endsAtTurn: turn + baseDur,
+                        source: S?.id,
+                    };
+                    const appliedData = def.onApply?.({ target: D, source: S, stacks: 1, turn });
+                    if (appliedData && appliedData.potency !== undefined) {
+                        inst.potency = appliedData.potency;
+                    }
+                    D.statuses.push(inst);
+                    applied.push(inst);
+                    D.__log?.statusApply?.(a.id, { chance: p, baseChance: a.baseChance ?? 0, duration: baseDur });
+                } else {
+                    let ex = D.statuses.find(s => s.id === a.id);
+                    if (!ex) {
+                        const stacks = a.stacks ?? 1;
+                        ex = {
+                            id: a.id,
+                            stacks,
+                            potency: undefined,
+                            nextTickAt: def.tickEvery ? turn + def.tickEvery : undefined,
+                            endsAtTurn: turn + baseDur,
+                            source: S?.id,
+                        };
+                        const appliedData = def.onApply?.({ target: D, source: S, stacks, turn });
+                        if (appliedData && appliedData.potency !== undefined) {
+                            ex.potency = appliedData.potency;
+                        }
+                        D.statuses.push(ex);
+                        applied.push(ex);
+                        D.__log?.statusApply?.(a.id, { chance: p, baseChance: a.baseChance ?? 0, duration: baseDur, stacks });
+                    } else {
+                        if (def.stacking === STACKING_RULE.REFRESH) {
+                            ex.endsAtTurn = Math.max(ex.endsAtTurn, turn + baseDur);
+                        } else if (def.stacking === STACKING_RULE.ADD_STACKS) {
+                            const addStacks = a.stacks ?? 1;
+                            const maxStacks = def.maxStacks ?? 999;
+                            ex.stacks = Math.min((ex.stacks ?? 1) + addStacks, maxStacks);
+                            ex.endsAtTurn = Math.max(ex.endsAtTurn, turn + baseDur);
+                        }
+                        D.__log?.statusApply?.(a.id, { chance: p, baseChance: a.baseChance ?? 0, duration: baseDur, stacks: ex.stacks });
+                    }
+                }
+            }
+
+            if (applied.length) {
+                rebuildStatusDerivedCache(D);
+            }
+            return applied;
+        }
+
+        class RingBuffer {
+            constructor(capacity = 64) {
+                this.capacity = capacity;
+                this.buffer = [];
+            }
+            push(value) {
+                if (this.buffer.length >= this.capacity) {
+                    this.buffer.shift();
+                }
+                this.buffer.push(value);
+            }
+            toArray() {
+                return this.buffer.slice();
+            }
+        }
+
+        function attachDebug(mob) {
+            if (!mob || mob.__log) return;
+            const rb = new RingBuffer(128);
+            mob.__log = {
+                push: (event) => rb.push(event),
+                attackStep: (step, data) => rb.push({ kind: "attack_step", step, data }),
+                statusApply: (id, data) => rb.push({ kind: "status_apply", id, data }),
+                statusTick: (id, data) => rb.push({ kind: "status_tick", id, data }),
+                statusExpire: (id, data) => rb.push({ kind: "status_expire", id, data }),
+                dump: () => rb.toArray(),
+            };
+        }
+
+        window.attachDebug = attachDebug;
+        window.StatusRegistry = StatusRegistry;
+        window.getStatus = getStatus;
+        window.applyStatuses = applyStatuses;
+
+        registerStatus({
+            id: "burn",
+            label: "Burning",
+            harmful: true,
+            stacking: STACKING_RULE.ADD_STACKS,
+            maxStacks: 5,
+            tickEvery: 1,
+            onTick: ({ target, stacks = 1 }) => {
+                const dot = 1 + stacks;
+                if (typeof target.hp === "number") {
+                    target.hp -= dot;
+                }
+                target.__log?.statusTick?.("burn", { dot, stacks });
+            },
+            derive: ({ stacks = 1 }) => ({
+                damageTakenMult: { cold: -0.1, fire: 0.25 },
+            }),
+        });
+
+        registerStatus({
+            id: "poisoned",
+            label: "Poisoned",
+            harmful: true,
+            stacking: STACKING_RULE.INDEPENDENT,
+            tickEvery: 1,
+            onTick: ({ target, potency = 1 }) => {
+                const dot = Math.ceil(1.5 * potency);
+                if (typeof target.hp === "number") {
+                    target.hp -= dot;
+                }
+                target.__log?.statusTick?.("poisoned", { dot, potency });
+            },
+            onApply: () => ({ potency: 1 }),
+        });
+
+        registerStatus({
+            id: "slowed",
+            label: "Slowed",
+            harmful: true,
+            stacking: STACKING_RULE.REFRESH,
+            derive: ({ stacks = 1 }) => ({
+                actionSpeedPct: 0.10 * stacks,
+                moveAPDelta: 0.1,
+            }),
+        });
+
+        registerStatus({
+            id: "stunned",
+            label: "Stunned",
+            harmful: true,
+            stacking: STACKING_RULE.REFRESH,
+            derive: () => ({ canAct: false }),
+        });
+
+        registerStatus({
+            id: "haste",
+            label: "Haste",
+            harmful: false,
+            stacking: STACKING_RULE.REFRESH,
+            derive: ({ stacks = 1 }) => ({ actionSpeedPct: 0.15 * stacks }),
+        });
+
         const Game = (() => {
             const viewportEl = document.getElementById('maze-viewport');
             const canvas = document.getElementById('maze-canvas');
@@ -405,6 +763,7 @@
             isPaused: false,
             speed: CONFIG.ai.ticksPerSecond,
             isReady: false,
+            turnCounter: 0,
         };
 
         const mapState = {
@@ -1041,6 +1400,10 @@
                 this.color = o.color ?? "#fff";
                 this.equipment = new Equipment();
                 this.inventory = new Inventory(DEFAULT_INVENTORY_CAPACITY);
+                this.statuses = [];
+                this.statusDerived = createEmptyStatusDerivedMods();
+                this.modCache = createDefaultModCache();
+                this.__log = null;
             }
             get pos() { return { x: this.x, y: this.y }; }
             set pos(p) { this.x = p.x | 0; this.y = p.y | 0; }
@@ -1093,7 +1456,14 @@
             removeById(id) { this.list = this.list.filter(x => x.id !== id); this.reindex(); }
             getMobAt(x, y) { return this.index.get(`${x},${y}`) || null; }
             reindex() { this.index.clear(); for (const m of this.list) this.index.set(`${m.x},${m.y}`, m); }
-            tick(gameCtx) { for (const m of this.list) if (m.kind !== "player") m.takeTurn(gameCtx); this.reindex(); }
+            tick(gameCtx, turn) {
+                for (const m of this.list) {
+                    if (m.kind === "player") continue;
+                    tickStatusesAtTurnStart(m, turn);
+                    m.takeTurn(gameCtx);
+                }
+                this.reindex();
+            }
         }
 
         // ===================== RANGED COMBAT HELPERS =====================
@@ -3140,9 +3510,12 @@
             const visitedForPathfinding = new Set([posKeyFromCoords(player.x, player.y)]);
             let shortTermMemory = [];
             explorationState.frontiers.clear();
+            simState.turnCounter = 0;
             function gameLoop() {
                 clearTimeout(simState.timeout);
                 if (!simState.isPaused) {
+                    const turn = ++simState.turnCounter;
+                    tickStatusesAtTurnStart(player, turn);
                     const currentPlayerX = player.x;
                     const currentPlayerY = player.y;
                     const currentPos = { x: currentPlayerX, y: currentPlayerY };
@@ -3246,7 +3619,9 @@
                     fovState.prevVisible = new Set(fovState.currentVisible);
                     minimapMaybeRefreshOnTick();
                 }
-                const delay = 1000 / simState.speed;
+                const speedMultiplier = 1 - (player.statusDerived?.actionSpeedPct ?? 0);
+                const safeMultiplier = Math.max(0.1, speedMultiplier);
+                const delay = Math.max(16, (1000 / simState.speed) * safeMultiplier);
                 simState.timeout = setTimeout(gameLoop, delay);
             }
             simState.loopFn = gameLoop;
@@ -3272,6 +3647,7 @@
             restartBtn.style.display = 'none';
             currentEndPos = null;
             hasPrevPlayerPos = false;
+            simState.turnCounter = 0;
         }
 
         function setupPlayer() {
