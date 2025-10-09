@@ -1749,6 +1749,15 @@
             this.index = new Map();
           }
           add(m) {
+            if (!m) return null;
+
+            // Avoid tracking the same instance twice. The simulation used to add the
+            // player both during setup and on the first tick, which left duplicate
+            // references in the list and caused inconsistent indexing/AI behaviour.
+            if (this.list.includes(m)) {
+              return m;
+            }
+
             this.list.push(m);
             this.reindex();
             return m;
@@ -3532,21 +3541,21 @@
           }
         }
 
-          class Triangle {
-            constructor(v0, v1, v2) {
-              this.v0 = v0;
-              this.v1 = v1;
-              this.v2 = v2;
-              this.circumCircle = calcCircumCircle(v0, v1, v2);
-            }
-            inCircumcircle(v) {
-              const dx = this.circumCircle.c.x - v.x;
-              const dy = this.circumCircle.c.y - v.y;
-              return Math.sqrt(dx * dx + dy * dy) <= this.circumCircle.r;
-            }
+        class Triangle {
+          constructor(v0, v1, v2) {
+            this.v0 = v0;
+            this.v1 = v1;
+            this.v2 = v2;
+            this.circumCircle = calcCircumCircle(v0, v1, v2);
           }
+          inCircumcircle(v) {
+            const dx = this.circumCircle.c.x - v.x;
+            const dy = this.circumCircle.c.y - v.y;
+            return Math.sqrt(dx * dx + dy * dy) <= this.circumCircle.r;
+          }
+        }
 
-          function calcCircumCircle(v0, v1, v2) {
+        function calcCircumCircle(v0, v1, v2) {
           const ax = v0.x,
             ay = v0.y;
           const bx = v1.x,
@@ -3569,6 +3578,7 @@
           const r = Math.sqrt((ax - ux) ** 2 + (ay - uy) ** 2);
           return { c: center, r: r };
         }
+
         function superTriangle(vertices) {
           var minx = Infinity,
             miny = Infinity,
@@ -3645,7 +3655,9 @@
         }
         // ============================================================
         // HYBRID DUNGEON GENERATOR
-        // Large-room scaffold (test2) + small-room fill (test) + corridors at the end
+        // Combines a large-room scaffold pass with the smaller-room filler and finally
+        // adds connecting corridors. (Previous prototypes lived in test.html/test2 but
+        // the logic is now embedded directly in index.html.)
         // Floors = 0, Walls = 1
         // ============================================================
         // ----- CONFIG -----
@@ -3657,8 +3669,9 @@
         // Phase A: Large rooms
         // -------------------------
         function generateLargeRoomsScaffold(cfg = HYBRID_CFG.large) {
-          // Reuse your test2 "generateLargeRoomsMap" internals,
-          // but return both the grid and normalized room descriptors.
+          // This is adapted from the old test2 prototype's generateLargeRoomsMap helper,
+          // but now lives directly in the production code so we can return both the
+          // grid and normalized room descriptors.
           const out = generateLargeRoomsMap({
             roomCountRange: cfg.roomCountRange,
             areaRange: cfg.areaRange,
@@ -3693,7 +3706,8 @@
         // Phase B: Fill with small rooms
         // -------------------------
         function rectsGenerateCandidates(count, sizeMin, sizeMax, spawnRadius) {
-          // Similar to test.html: biased sizes, later rounded
+          // Preserve the biased sizing curve from the earlier prototype but keep it here
+          // so readers don't have to chase down the old test.html snippet.
           const normal = () =>
             (Math.random() + Math.random() + Math.random()) / 3; // 0..1
           const rects = [];
