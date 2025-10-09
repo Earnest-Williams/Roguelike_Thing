@@ -5224,18 +5224,40 @@
           }
           return score;
         }
-        // Classic breadth-first search that respects the knowledge gathered so
-        // far. We allow the caller to provide a short-term memory blacklist so
-        // the AI can temporarily avoid tiles that caused recent backtracking.
-        // Callers can explicitly disable this penalty via the ignoreShortTermMemory
-        // option when a full backtrack is desired.
-        function bfsToTarget(start, target, shortTermMemory, options = {}) {
-          const { ignoreShortTermMemory = false } = options;
+        function reconstructPath(parents, startKey, targetKey, strategyName) {
+          const path = [];
+          let key = targetKey;
+          while (key !== startKey) {
+            const parentKey = parents.get(key);
+            if (!parentKey) {
+              throw new Error(
+                `${strategyName} logic error: No parent found for key ${key} when reconstructing path from ${startKey} to ${targetKey}`,
+              );
+            }
+            const [x, y] = key.split(",").map(Number);
+            path.unshift({ x, y });
+            key = parentKey;
+          }
+          return path;
+        }
+
+        function findPath(
+          start,
+          target,
+          shortTermMemory,
+          options = {},
+          strategyFactory,
+        ) {
+          const effectiveOptions = options ?? {};
           const startKey = posKey(start);
           const targetKey = posKey(target);
           if (startKey === targetKey) {
             return [];
           }
+
+          const {
+            ignoreShortTermMemory = false,
+          } = effectiveOptions;
 
           const restricted =
             !ignoreShortTermMemory &&
@@ -5244,63 +5266,162 @@
               ? new Set(shortTermMemory)
               : null;
 
-          const queue = [start];
-          let head = 0;
-          const visited = new Set([startKey]);
           const parents = new Map();
+          const strategy = strategyFactory({
+            start,
+            target,
+            startKey,
+            targetKey,
+            options: effectiveOptions,
+            restricted,
+          });
 
-          while (head < queue.length) {
-            const current = queue[head++];
-            const currentKey = posKey(current);
+          const strategyName = strategy?.name || "Pathfinding";
+          if (
+            !strategy ||
+            typeof strategy.getNextNode !== "function" ||
+            typeof strategy.processNeighbor !== "function"
+          ) {
+            throw new Error(
+              `${strategyName} strategy must define getNextNode and processNeighbor`,
+            );
+          }
+
+          while (true) {
+            const current = strategy.getNextNode();
+            if (!current) {
+              break;
+            }
+
+            const currentPos = current.pos || current;
+            const currentKey = current.key || posKey(currentPos);
 
             if (currentKey === targetKey) {
-              const path = [];
-              let key = targetKey;
-              while (key !== startKey) {
-                const parentKey = parents.get(key);
-                if (!parentKey) {
-                  throw new Error(
-                    `BFS logic error: No parent found for key ${key} when reconstructing path from ${startKey} to ${targetKey}`,
-                  );
-                }
-                const [x, y] = key.split(",").map(Number);
-                path.unshift({ x, y });
-                key = parentKey;
-              }
-              return path;
+              return reconstructPath(parents, startKey, targetKey, strategyName);
             }
 
             for (const { dx, dy } of CARDINAL_DIRECTIONS) {
-              const nx = current.x + dx;
-              const ny = current.y + dy;
+              const neighbor = { x: currentPos.x + dx, y: currentPos.y + dy };
               if (
-                nx < 0 ||
-                nx >= mapState.width ||
-                ny < 0 ||
-                ny >= mapState.height
+                neighbor.x < 0 ||
+                neighbor.x >= mapState.width ||
+                neighbor.y < 0 ||
+                neighbor.y >= mapState.height
               ) {
                 continue;
               }
 
-              if (mapState.known[ny][nx] !== TILE_FLOOR) {
-                continue;
-              }
-
-              const neighborKey = posKey({ x: nx, y: ny });
-              if (visited.has(neighborKey)) {
-                continue;
-              }
-
+              const neighborKey = posKey(neighbor);
               if (restricted && restricted.has(neighborKey)) {
                 continue;
               }
 
-              visited.add(neighborKey);
-              parents.set(neighborKey, currentKey);
-              queue.push({ x: nx, y: ny });
+              if (
+                strategy.canTraverse &&
+                !strategy.canTraverse({
+                  neighbor,
+                  neighborKey,
+                  current,
+                  currentKey,
+                  parents,
+                })
+              ) {
+                continue;
+              }
+
+              strategy.processNeighbor({
+                neighbor,
+                neighborKey,
+                current,
+                currentKey,
+                parents,
+              });
             }
           }
+
           return null;
+        }
+
+        function createBfsStrategy({ start, startKey }) {
+          const queue = [{ pos: start, key: startKey }];
+          let head = 0;
+          const visited = new Set([startKey]);
+
+          return {
+            name: "BFS",
+            getNextNode() {
+              if (head >= queue.length) {
+                return null;
+              }
+              return queue[head++];
+            },
+            canTraverse({ neighbor, neighborKey }) {
+              if (visited.has(neighborKey)) {
+                return false;
+              }
+              return mapState.known[neighbor.y][neighbor.x] === TILE_FLOOR;
+            },
+            processNeighbor({ neighbor, neighborKey, currentKey, parents }) {
+              visited.add(neighborKey);
+              parents.set(neighborKey, currentKey);
+              queue.push({ pos: neighbor, key: neighborKey });
+            },
+          };
+        }
+
+        function createWeightedSearchStrategy({ start, startKey, options }) {
+          const unknownTileCost =
+            options.unknownTileCost ?? CONFIG.ai.fallback.unknownTileCost;
+          const open = [{ pos: start, key: startKey, cost: 0 }];
+          const costs = new Map([[startKey, 0]]);
+          const processed = new Set();
+
+          return {
+            name: "Weighted search",
+            getNextNode() {
+              while (open.length > 0) {
+                open.sort((a, b) => a.cost - b.cost);
+                const node = open.shift();
+                if (!node) {
+                  break;
+                }
+                if (processed.has(node.key)) {
+                  continue;
+                }
+                processed.add(node.key);
+                return node;
+              }
+              return null;
+            },
+            canTraverse({ neighbor, neighborKey }) {
+              if (processed.has(neighborKey)) {
+                return false;
+              }
+              return mapState.grid[neighbor.y][neighbor.x] === TILE_FLOOR;
+            },
+            processNeighbor({ neighbor, neighborKey, current, currentKey, parents }) {
+              const currentCost = current.cost ?? 0;
+              let stepCost = 1;
+              if (mapState.known[neighbor.y][neighbor.x] !== TILE_FLOOR) {
+                stepCost += Math.max(0, unknownTileCost);
+              }
+              const newCost = currentCost + stepCost;
+              if (!costs.has(neighborKey) || newCost < costs.get(neighborKey)) {
+                costs.set(neighborKey, newCost);
+                parents.set(neighborKey, currentKey);
+                open.push({ pos: neighbor, key: neighborKey, cost: newCost });
+              }
+            },
+          };
+        }
+
+        // Classic breadth-first search that respects the knowledge gathered so
+        // far. We allow the caller to provide a short-term memory blacklist so
+        // the AI can temporarily avoid tiles that caused recent backtracking.
+        // Callers can explicitly disable this penalty via the ignoreShortTermMemory
+        // option when a full backtrack is desired.
+        function bfsToTarget(start, target, shortTermMemory, options = {}) {
+          return findPath(start, target, shortTermMemory, options, createBfsStrategy);
         }
 
         function weightedSearchToTarget(
@@ -5309,91 +5430,17 @@
           shortTermMemory,
           options = {},
         ) {
-          const {
-            ignoreShortTermMemory = false,
-            unknownTileCost = CONFIG.ai.fallback.unknownTileCost,
-          } = options;
-          const startKey = posKey(start);
-          const targetKey = posKey(target);
-          if (startKey === targetKey) {
-            return [];
-          }
-
-          const restricted =
-            !ignoreShortTermMemory &&
-            shortTermMemory &&
-            shortTermMemory.length > 0
-              ? new Set(shortTermMemory)
-              : null;
-
-          const open = [{ pos: start, cost: 0 }];
-          const costs = new Map([[startKey, 0]]);
-          const parents = new Map();
-          const processed = new Set();
-
-          while (open.length > 0) {
-            open.sort((a, b) => a.cost - b.cost);
-            const current = open.shift();
-            const currentKey = posKey(current.pos);
-            if (processed.has(currentKey)) {
-              continue;
-            }
-            processed.add(currentKey);
-
-            if (currentKey === targetKey) {
-              const path = [];
-              let key = targetKey;
-              while (key !== startKey) {
-                const parentKey = parents.get(key);
-                if (!parentKey) {
-                  throw new Error(
-                    `Weighted search logic error: No parent for key ${key} when reconstructing path from ${startKey} to ${targetKey}`,
-                  );
-                }
-                const [x, y] = key.split(",").map(Number);
-                path.unshift({ x, y });
-                key = parentKey;
-              }
-              return path;
-            }
-
-            for (const { dx, dy } of CARDINAL_DIRECTIONS) {
-              const nx = current.pos.x + dx;
-              const ny = current.pos.y + dy;
-              if (
-                nx < 0 ||
-                nx >= mapState.width ||
-                ny < 0 ||
-                ny >= mapState.height
-              ) {
-                continue;
-              }
-
-              if (mapState.grid[ny][nx] !== TILE_FLOOR) {
-                continue;
-              }
-
-              const neighborKey = posKey({ x: nx, y: ny });
-              if (processed.has(neighborKey)) {
-                continue;
-              }
-              if (restricted && restricted.has(neighborKey)) {
-                continue;
-              }
-
-              let stepCost = 1;
-              if (mapState.known[ny][nx] !== TILE_FLOOR) {
-                stepCost += Math.max(0, unknownTileCost);
-              }
-              const newCost = current.cost + stepCost;
-              if (!costs.has(neighborKey) || newCost < costs.get(neighborKey)) {
-                costs.set(neighborKey, newCost);
-                parents.set(neighborKey, currentKey);
-                open.push({ pos: { x: nx, y: ny }, cost: newCost });
-              }
-            }
-          }
-          return null;
+          const mergedOptions = {
+            unknownTileCost: CONFIG.ai.fallback.unknownTileCost,
+            ...options,
+          };
+          return findPath(
+            start,
+            target,
+            shortTermMemory,
+            mergedOptions,
+            createWeightedSearchStrategy,
+          );
         }
 
         function prioritizeFrontiers(origin, seed = 0) {
