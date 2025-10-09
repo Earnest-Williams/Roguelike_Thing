@@ -2997,14 +2997,17 @@
         // Classic breadth-first search that respects the knowledge gathered so
         // far. We allow the caller to provide a short-term memory blacklist so
         // the AI can temporarily avoid tiles that caused recent backtracking.
-        function bfsToTarget(start, target, shortTermMemory) {
+        // Callers can explicitly disable this penalty via the ignoreShortTermMemory
+        // option when a full backtrack is desired.
+        function bfsToTarget(start, target, shortTermMemory, options = {}) {
+            const { ignoreShortTermMemory = false } = options;
             const startKey = posKey(start);
             const targetKey = posKey(target);
             if (startKey === targetKey) {
                 return [];
             }
 
-            const restricted = (shortTermMemory && shortTermMemory.length > 0)
+            const restricted = (!ignoreShortTermMemory && shortTermMemory && shortTermMemory.length > 0)
                 ? new Set(shortTermMemory)
                 : null;
 
@@ -3166,7 +3169,7 @@
                     if (mapState.known[endPos.y][endPos.x] === TILE_FLOOR) {
                         // Once the exit has been discovered we greedily follow the fastest path to
                         // it, ignoring the short-term memory so backtracking is allowed.
-                        const pathToExit = bfsToTarget(currentPos, endPos, []); // Ignore short term memory for exit path
+                        const pathToExit = bfsToTarget(currentPos, endPos, shortTermMemory, { ignoreShortTermMemory: true });
                         if (pathToExit && pathToExit.length > 0) {
                             nextMove = pathToExit[0];
                         }
@@ -3204,7 +3207,7 @@
                         }
                         // When traveling to a distant frontier we must allow full backtracking,
                         // so ignore the short-term memory penalty during pathfinding.
-                        const pathToFrontier = bfsToTarget(currentPos, closestFrontier, []);
+                        const pathToFrontier = bfsToTarget(currentPos, closestFrontier, shortTermMemory, { ignoreShortTermMemory: true });
                         if (pathToFrontier && pathToFrontier.length > 0) {
                             nextMove = pathToFrontier[0];
                         }
