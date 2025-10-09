@@ -510,6 +510,13 @@
         function dimsVolumeL(d) { return (d.l * d.w * d.h) / 1000.0; } // cm^3 to liters
         function dimsLongest(d) { return Math.max(d.l, d.w, d.h); }
 
+        function clamp01(value) {
+            if (!Number.isFinite(value)) return 0;
+            if (value <= 0) return 0;
+            if (value >= 1) return 1;
+            return value;
+        }
+
         function normalizeDamageProfile(dmg) {
             if (!dmg) {
                 return { diceCount: 1, diceSides: 4, bonus: 0 };
@@ -518,6 +525,70 @@
             const diceSides = Math.max(1, Math.floor(dmg.diceSides ?? dmg.sides ?? 6));
             const bonus = Math.floor(dmg.bonus ?? dmg.flat ?? 0);
             return { diceCount, diceSides, bonus };
+        }
+
+        function computeHeftScore(item) {
+            if (!item) return 0.5;
+            const dims = item.dims || { l: 1, w: 1, h: 1 };
+            const longest = Math.max(dims.l || 1, dims.w || 1, dims.h || 1);
+            const mass = Math.max(0.05, item.mass ?? 0.1);
+            // Heft combines mass with the leverage granted by item length.
+            return mass * (0.6 + longest / 60);
+        }
+
+        function defaultThrowDamageForItem(item) {
+            const heft = computeHeftScore(item);
+            let diceSides = 2;
+            if (heft <= 0.75) diceSides = 2;
+            else if (heft <= 1.5) diceSides = 3;
+            else if (heft <= 2.5) diceSides = 4;
+            else if (heft <= 4) diceSides = 6;
+            else if (heft <= 6) diceSides = 8;
+            else if (heft <= 8) diceSides = 10;
+            else diceSides = 12;
+            const bonus = Math.max(0, Math.floor((heft - 2.5) / 2));
+            return { diceCount: 1, diceSides, bonus };
+        }
+
+        function defaultThrowRangeForItem(item) {
+            const dims = (item && item.dims) ? item.dims : { l: 1, w: 1, h: 1 };
+            const longest = Math.max(dims.l || 1, dims.w || 1, dims.h || 1);
+            const optimal = Math.max(2, Math.min(5, Math.round(1 + longest / 60)));
+            const max = Math.max(optimal + 1, Math.min(7, optimal + Math.round(longest / 50)));
+            return { min: 1, optimal, max };
+        }
+
+        function normalizeThrowProfile(profile, item) {
+            const baseRange = profile?.range || {};
+            const defaults = defaultThrowRangeForItem(item);
+            const min = Math.max(1, Math.floor(baseRange.min ?? defaults.min));
+            const optimal = Math.max(min, Math.floor(baseRange.optimal ?? defaults.optimal));
+            const max = Math.max(optimal, Math.floor(baseRange.max ?? defaults.max));
+            const damage = normalizeDamageProfile(profile?.damage ?? defaultThrowDamageForItem(item));
+            const accuracy = typeof profile?.accuracy === 'number' ? profile.accuracy : 0;
+            const consumesItem = profile?.consumesItem !== undefined ? !!profile.consumesItem : true;
+            const recoveryChance = clamp01(profile?.recoveryChance ?? 0);
+            const notes = profile?.notes || null;
+            return {
+                range: { min, optimal, max },
+                damage,
+                accuracy,
+                consumesItem,
+                recoveryChance,
+                notes,
+            };
+        }
+
+        function cloneThrowProfile(profile) {
+            if (!profile) return null;
+            return {
+                range: profile.range ? { ...profile.range } : null,
+                damage: profile.damage ? { ...profile.damage } : null,
+                accuracy: profile.accuracy,
+                consumesItem: profile.consumesItem,
+                recoveryChance: profile.recoveryChance,
+                notes: profile.notes || null,
+            };
         }
 
         function normalizeAmmoProfile(ammo) {
@@ -552,6 +623,8 @@
                 ammo: normalizeAmmoProfile(profile.ammo),
                 damage: normalizeDamageProfile(profile.damage),
                 accuracy: typeof profile.accuracy === 'number' ? profile.accuracy : 0,
+                consumeWeaponOnUse: profile.consumeWeaponOnUse ?? (category === WEAPON_CATEGORY.THROWN && !profile.ammo),
+                recoveryChance: clamp01(profile.recoveryChance ?? 0),
                 notes: profile.notes || null,
             };
         }
@@ -568,6 +641,8 @@
                 ammo: profile.ammo ? { ...profile.ammo } : null,
                 damage: profile.damage ? { ...profile.damage } : null,
                 accuracy: profile.accuracy,
+                consumeWeaponOnUse: profile.consumeWeaponOnUse,
+                recoveryChance: profile.recoveryChance,
                 notes: profile.notes,
             };
         }
@@ -599,10 +674,15 @@
                 this.container = o.container ? { ...o.container } : null;
                 // Runtime state for containers (contents as stacks)
                 if (this.container) this.contents = [];
+                this.throwProfile = normalizeThrowProfile(o.throwProfile || null, this);
                 this.weaponProfile = normalizeWeaponProfile(o.weaponProfile);
             }
             isWeapon() { return this.kind === "weapon" || !!this.weaponProfile; }
             isRangedWeapon() { return !!(this.weaponProfile && this.weaponProfile.isRanged); }
+            isThrowable() { return true; }
+            getThrowProfile() {
+                return this.throwProfile ? cloneThrowProfile(this.throwProfile) : null;
+            }
             clone() {
                 const copy = {
                     id: this.id,
@@ -618,6 +698,7 @@
                     lightColor: this.lightColor,
                     flickerRate: this.flickerRate,
                     container: null,
+                    throwProfile: this.throwProfile ? cloneThrowProfile(this.throwProfile) : null,
                     weaponProfile: cloneWeaponProfile(this.weaponProfile),
                 };
 
@@ -1022,6 +1103,42 @@
             return mob.inventory.findStack(stack => ammoMatchesProfile(weaponProfile.ammo, stack));
         }
 
+        function consumeThrownItemFromAttacker(attacker, item, context = {}) {
+            if (!attacker) return false;
+            if (context && typeof context.consumeSource === 'function') {
+                const result = context.consumeSource();
+                if (result) return true;
+            }
+            if (context && typeof context.inventoryIndex === 'number' && attacker.inventory) {
+                if (attacker.inventory.consumeAt(context.inventoryIndex, 1)) return true;
+            }
+            if (context && context.stack && typeof context.stack.consume === 'function') {
+                const consumed = context.stack.consume(1);
+                if (consumed) return true;
+            }
+            if (context && context.equipmentSlot && attacker.equipment) {
+                const equipped = attacker.equipment.get(context.equipmentSlot);
+                if (equipped && (equipped === item || equipped.id === item.id)) {
+                    attacker.equipment.unequip(context.equipmentSlot);
+                    return true;
+                }
+            }
+            if (attacker.equipment && attacker.equipment.slots instanceof Map) {
+                for (const [slot, equipped] of attacker.equipment.slots.entries()) {
+                    if (!equipped) continue;
+                    if (equipped === item || equipped.id === item.id) {
+                        attacker.equipment.unequip(slot);
+                        return true;
+                    }
+                }
+            }
+            if (attacker.inventory && typeof attacker.inventory.consumeMatching === 'function') {
+                if (attacker.inventory.consumeMatching(stack => stack.item === item, 1)) return true;
+                if (attacker.inventory.consumeMatching(stack => stack.item.id === item.id, 1)) return true;
+            }
+            return false;
+        }
+
         function evaluateRangedAttack(attacker, target, weapon, context = {}) {
             if (!isRangedWeapon(weapon)) {
                 return { ok: false, reason: 'not_ranged' };
@@ -1092,6 +1209,10 @@
                 evaluation.targetHp = target.hp;
                 evaluation.targetDefeated = target.hp <= 0;
             }
+            if (profile.category === WEAPON_CATEGORY.THROWN && profile.consumeWeaponOnUse) {
+                const consumed = consumeThrownItemFromAttacker(attacker, weapon, context);
+                evaluation.weaponConsumed = consumed;
+            }
             return evaluation;
         }
 
@@ -1110,6 +1231,12 @@
             if (profile.ammo) {
                 const ammoPart = describeAmmo(profile.ammo);
                 if (ammoPart) parts.push(`Ammo ${ammoPart}×${profile.ammo.perShot ?? 1}`);
+            }
+            if (profile.category === WEAPON_CATEGORY.THROWN && profile.consumeWeaponOnUse) {
+                const recover = profile.recoveryChance > 0
+                    ? ` (recover ${Math.round(profile.recoveryChance * 100)}%)`
+                    : '';
+                parts.push(`Consumes weapon${recover}`);
             }
             if (profile.reloadTime) {
                 parts.push(`Reload ${profile.reloadTime}t`);
@@ -1135,6 +1262,106 @@
             evaluateRangedAttack,
             performRangedAttack,
             describeRangedWeapon,
+        };
+
+        function getThrowProfileForItem(item) {
+            if (!(item instanceof Item)) return null;
+            return item.getThrowProfile?.() || item.throwProfile || null;
+        }
+
+        function describeThrowProfile(profile) {
+            if (!profile) return '';
+            const parts = [];
+            if (profile.range) {
+                parts.push(`Range ${profile.range.min}/${profile.range.optimal}/${profile.range.max}`);
+            }
+            if (profile.damage) {
+                parts.push(`Damage ${describeDamage(profile.damage)}`);
+            }
+            if (profile.consumesItem) {
+                const recover = (profile.recoveryChance > 0)
+                    ? ` (recover ${Math.round(profile.recoveryChance * 100)}%)`
+                    : '';
+                parts.push(`Consumes item${recover}`);
+            }
+            if (!profile.consumesItem) {
+                parts.push('Reusable');
+            }
+            if (profile.notes) {
+                parts.push(profile.notes);
+            }
+            return parts.join(' • ');
+        }
+
+        function describeThrowable(item) {
+            const profile = getThrowProfileForItem(item);
+            if (!profile) return '';
+            return describeThrowProfile(profile);
+        }
+
+        function evaluateThrow(attacker, target, item, context = {}) {
+            if (!(item instanceof Item)) {
+                return { ok: false, reason: 'invalid_item' };
+            }
+            if (!attacker || !target) {
+                return { ok: false, reason: 'invalid_actor' };
+            }
+            const profile = getThrowProfileForItem(item);
+            if (!profile) {
+                return { ok: false, reason: 'not_throwable' };
+            }
+            const distance = chebyshevDistance(attacker.pos, target.pos);
+            const result = {
+                ok: false,
+                item,
+                profile,
+                distance,
+                reason: null,
+            };
+            if (distance < profile.range.min) {
+                result.reason = 'too_close';
+                return result;
+            }
+            if (distance > profile.range.max) {
+                result.reason = 'out_of_range';
+                return result;
+            }
+            const requireLoS = context.requireLineOfSight !== false;
+            const mazeRef = context.maze || context.grid || null;
+            if (requireLoS && mazeRef && !hasLineOfSight(mazeRef, attacker.pos, target.pos)) {
+                result.reason = 'no_los';
+                return result;
+            }
+            result.damage = damageExpectation(profile.damage);
+            result.timeCost = Math.max(1, Math.floor(context.timeCost ?? 1));
+            result.ok = true;
+            return result;
+        }
+
+        function performThrow(attacker, target, item, context = {}) {
+            const evaluation = evaluateThrow(attacker, target, item, context);
+            if (!evaluation.ok) return evaluation;
+            const profile = evaluation.profile;
+            const roll = rollDamage(profile.damage);
+            evaluation.roll = roll;
+            evaluation.damageApplied = roll.total;
+            if (typeof target.hp === 'number') {
+                target.hp -= roll.total;
+                evaluation.targetHp = target.hp;
+                evaluation.targetDefeated = target.hp <= 0;
+            }
+            if (profile.consumesItem) {
+                evaluation.itemConsumed = consumeThrownItemFromAttacker(attacker, item, context);
+            }
+            return evaluation;
+        }
+
+        const Throwing = {
+            getThrowProfile: getThrowProfileForItem,
+            describeThrowProfile,
+            describeThrowable,
+            evaluateThrow,
+            performThrow,
         };
 
         // ===================== MOB SYSTEM =====================
@@ -1294,36 +1521,41 @@
             equipSlots:[SLOT.LeftHand, SLOT.RightHand, SLOT.Belt1, SLOT.Belt2, SLOT.Belt3, SLOT.Belt4],
             handsRequired:1,
             dims:{l:28,w:3,h:2}, mass:0.25, stackable:true, maxStack:6,
+            throwProfile:{
+                range:{min:1, optimal:3, max:6},
+                damage:{ diceCount:1, diceSides:4, bonus:1 },
+                consumesItem:true,
+                recoveryChance:0.4,
+            },
             weaponProfile:{
                 category:WEAPON_CATEGORY.THROWN,
                 range:{min:1, optimal:3, max:6},
                 reloadTime:0,
-                ammo:{ itemId:"throwing_knife", perShot:1, consumesItem:true, label:"knives", minEquipped:1 },
                 damage:{ diceCount:1, diceSides:4, bonus:1 },
-                notes:"Expended on a hit unless recovered"
+                consumeWeaponOnUse:true,
+                recoveryChance:0.4,
+                notes:"Designed to be thrown; may be recovered after a fight"
             }
         });
-        // Javelin ammunition item
-        registerItem({
-            id:"javelin_ammo", name:"Javelin", kind:"ammo",
-            stackable:true, maxStack:12,
-            dims:{l:150,w:5,h:5}, mass:1.0,
-            ammoFor:["javelin"],
-            description:"A throwable javelin, used as ammunition for the javelin weapon."
-        });
-        // Javelin weapon (no longer stackable, uses javelin_ammo as ammo)
         registerItem({
             id:"javelin", name:"Javelin", kind:"weapon",
             equipSlots:[SLOT.LeftHand, SLOT.RightHand, SLOT.Belt1, SLOT.Belt2],
             handsRequired:1,
             dims:{l:150,w:5,h:5}, mass:1.0,
+            throwProfile:{
+                range:{min:1, optimal:5, max:8},
+                damage:{ diceCount:1, diceSides:6, bonus:2 },
+                consumesItem:true,
+                recoveryChance:0.35,
+            },
             weaponProfile:{
                 category:WEAPON_CATEGORY.THROWN,
                 range:{min:1, optimal:5, max:8},
                 reloadTime:0,
-                ammo:{ itemId:"javelin_ammo", perShot:1, consumesItem:true, label:"javelins" },
                 damage:{ diceCount:1, diceSides:6, bonus:2 },
-                notes:"Throws consume a javelin from your ammo supply"
+                consumeWeaponOnUse:true,
+                recoveryChance:0.35,
+                notes:"A heavy spear meant for throwing; the javelin itself is expended on impact"
             }
         });
 
@@ -2579,10 +2811,13 @@
 
         function tooltipForItem(item) {
             if (!item) return '';
+            const throwInfo = describeThrowable(item);
             if (isRangedWeapon(item)) {
-                return RangedCombat.describeRangedWeapon(item);
+                const base = RangedCombat.describeRangedWeapon(item);
+                return throwInfo ? `${base}\nThrow: ${throwInfo}` : base;
             }
-            return item.name || '';
+            const name = item.name || '';
+            return throwInfo ? `${name}\nThrow: ${throwInfo}` : name;
         }
 
         function tooltipForStack(stack) {
