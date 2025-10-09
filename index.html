@@ -1321,6 +1321,12 @@
         // Registry
         const ItemRegistry = new Map();
         function registerItem(def) {
+          if (!def || typeof def.id !== "string" || !def.id) {
+            throw new Error("Item definition must include a stable string id");
+          }
+          if (ItemRegistry.has(def.id)) {
+            throw new Error(`Duplicate item id registration attempted: ${def.id}`);
+          }
           ItemRegistry.set(def.id, new Item(def));
         }
         function makeItem(id) {
@@ -2219,404 +2225,446 @@
         };
 
         // --- ITEM TEMPLATES ---
-        // Weapons
-        registerItem({
-          id: "dagger",
-          name: "Dagger",
-          kind: "weapon",
-          equipSlots: [
-            SLOT.LeftHand,
-            SLOT.RightHand,
-            SLOT.Belt1,
-            SLOT.Belt2,
-            SLOT.Belt3,
-            SLOT.Belt4,
+        const ITEM_DEFINITIONS = Object.freeze({
+          weapons: [
+            {
+              id: "dagger",
+              name: "Dagger",
+              kind: "weapon",
+              equipSlots: [
+                SLOT.LeftHand,
+                SLOT.RightHand,
+                SLOT.Belt1,
+                SLOT.Belt2,
+                SLOT.Belt3,
+                SLOT.Belt4,
+              ],
+              handsRequired: 1,
+              dims: { l: 30, w: 4, h: 2 },
+              mass: 0.4,
+            },
+            {
+              id: "short_sword",
+              name: "Short Sword",
+              kind: "weapon",
+              equipSlots: [
+                SLOT.LeftHand,
+                SLOT.RightHand,
+                SLOT.Belt1,
+                SLOT.Belt2,
+                SLOT.Belt3,
+                SLOT.Belt4,
+              ],
+              handsRequired: 1,
+              dims: { l: 75, w: 5, h: 3 },
+              mass: 1.2,
+            },
+            {
+              id: "long_sword",
+              name: "Longsword",
+              kind: "weapon",
+              equipSlots: [
+                SLOT.LeftHand,
+                SLOT.RightHand,
+                SLOT.Belt1,
+                SLOT.Belt2,
+              ],
+              handsRequired: 1,
+              dims: { l: 110, w: 5, h: 3 },
+              mass: 1.6,
+            },
+            {
+              id: "halberd",
+              name: "Halberd",
+              kind: "weapon",
+              equipSlots: [SLOT.LeftHand, SLOT.RightHand],
+              handsRequired: 2,
+              dims: { l: 210, w: 20, h: 4 },
+              mass: 3.5,
+            },
+            {
+              id: "bow_short",
+              name: "Shortbow",
+              kind: "weapon",
+              equipSlots: [
+                SLOT.LeftHand,
+                SLOT.RightHand,
+                SLOT.Belt1,
+                SLOT.Belt2,
+              ],
+              handsRequired: 2,
+              dims: { l: 150, w: 6, h: 4 },
+              mass: 1.1,
+              weaponProfile: {
+                category: WEAPON_CATEGORY.BOW,
+                range: { min: 2, optimal: 7, max: 12 },
+                reloadTime: 1,
+                ammo: { typePrefix: "arrow_", label: "arrows" },
+                damage: { diceCount: 1, diceSides: 6, bonus: 0 },
+              },
+            },
+            {
+              id: "bow_long",
+              name: "Longbow",
+              kind: "weapon",
+              equipSlots: [SLOT.LeftHand, SLOT.RightHand],
+              handsRequired: 2,
+              dims: { l: 180, w: 7, h: 4 },
+              mass: 1.4,
+              weaponProfile: {
+                category: WEAPON_CATEGORY.BOW,
+                range: { min: 3, optimal: 9, max: 15 },
+                reloadTime: 1,
+                ammo: { typePrefix: "arrow_", label: "arrows" },
+                damage: { diceCount: 1, diceSides: 8, bonus: 0 },
+              },
+            },
+            {
+              id: "crossbow_light",
+              name: "Light Crossbow",
+              kind: "weapon",
+              equipSlots: [SLOT.LeftHand, SLOT.RightHand, SLOT.Belt1],
+              handsRequired: 2,
+              dims: { l: 110, w: 18, h: 12 },
+              mass: 2.7,
+              weaponProfile: {
+                category: WEAPON_CATEGORY.CROSSBOW,
+                range: { min: 1, optimal: 8, max: 14 },
+                reloadTime: 3,
+                ammo: { typePrefix: "bolt_", label: "bolts" },
+                damage: { diceCount: 1, diceSides: 8, bonus: 1 },
+                notes: "Mechanical reload between shots",
+              },
+            },
+            {
+              id: "sling_leather",
+              name: "Leather Sling",
+              kind: "weapon",
+              equipSlots: [
+                SLOT.LeftHand,
+                SLOT.RightHand,
+                SLOT.Belt1,
+                SLOT.Belt2,
+                SLOT.Belt3,
+                SLOT.Belt4,
+              ],
+              handsRequired: 1,
+              dims: { l: 90, w: 4, h: 2 },
+              mass: 0.2,
+              weaponProfile: {
+                category: WEAPON_CATEGORY.SLING,
+                range: { min: 2, optimal: 6, max: 10 },
+                reloadTime: 1,
+                ammo: { typePrefix: "sling_stone", label: "stones" },
+                damage: { diceCount: 1, diceSides: 4, bonus: 1 },
+              },
+            },
+            {
+              id: "throwing_knife",
+              name: "Throwing Knife",
+              kind: "weapon",
+              equipSlots: [
+                SLOT.LeftHand,
+                SLOT.RightHand,
+                SLOT.Belt1,
+                SLOT.Belt2,
+                SLOT.Belt3,
+                SLOT.Belt4,
+              ],
+              handsRequired: 1,
+              dims: { l: 28, w: 3, h: 2 },
+              mass: 0.25,
+              stackable: true,
+              maxStack: 6,
+              throwProfile: {
+                range: { min: 1, optimal: 3, max: 6 },
+                damage: { diceCount: 1, diceSides: 4, bonus: 1 },
+                consumesItem: true,
+                recoveryChance: 0.4,
+              },
+              weaponProfile: {
+                category: WEAPON_CATEGORY.THROWN,
+                range: { min: 1, optimal: 3, max: 6 },
+                reloadTime: 0,
+                damage: { diceCount: 1, diceSides: 4, bonus: 1 },
+                consumeWeaponOnUse: true,
+                recoveryChance: 0.4,
+                notes: "Designed to be thrown; may be recovered after a fight",
+              },
+            },
+            {
+              id: "javelin",
+              name: "Javelin",
+              kind: "weapon",
+              equipSlots: [
+                SLOT.LeftHand,
+                SLOT.RightHand,
+                SLOT.Belt1,
+                SLOT.Belt2,
+              ],
+              handsRequired: 1,
+              dims: { l: 150, w: 5, h: 5 },
+              mass: 1.0,
+              throwProfile: {
+                range: { min: 1, optimal: 5, max: 8 },
+                damage: { diceCount: 1, diceSides: 6, bonus: 2 },
+                consumesItem: true,
+                recoveryChance: 0.35,
+              },
+              weaponProfile: {
+                category: WEAPON_CATEGORY.THROWN,
+                range: { min: 1, optimal: 5, max: 8 },
+                reloadTime: 0,
+                damage: { diceCount: 1, diceSides: 6, bonus: 2 },
+                consumeWeaponOnUse: true,
+                recoveryChance: 0.35,
+                notes:
+                  "A heavy spear meant for throwing; the javelin itself is expended on impact",
+              },
+            },
           ],
-          handsRequired: 1,
-          dims: { l: 30, w: 4, h: 2 },
-          mass: 0.4,
-        });
-        registerItem({
-          id: "short_sword",
-          name: "Short Sword",
-          kind: "weapon",
-          equipSlots: [
-            SLOT.LeftHand,
-            SLOT.RightHand,
-            SLOT.Belt1,
-            SLOT.Belt2,
-            SLOT.Belt3,
-            SLOT.Belt4,
+          armor: [
+            {
+              id: "leather_cap",
+              name: "Leather Cap",
+              kind: "armor",
+              equipSlots: [SLOT.Head],
+              dims: { l: 25, w: 20, h: 15 },
+              mass: 0.6,
+            },
+            {
+              id: "basic_clothes",
+              name: "Basic Clothes",
+              kind: "armor",
+              equipSlots: [SLOT.BodyArmor],
+              dims: { l: 40, w: 30, h: 10 },
+              mass: 1.0,
+            },
+            {
+              id: "cloak",
+              name: "Cloak",
+              kind: "armor",
+              equipSlots: [SLOT.Cloak],
+              dims: { l: 50, w: 35, h: 10 },
+              mass: 1.2,
+            },
+            {
+              id: "boots",
+              name: "Boots",
+              kind: "armor",
+              equipSlots: [SLOT.Boots],
+              dims: { l: 35, w: 25, h: 15 },
+              mass: 1.5,
+            },
+            {
+              id: "gloves",
+              name: "Gloves",
+              kind: "armor",
+              equipSlots: [SLOT.Gloves],
+              dims: { l: 20, w: 12, h: 6 },
+              mass: 0.3,
+            },
+            {
+              id: "belt_leather",
+              name: "Leather Belt",
+              kind: "armor",
+              equipSlots: [SLOT.Belt],
+              dims: { l: 20, w: 10, h: 5 },
+              mass: 0.3,
+            },
           ],
-          handsRequired: 1,
-          dims: { l: 75, w: 5, h: 3 },
-          mass: 1.2,
-        });
-        registerItem({
-          id: "long_sword",
-          name: "Longsword",
-          kind: "weapon",
-          equipSlots: [SLOT.LeftHand, SLOT.RightHand, SLOT.Belt1, SLOT.Belt2],
-          handsRequired: 1,
-          dims: { l: 110, w: 5, h: 3 },
-          mass: 1.6,
-        });
-        registerItem({
-          id: "halberd",
-          name: "Halberd",
-          kind: "weapon",
-          equipSlots: [SLOT.LeftHand, SLOT.RightHand], // cannot belt-carry or backpack
-          handsRequired: 2,
-          dims: { l: 210, w: 20, h: 4 },
-          mass: 3.5,
-        });
-        registerItem({
-          id: "bow_short",
-          name: "Shortbow",
-          kind: "weapon",
-          equipSlots: [SLOT.LeftHand, SLOT.RightHand, SLOT.Belt1, SLOT.Belt2],
-          handsRequired: 2,
-          dims: { l: 150, w: 6, h: 4 },
-          mass: 1.1,
-          weaponProfile: {
-            category: WEAPON_CATEGORY.BOW,
-            range: { min: 2, optimal: 7, max: 12 },
-            reloadTime: 1,
-            ammo: { typePrefix: "arrow_", label: "arrows" },
-            damage: { diceCount: 1, diceSides: 6, bonus: 0 },
-          },
-        });
-        registerItem({
-          id: "bow_long",
-          name: "Longbow",
-          kind: "weapon",
-          equipSlots: [SLOT.LeftHand, SLOT.RightHand],
-          handsRequired: 2,
-          dims: { l: 180, w: 7, h: 4 },
-          mass: 1.4,
-          weaponProfile: {
-            category: WEAPON_CATEGORY.BOW,
-            range: { min: 3, optimal: 9, max: 15 },
-            reloadTime: 1,
-            ammo: { typePrefix: "arrow_", label: "arrows" },
-            damage: { diceCount: 1, diceSides: 8, bonus: 0 },
-          },
-        });
-        registerItem({
-          id: "crossbow_light",
-          name: "Light Crossbow",
-          kind: "weapon",
-          equipSlots: [SLOT.LeftHand, SLOT.RightHand, SLOT.Belt1],
-          handsRequired: 2,
-          dims: { l: 110, w: 18, h: 12 },
-          mass: 2.7,
-          weaponProfile: {
-            category: WEAPON_CATEGORY.CROSSBOW,
-            range: { min: 1, optimal: 8, max: 14 },
-            reloadTime: 3,
-            ammo: { typePrefix: "bolt_", label: "bolts" },
-            damage: { diceCount: 1, diceSides: 8, bonus: 1 },
-            notes: "Mechanical reload between shots",
-          },
-        });
-        registerItem({
-          id: "sling_leather",
-          name: "Leather Sling",
-          kind: "weapon",
-          equipSlots: [
-            SLOT.LeftHand,
-            SLOT.RightHand,
-            SLOT.Belt1,
-            SLOT.Belt2,
-            SLOT.Belt3,
-            SLOT.Belt4,
+          jewelry: [
+            {
+              id: "ring_plain",
+              name: "Plain Ring",
+              kind: "jewelry",
+              equipSlots: [SLOT.LeftRing, SLOT.RightRing],
+              dims: { l: 3, w: 3, h: 1 },
+              mass: 0.02,
+              stackable: false,
+            },
+            {
+              id: "amulet_simple",
+              name: "Amulet",
+              kind: "jewelry",
+              equipSlots: [SLOT.Amulet],
+              dims: { l: 5, w: 4, h: 1 },
+              mass: 0.05,
+            },
           ],
-          handsRequired: 1,
-          dims: { l: 90, w: 4, h: 2 },
-          mass: 0.2,
-          weaponProfile: {
-            category: WEAPON_CATEGORY.SLING,
-            range: { min: 2, optimal: 6, max: 10 },
-            reloadTime: 1,
-            ammo: { typePrefix: "sling_stone", label: "stones" },
-            damage: { diceCount: 1, diceSides: 4, bonus: 1 },
-          },
-        });
-        registerItem({
-          id: "throwing_knife",
-          name: "Throwing Knife",
-          kind: "weapon",
-          equipSlots: [
-            SLOT.LeftHand,
-            SLOT.RightHand,
-            SLOT.Belt1,
-            SLOT.Belt2,
-            SLOT.Belt3,
-            SLOT.Belt4,
+          tools: [
+            {
+              id: "torch",
+              name: "Torch",
+              kind: "tool",
+              equipSlots: [
+                SLOT.LeftHand,
+                SLOT.RightHand,
+                SLOT.Belt1,
+                SLOT.Belt2,
+                SLOT.Belt3,
+                SLOT.Belt4,
+              ],
+              dims: { l: 30, w: 4, h: 4 },
+              mass: 0.5,
+              stackable: true,
+              maxStack: 20,
+              lightRadius: 2,
+              lightColor: "#ffb347",
+              flickerRate: 3.5,
+            },
+            {
+              id: "lantern",
+              name: "Lantern",
+              kind: "tool",
+              equipSlots: [
+                SLOT.LeftHand,
+                SLOT.RightHand,
+                SLOT.Belt1,
+                SLOT.Belt2,
+                SLOT.Belt3,
+                SLOT.Belt4,
+              ],
+              dims: { l: 18, w: 12, h: 12 },
+              mass: 0.9,
+              lightRadius: 5,
+              lightColor: "#fff4c1",
+              flickerRate: 1.2,
+            },
           ],
-          handsRequired: 1,
-          dims: { l: 28, w: 3, h: 2 },
-          mass: 0.25,
-          stackable: true,
-          maxStack: 6,
-          throwProfile: {
-            range: { min: 1, optimal: 3, max: 6 },
-            damage: { diceCount: 1, diceSides: 4, bonus: 1 },
-            consumesItem: true,
-            recoveryChance: 0.4,
-          },
-          weaponProfile: {
-            category: WEAPON_CATEGORY.THROWN,
-            range: { min: 1, optimal: 3, max: 6 },
-            reloadTime: 0,
-            damage: { diceCount: 1, diceSides: 4, bonus: 1 },
-            consumeWeaponOnUse: true,
-            recoveryChance: 0.4,
-            notes: "Designed to be thrown; may be recovered after a fight",
-          },
-        });
-        registerItem({
-          id: "javelin",
-          name: "Javelin",
-          kind: "weapon",
-          equipSlots: [SLOT.LeftHand, SLOT.RightHand, SLOT.Belt1, SLOT.Belt2],
-          handsRequired: 1,
-          dims: { l: 150, w: 5, h: 5 },
-          mass: 1.0,
-          throwProfile: {
-            range: { min: 1, optimal: 5, max: 8 },
-            damage: { diceCount: 1, diceSides: 6, bonus: 2 },
-            consumesItem: true,
-            recoveryChance: 0.35,
-          },
-          weaponProfile: {
-            category: WEAPON_CATEGORY.THROWN,
-            range: { min: 1, optimal: 5, max: 8 },
-            reloadTime: 0,
-            damage: { diceCount: 1, diceSides: 6, bonus: 2 },
-            consumeWeaponOnUse: true,
-            recoveryChance: 0.35,
-            notes:
-              "A heavy spear meant for throwing; the javelin itself is expended on impact",
-          },
-        });
-
-        // Armor and wearables
-        registerItem({
-          id: "leather_cap",
-          name: "Leather Cap",
-          kind: "armor",
-          equipSlots: [SLOT.Head],
-          dims: { l: 25, w: 20, h: 15 },
-          mass: 0.6,
-        });
-        registerItem({
-          id: "basic_clothes",
-          name: "Basic Clothes",
-          kind: "armor",
-          equipSlots: [SLOT.BodyArmor],
-          dims: { l: 40, w: 30, h: 10 },
-          mass: 1.0,
-        });
-        registerItem({
-          id: "cloak",
-          name: "Cloak",
-          kind: "armor",
-          equipSlots: [SLOT.Cloak],
-          dims: { l: 50, w: 35, h: 10 },
-          mass: 1.2,
-        });
-        registerItem({
-          id: "boots",
-          name: "Boots",
-          kind: "armor",
-          equipSlots: [SLOT.Boots],
-          dims: { l: 35, w: 25, h: 15 },
-          mass: 1.5,
-        });
-        registerItem({
-          id: "gloves",
-          name: "Gloves",
-          kind: "armor",
-          equipSlots: [SLOT.Gloves],
-          dims: { l: 20, w: 12, h: 6 },
-          mass: 0.3,
-        });
-
-        // Jewelry
-        registerItem({
-          id: "ring_plain",
-          name: "Plain Ring",
-          kind: "jewelry",
-          equipSlots: [SLOT.LeftRing, SLOT.RightRing],
-          dims: { l: 3, w: 3, h: 1 },
-          mass: 0.02,
-          stackable: false,
-        });
-        registerItem({
-          id: "amulet_simple",
-          name: "Amulet",
-          kind: "jewelry",
-          equipSlots: [SLOT.Amulet],
-          dims: { l: 5, w: 4, h: 1 },
-          mass: 0.05,
-        });
-
-        // Light sources
-        registerItem({
-          id: "torch",
-          name: "Torch",
-          kind: "tool",
-          equipSlots: [
-            SLOT.LeftHand,
-            SLOT.RightHand,
-            SLOT.Belt1,
-            SLOT.Belt2,
-            SLOT.Belt3,
-            SLOT.Belt4,
+          containers: [
+            {
+              id: "pouch_small",
+              name: "Small Pouch",
+              kind: "container",
+              equipSlots: [
+                SLOT.Belt1,
+                SLOT.Belt2,
+                SLOT.Belt3,
+                SLOT.Belt4,
+              ],
+              dims: { l: 10, w: 8, h: 4 },
+              mass: 0.1,
+              container: {
+                volumeL: 0.6,
+                maxMassKg: 1.0,
+                maxItemLengthCm: 12,
+                accepts: (it) => it.kind === "ammo" || it.mass <= 0.2,
+              },
+            },
+            {
+              id: "pack_sack",
+              name: "Cloth Sack",
+              kind: "container",
+              equipSlots: [SLOT.Backpack],
+              dims: { l: 40, w: 30, h: 10 },
+              mass: 0.6,
+              container: {
+                volumeL: 20,
+                maxMassKg: 12,
+                maxItemLengthCm: 60,
+                accepts: (it) => it.longestCm() <= 60,
+              },
+            },
+            {
+              id: "pack_rucksack",
+              name: "Rucksack",
+              kind: "container",
+              equipSlots: [SLOT.Backpack],
+              dims: { l: 60, w: 35, h: 20 },
+              mass: 1.8,
+              container: {
+                volumeL: 45,
+                maxMassKg: 25,
+                maxItemLengthCm: 80,
+                accepts: (it) => it.longestCm() <= 80,
+              },
+            },
+            {
+              id: "pack_frame",
+              name: "Frame Pack",
+              kind: "container",
+              equipSlots: [SLOT.Backpack],
+              dims: { l: 80, w: 40, h: 25 },
+              mass: 2.6,
+              container: {
+                volumeL: 65,
+                maxMassKg: 30,
+                maxItemLengthCm: 120,
+                accepts: (it) => it.longestCm() <= 120,
+              },
+            },
+            {
+              id: "quiver_std",
+              name: "Quiver",
+              kind: "container",
+              equipSlots: [SLOT.Quiver],
+              dims: { l: 70, w: 15, h: 8 },
+              mass: 0.5,
+              container: {
+                volumeL: 6,
+                maxMassKg: 5,
+                maxItemLengthCm: 80,
+                accepts: (it) =>
+                  it.kind === "ammo" && it.id.startsWith("arrow_"),
+              },
+            },
           ],
-          dims: { l: 30, w: 4, h: 4 },
-          mass: 0.5,
-          stackable: true,
-          maxStack: 20,
-          lightRadius: 2,
-          lightColor: "#ffb347",
-          flickerRate: 3.5,
-        });
-        registerItem({
-          id: "lantern",
-          name: "Lantern",
-          kind: "tool",
-          equipSlots: [
-            SLOT.LeftHand,
-            SLOT.RightHand,
-            SLOT.Belt1,
-            SLOT.Belt2,
-            SLOT.Belt3,
-            SLOT.Belt4,
+          ammo: [
+            {
+              id: "arrow_wood",
+              name: "Wooden Arrow",
+              kind: "ammo",
+              equipSlots: [],
+              stackable: true,
+              maxStack: 99,
+              dims: { l: 75, w: 1, h: 1 },
+              mass: 0.03,
+            },
+            {
+              id: "bolt_wood",
+              name: "Wooden Bolt",
+              kind: "ammo",
+              equipSlots: [],
+              stackable: true,
+              maxStack: 99,
+              dims: { l: 35, w: 1.2, h: 1.2 },
+              mass: 0.04,
+            },
+            {
+              id: "sling_stone",
+              name: "Smooth Stone",
+              kind: "ammo",
+              equipSlots: [],
+              stackable: true,
+              maxStack: 120,
+              dims: { l: 4, w: 4, h: 4 },
+              mass: 0.05,
+            },
           ],
-          dims: { l: 18, w: 12, h: 12 },
-          mass: 0.9,
-          lightRadius: 5,
-          lightColor: "#fff4c1",
-          flickerRate: 1.2,
         });
 
-        // Belt garment and attachments
-        registerItem({
-          id: "belt_leather",
-          name: "Leather Belt",
-          kind: "armor",
-          equipSlots: [SLOT.Belt],
-          dims: { l: 20, w: 10, h: 5 },
-          mass: 0.3,
+        // Derived canonical id lists so other systems can reference item categories
+        // without maintaining duplicate registries.
+        const ITEM_GROUP_IDS = Object.freeze({
+          weapons: Object.freeze(ITEM_DEFINITIONS.weapons.map((def) => def.id)),
+          armor: Object.freeze(ITEM_DEFINITIONS.armor.map((def) => def.id)),
+          jewelry: Object.freeze(ITEM_DEFINITIONS.jewelry.map((def) => def.id)),
+          tools: Object.freeze(ITEM_DEFINITIONS.tools.map((def) => def.id)),
+          containers: Object.freeze(
+            ITEM_DEFINITIONS.containers.map((def) => def.id),
+          ),
+          ammo: Object.freeze(ITEM_DEFINITIONS.ammo.map((def) => def.id)),
+          lightSources: Object.freeze(
+            ITEM_DEFINITIONS.tools
+              .filter((def) => typeof def.lightRadius === "number" && def.lightRadius > 0)
+              .map((def) => def.id),
+          ),
         });
 
-        // Pouch that sits on a belt slot; we treat it as “equipped” to Belt1–4 and it is a tiny container
-        registerItem({
-          id: "pouch_small",
-          name: "Small Pouch",
-          kind: "container",
-          equipSlots: [SLOT.Belt1, SLOT.Belt2, SLOT.Belt3, SLOT.Belt4],
-          dims: { l: 10, w: 8, h: 4 },
-          mass: 0.1,
-          container: {
-            volumeL: 0.6,
-            maxMassKg: 1.0,
-            maxItemLengthCm: 12,
-            accepts: (it) => it.kind === "ammo" || it.mass <= 0.2,
-          },
-        });
-
-        // Backpacks (choose one equipped at SLOT.Backpack). Capacity and length gates enforced.
-        registerItem({
-          id: "pack_sack",
-          name: "Cloth Sack",
-          kind: "container",
-          equipSlots: [SLOT.Backpack],
-          dims: { l: 40, w: 30, h: 10 },
-          mass: 0.6,
-          container: {
-            volumeL: 20,
-            maxMassKg: 12,
-            maxItemLengthCm: 60,
-            accepts: (it) => it.longestCm() <= 60,
-          },
-        });
-        registerItem({
-          id: "pack_rucksack",
-          name: "Rucksack",
-          kind: "container",
-          equipSlots: [SLOT.Backpack],
-          dims: { l: 60, w: 35, h: 20 },
-          mass: 1.8,
-          container: {
-            volumeL: 45,
-            maxMassKg: 25,
-            maxItemLengthCm: 80,
-            accepts: (it) => it.longestCm() <= 80,
-          },
-        });
-        registerItem({
-          id: "pack_frame",
-          name: "Frame Pack",
-          kind: "container",
-          equipSlots: [SLOT.Backpack],
-          dims: { l: 80, w: 40, h: 25 },
-          mass: 2.6,
-          container: {
-            volumeL: 65,
-            maxMassKg: 30,
-            maxItemLengthCm: 120,
-            accepts: (it) => it.longestCm() <= 120,
-          },
-        });
-
-        // Quiver and ammo
-        registerItem({
-          id: "quiver_std",
-          name: "Quiver",
-          kind: "container",
-          equipSlots: [SLOT.Quiver],
-          dims: { l: 70, w: 15, h: 8 },
-          mass: 0.5,
-          container: {
-            volumeL: 6,
-            maxMassKg: 5,
-            maxItemLengthCm: 80,
-            accepts: (it) => it.kind === "ammo" && it.id.startsWith("arrow_"),
-          },
-        });
-        registerItem({
-          id: "arrow_wood",
-          name: "Wooden Arrow",
-          kind: "ammo",
-          equipSlots: [],
-          stackable: true,
-          maxStack: 99,
-          dims: { l: 75, w: 1, h: 1 },
-          mass: 0.03,
-        });
-        registerItem({
-          id: "bolt_wood",
-          name: "Wooden Bolt",
-          kind: "ammo",
-          equipSlots: [],
-          stackable: true,
-          maxStack: 99,
-          dims: { l: 35, w: 1.2, h: 1.2 },
-          mass: 0.04,
-        });
-        registerItem({
-          id: "sling_stone",
-          name: "Smooth Stone",
-          kind: "ammo",
-          equipSlots: [],
-          stackable: true,
-          maxStack: 120,
-          dims: { l: 4, w: 4, h: 4 },
-          mass: 0.05,
-        });
+        for (const defs of Object.values(ITEM_DEFINITIONS)) {
+          for (const def of defs) registerItem(def);
+        }
 
         // --- UTILITY FUNCTIONS ---
         function shuffle(array) {
