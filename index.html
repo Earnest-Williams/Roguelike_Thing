@@ -399,24 +399,38 @@
 
         let minimapModalEl, minimapCanvas, minimapCtx, minimapCloseBtn;
 
-        let MAP_W, MAP_H;
-        let gameLoopTimeout;
-        let gameLoopFn = null;
-        let isPaused = false;
-        let simulationSpeed = CONFIG.ai.ticksPerSecond;
-        let maze = [];
-        let exploredGrid = [];
-        let knownGrid = [];
+        const simState = {
+            timeout: null,
+            loopFn: null,
+            isPaused: false,
+            speed: CONFIG.ai.ticksPerSecond,
+        };
+
+        const mapState = {
+            width: 0,
+            height: 0,
+            grid: [],
+            explored: [],
+            known: [],
+        };
+
+        const fovState = {
+            currentVisible: new Set(),
+            prevVisible: new Set(),
+            lastCache: { key: null, radius: null, visible: null },
+            overlayStyle: CONFIG.visual.colors.visibleOverlay,
+        };
+
+        const explorationState = {
+            frontiers: new Set(),
+            newlyExplored: [],
+        };
+
         let player = {};
-        let frontiers = new Set();
-        let newlyExplored = [];
         let isEndRendered = false;
-        let prevVisible = new Set();
         let prevPlayerPos = null;
         let currentEndPos = null;
-        let currentVisible = new Set();
         let initRetries = 0;
-        let lastFOVCache = { key: null, radius: null, visible: null };
 
         const rawLightConfig = CONFIG.visual.light || {};
         const LIGHT_CONFIG = {
@@ -426,7 +440,7 @@
             flickerVariance: (typeof rawLightConfig.flickerVariance === 'number') ? rawLightConfig.flickerVariance : 0.12
         };
 
-        let currentVisibleOverlayStyle = CONFIG.visual.colors.visibleOverlay;
+        
 
         const VIEW_W = CONFIG.visual.view.width;
         const VIEW_H = CONFIG.visual.view.height;
@@ -1748,7 +1762,7 @@
         }
 
         function refreshLightingVisuals() {
-            currentVisibleOverlayStyle = computeLightOverlayStyle();
+            fovState.overlayStyle = computeLightOverlayStyle();
         }
 
         function getLightRadius() {
@@ -1756,8 +1770,8 @@
         }
 
         function tileBlocksLight(x, y, useKnownGrid = false) {
-            if (x < 0 || x >= MAP_W || y < 0 || y >= MAP_H) return true;
-            const grid = useKnownGrid ? knownGrid : maze;
+            if (x < 0 || x >= mapState.width || y < 0 || y >= mapState.height) return true;
+            const grid = useKnownGrid ? mapState.known : mapState.grid;
             const row = grid[y];
             if (!row) return true;
             const val = row[x];
@@ -1769,7 +1783,7 @@
             const radiusSq = radius * radius;
             visible.add(posKey(pos));
             const setVisible = (x, y) => {
-                if (x < 0 || x >= MAP_W || y < 0 || y >= MAP_H) return;
+                if (x < 0 || x >= mapState.width || y < 0 || y >= mapState.height) return;
                 visible.add(posKey({ x, y }));
             };
             function castLight(row, startSlope, endSlope, xx, xy, yx, yy) {
@@ -1823,11 +1837,11 @@
         function computeVisibleCells(pos) {
             const key = posKey(pos);
             const radius = getLightRadius();
-            if (lastFOVCache.visible && lastFOVCache.key === key && lastFOVCache.radius === radius) {
-                return lastFOVCache.visible;
+            if (fovState.lastCache.visible && fovState.lastCache.key === key && fovState.lastCache.radius === radius) {
+                return fovState.lastCache.visible;
             }
             const visible = computeFieldOfView(pos, radius, false);
-            lastFOVCache = { key, radius, visible };
+            fovState.lastCache = { key, radius, visible };
             return visible;
         }
         // --- A* PATHFINDING FOR MAP VALIDATION ---
@@ -2639,8 +2653,8 @@
             // Phase A: large-room scaffold
             const largeOut = generateLargeRoomsScaffold(HYBRID_CFG.large);
             // Adopt dynamic map sizing from scaffold
-            MAP_W = largeOut.width;
-            MAP_H = largeOut.height;
+            mapState.width = largeOut.width;
+            mapState.height = largeOut.height;
             const grid = largeOut.grid.map(row => row.slice()); // copy
             const allLarge = largeOut.largeRooms;
             // Phase B: small rooms filling
@@ -2667,7 +2681,7 @@
                 ensureConnectivity(grid, allRooms);
             }
             // Choose start/end on far rooms
-            const start = allRooms[0]?.center || { x: Math.floor(MAP_W/2), y: Math.floor(MAP_H/2) };
+            const start = allRooms[0]?.center || { x: Math.floor(mapState.width/2), y: Math.floor(mapState.height/2) };
             let farIdx = 0, farDist = -1;
             for (let i = 0; i < allRooms.length; i++) {
                 const d = manhattan(start, allRooms[i].center);
@@ -2692,12 +2706,12 @@
                 viewportEl.style.height = `${VIEW_H * CELL_SIZE}px`;
             }
             if (canvas) {
-                canvas.width = MAP_W * CELL_SIZE;
-                canvas.height = MAP_H * CELL_SIZE;
+                canvas.width = mapState.width * CELL_SIZE;
+                canvas.height = mapState.height * CELL_SIZE;
             }
         }
         function updateResponsiveLayout(forceRedraw = true) {
-            if (!MAP_W || !MAP_H) return;
+            if (!mapState.width || !mapState.height) return;
             if (!containerEl || !viewportEl || !canvas) return;
             const appContainer = document.getElementById('app-container');
             const uiPanel = document.getElementById('ui-panel');
@@ -2754,22 +2768,22 @@
             if (forceRedraw) redrawAfterResize();
         }
         function redrawAfterResize() {
-            if (!maze || !maze.length) return;
+            if (!mapState.grid || !mapState.grid.length) return;
             if (!player || !player.pos) return;
             refreshLightingVisuals();
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            for (let y = 0; y < MAP_H; y++) {
-                for (let x = 0; x < MAP_W; x++) {
-                    if (!exploredGrid[y][x]) continue;
+            for (let y = 0; y < mapState.height; y++) {
+                for (let x = 0; x < mapState.width; x++) {
+                    if (!mapState.explored[y][x]) continue;
                     const key = posKey({ x, y });
-                    const isVisible = currentVisible.has(key);
+                    const isVisible = fovState.currentVisible.has(key);
                     const isStart = player.startPos && x === player.startPos.x && y === player.startPos.y;
                     const isEnd = currentEndPos && x === currentEndPos.x && y === currentEndPos.y && isEndRendered;
                     drawCell(x, y, isVisible, false, isStart, isEnd);
                 }
             }
             const playerKey = posKey(player.pos);
-            const isPlayerVisible = currentVisible.has(playerKey);
+            const isPlayerVisible = fovState.currentVisible.has(playerKey);
             const isStart = player.startPos && player.pos.x === player.startPos.x && player.pos.y === player.startPos.y;
             const isEnd = currentEndPos && player.pos.x === currentEndPos.x && player.pos.y === currentEndPos.y;
             drawCell(player.pos.x, player.pos.y, isPlayerVisible, true, isStart, isEnd);
@@ -2779,7 +2793,7 @@
             }
         }
         function handleResize() {
-            if (!maze || !maze.length) return;
+            if (!mapState.grid || !mapState.grid.length) return;
             updateResponsiveLayout(true);
         }
         // --- UI & RENDER FUNCTIONS ---
@@ -2850,8 +2864,8 @@
         // drift past the map edges. This is effectively a clamped translation
         // that mimics a traditional roguelike "camera" following the hero.
         function updateCamera(playerPos) {
-            const mapPxW = MAP_W * CELL_SIZE;
-            const mapPxH = MAP_H * CELL_SIZE;
+            const mapPxW = mapState.width * CELL_SIZE;
+            const mapPxH = mapState.height * CELL_SIZE;
             const vw = VIEW_W * CELL_SIZE;
             const vh = VIEW_H * CELL_SIZE;
             const desiredX = vw / 2 - (playerPos.x + 0.5) * CELL_SIZE;
@@ -2866,12 +2880,12 @@
         function drawCell(x, y, isVisible, isPlayer = false, isStart = false, isEnd = false) {
             const cellX = x * CELL_SIZE;
             const cellY = y * CELL_SIZE;
-            if (!exploredGrid[y][x]) return; // Unexplored cells retain the base background color
+            if (!mapState.explored[y][x]) return; // Unexplored cells retain the base background color
             let bgColor = CONFIG.visual.colors.unseen;
             let text = '';
             let textColor = CONFIG.visual.colors.defaultText;
             let fontWeight = '';
-            const isWall = maze[y][x] === TILE_WALL;
+            const isWall = mapState.grid[y][x] === TILE_WALL;
             if (isWall) {
                 bgColor = CONFIG.visual.colors.wall;
                 textColor = 'transparent';
@@ -2905,27 +2919,27 @@
                 ctx.fillText(text, cellX + HALF_CELL, cellY + HALF_CELL);
             }
             if (isVisible) {
-                ctx.fillStyle = currentVisibleOverlayStyle;
+                ctx.fillStyle = fovState.overlayStyle;
                 ctx.fillRect(cellX, cellY, CELL_SIZE, CELL_SIZE);
             }
         }
         // Updates the persistent fog-of-war state as the player moves. This both
-        // records which tiles were ever seen (exploredGrid) and promotes nearby
+        // records which tiles were ever seen (mapState.explored) and promotes nearby
         // floor cells to "frontiers" so the explorer knows where to head next.
         function updateVisionAndExploration(pos) {
             const lightRadius = getLightRadius();
             const radiusSq = lightRadius * lightRadius;
-            newlyExplored = [];
+            explorationState.newlyExplored = [];
             const visibleCells = computeFieldOfView(pos, lightRadius, false);
-            lastFOVCache = { key: posKey(pos), radius: lightRadius, visible: visibleCells };
+            fovState.lastCache = { key: posKey(pos), radius: lightRadius, visible: visibleCells };
             const cellsToUpdate = new Set(visibleCells);
             for (const cellKey of visibleCells) {
                 const [x, y] = cellKey.split(',').map(Number);
-                if (maze[y][x] === TILE_FLOOR) {
+                if (mapState.grid[y][x] === TILE_FLOOR) {
                     for (const { dx, dy } of CARDINAL_DIRECTIONS) {
                         const n = { x: x + dx, y: y + dy };
                         const withinRadius = (n.x - pos.x) * (n.x - pos.x) + (n.y - pos.y) * (n.y - pos.y) <= radiusSq;
-                        if (withinRadius && n.x >= 0 && n.x < MAP_W && n.y >= 0 && n.y < MAP_H && maze[n.y][n.x] === TILE_WALL) {
+                        if (withinRadius && n.x >= 0 && n.x < mapState.width && n.y >= 0 && n.y < mapState.height && mapState.grid[n.y][n.x] === TILE_WALL) {
                             cellsToUpdate.add(posKey(n));
                         }
                     }
@@ -2933,23 +2947,23 @@
             }
             for (const cellKey of cellsToUpdate) {
                 const [x, y] = cellKey.split(',').map(Number);
-                if (!exploredGrid[y][x]) {
-                    newlyExplored.push({x, y});
+                if (!mapState.explored[y][x]) {
+                    explorationState.newlyExplored.push({x, y});
                 }
-                exploredGrid[y][x] = true;
-                knownGrid[y][x] = maze[y][x];
-                if (knownGrid[y][x] === TILE_FLOOR) {
+                mapState.explored[y][x] = true;
+                mapState.known[y][x] = mapState.grid[y][x];
+                if (mapState.known[y][x] === TILE_FLOOR) {
                     const neighbors = [
                         {x: x, y: y-1}, {x: x, y: y+1}, {x: x-1, y: y}, {x: x+1, y: y},
                         {x: x-1, y: y-1}, {x: x-1, y: y+1}, {x: x+1, y: y-1}, {x: x+1, y: y+1}
                     ];
                     const hasUnknown = neighbors.some(n =>
-                        n.x >= 0 && n.x < MAP_W && n.y >= 0 && n.y < MAP_H && knownGrid[n.y][n.x] === -1
+                        n.x >= 0 && n.x < mapState.width && n.y >= 0 && n.y < mapState.height && mapState.known[n.y][n.x] === -1
                     );
                     if (hasUnknown) {
-                        frontiers.add(posKey({x, y}));
+                        explorationState.frontiers.add(posKey({x, y}));
                     } else {
-                        frontiers.delete(posKey({x, y}));
+                        explorationState.frontiers.delete(posKey({x, y}));
                     }
                 }
             }
@@ -2964,7 +2978,7 @@
             const visibleCells = computeFieldOfView(pos, lightRadius, true);
             for (const cellKey of visibleCells) {
                 const [x, y] = cellKey.split(',').map(Number);
-                if (knownGrid[y][x] === -1) {
+                if (mapState.known[y][x] === -1) {
                     score++;
                 }
             }
@@ -3014,11 +3028,11 @@
                 for (const { dx, dy } of CARDINAL_DIRECTIONS) {
                     const nx = current.x + dx;
                     const ny = current.y + dy;
-                    if (nx < 0 || nx >= MAP_W || ny < 0 || ny >= MAP_H) {
+                    if (nx < 0 || nx >= mapState.width || ny < 0 || ny >= mapState.height) {
                         continue;
                     }
 
-                    if (knownGrid[ny][nx] !== TILE_FLOOR) {
+                    if (mapState.known[ny][nx] !== TILE_FLOOR) {
                         continue;
                     }
 
@@ -3040,11 +3054,11 @@
         }
         function renderInitial(playerPos, startPos, endPos) {
             refreshLightingVisuals();
-            currentVisible = computeVisibleCells(playerPos);
+            fovState.currentVisible = computeVisibleCells(playerPos);
             // Draw all initially explored cells
-            for (const pos of newlyExplored) {
+            for (const pos of explorationState.newlyExplored) {
                 const key = posKey(pos);
-                const isVis = currentVisible.has(key);
+                const isVis = fovState.currentVisible.has(key);
                 const isS = pos.x === startPos.x && pos.y === startPos.y;
                 const isE = pos.x === endPos.x && pos.y === endPos.y;
                 if (isE) isEndRendered = true;
@@ -3056,8 +3070,8 @@
         function renderDelta(prevPlayerPos, playerPos, endPos) {
             refreshLightingVisuals();
             // Redraw cells where visibility turned off
-            for (const key of prevVisible) {
-                if (!currentVisible.has(key)) {
+            for (const key of fovState.prevVisible) {
+                if (!fovState.currentVisible.has(key)) {
                     const [x, y] = key.split(',').map(Number);
                     const isS = x === player.startPos.x && y === player.startPos.y;
                     const isE = x === endPos.x && y === endPos.y;
@@ -3067,15 +3081,15 @@
             // Redraw old player position (without player)
             if (prevPlayerPos) {
                 const oldKey = posKey(prevPlayerPos);
-                const isVis = currentVisible.has(oldKey);
+                const isVis = fovState.currentVisible.has(oldKey);
                 const isS = prevPlayerPos.x === player.startPos.x && prevPlayerPos.y === player.startPos.y;
                 const isE = prevPlayerPos.x === endPos.x && prevPlayerPos.y === endPos.y;
                 drawCell(prevPlayerPos.x, prevPlayerPos.y, isVis, false, isS, isE);
             }
             // Draw newly explored cells
-            for (const pos of newlyExplored) {
+            for (const pos of explorationState.newlyExplored) {
                 const key = posKey(pos);
-                const isVis = currentVisible.has(key);
+                const isVis = fovState.currentVisible.has(key);
                 const isS = pos.x === player.startPos.x && pos.y === player.startPos.y;
                 let isE = pos.x === endPos.x && pos.y === endPos.y;
                 if (isE && !isEndRendered) {
@@ -3084,10 +3098,10 @@
                 drawCell(pos.x, pos.y, isVis, false, isS, isE);
             }
             // Draw newly visible cells that were already explored
-            for (const key of currentVisible) {
-                if (!prevVisible.has(key)) {
+            for (const key of fovState.currentVisible) {
+                if (!fovState.prevVisible.has(key)) {
                     const [x, y] = key.split(',').map(Number);
-                    const alreadyNew = newlyExplored.some(p => p.x === x && p.y === y);
+                    const alreadyNew = explorationState.newlyExplored.some(p => p.x === x && p.y === y);
                     if (!alreadyNew) {
                         const isS = x === player.startPos.x && y === player.startPos.y;
                         const isE = x === endPos.x && y === endPos.y;
@@ -3097,7 +3111,7 @@
             }
             // Draw new player position
             const newKey = posKey(playerPos);
-            const isVis = currentVisible.has(newKey);
+            const isVis = fovState.currentVisible.has(newKey);
             const isS = playerPos.x === player.startPos.x && playerPos.y === player.startPos.y;
             const isE = playerPos.x === endPos.x && playerPos.y === endPos.y;
             drawCell(playerPos.x, playerPos.y, isVis, true, isS, isE);
@@ -3114,12 +3128,12 @@
             const stack = [];
             const visitedForPathfinding = new Set([posKey(player.pos)]);
             let shortTermMemory = [];
-            frontiers.clear();
+            explorationState.frontiers.clear();
             function gameLoop() {
-                clearTimeout(gameLoopTimeout);
-                if (!isPaused) {
+                clearTimeout(simState.timeout);
+                if (!simState.isPaused) {
                     if (player.pos.x === endPos.x && player.pos.y === endPos.y) {
-                        clearInterval(gameLoopTimeout); statusDiv.textContent = 'Exit found!';
+                        clearInterval(simState.timeout); statusDiv.textContent = 'Exit found!';
                         renderDelta(prevPlayerPos, player.pos, endPos);
                         restartBtn.style.display = 'block';
                         return;
@@ -3131,7 +3145,7 @@
                         shortTermMemory.shift();
                     }
                     let nextMove = null;
-                    if (knownGrid[endPos.y][endPos.x] === TILE_FLOOR) {
+                    if (mapState.known[endPos.y][endPos.x] === TILE_FLOOR) {
                         // Once the exit has been discovered we greedily follow the fastest path to
                         // it, ignoring the short-term memory so backtracking is allowed.
                         const pathToExit = bfsToTarget(player.pos, endPos, []); // Ignore short term memory for exit path
@@ -3145,8 +3159,8 @@
                             y: player.pos.y + dy
                         }));
                         const unvisitedNeighbors = neighbors.filter(n =>
-                            n.x >= 0 && n.x < MAP_W && n.y >= 0 && n.y < MAP_H &&
-                            knownGrid[n.y][n.x] === TILE_FLOOR &&
+                            n.x >= 0 && n.x < mapState.width && n.y >= 0 && n.y < mapState.height &&
+                            mapState.known[n.y][n.x] === TILE_FLOOR &&
                             !visitedForPathfinding.has(posKey(n))
                         );
                         const potentialMoves = unvisitedNeighbors.map(n => ({pos: n, score: explorationScore(n, shortTermMemory)}));
@@ -3156,13 +3170,13 @@
                             nextMove = potentialMoves[0].pos;
                         }
                     }
-                    if (!nextMove && frontiers.size > 0) {
+                    if (!nextMove && explorationState.frontiers.size > 0) {
                         // When no enticing neighbour exists we fall back to the nearest frontier:
                         // a lit floor tile that borders unexplored darkness. BFS charts a safe
                         // course to the chosen frontier.
                         let closestFrontier = null;
                         let minDist = Infinity;
-                        for (const fKey of frontiers) {
+                        for (const fKey of explorationState.frontiers) {
                             const [fx, fy] = fKey.split(',').map(Number);
                             const dist = Math.abs(player.pos.x - fx) + Math.abs(player.pos.y - fy);
                             if (dist < minDist) {
@@ -3188,30 +3202,30 @@
                             visitedForPathfinding.add(stepKey);
                         }
                     } else {
-                        clearTimeout(gameLoopTimeout); statusDiv.textContent = 'AI is trapped!';
+                        clearTimeout(simState.timeout); statusDiv.textContent = 'AI is trapped!';
                         restartBtn.style.display = 'block'; return;
                     }
                     updateVisionAndExploration(player.pos);
-                    currentVisible = computeVisibleCells(player.pos);
+                    fovState.currentVisible = computeVisibleCells(player.pos);
                     renderDelta(prevPlayerPos, player.pos, endPos);
                     updateCamera(player.pos);
-                    prevVisible = new Set(currentVisible);
+                    fovState.prevVisible = new Set(fovState.currentVisible);
                     minimapMaybeRefreshOnTick();
                 }
-                const delay = 1000 / simulationSpeed;
-                gameLoopTimeout = setTimeout(gameLoop, delay);
+                const delay = 1000 / simState.speed;
+                simState.timeout = setTimeout(gameLoop, delay);
             }
-            gameLoopFn = gameLoop;
+            simState.loopFn = gameLoop;
             gameLoop();
         }
         function togglePause() {
-            isPaused = !isPaused;
-            if (isPaused) {
+            simState.isPaused = !simState.isPaused;
+            if (simState.isPaused) {
                 pauseIndicator.textContent = 'PAUSED';
             } else {
                 pauseIndicator.textContent = '';
-                if (typeof gameLoopFn === 'function') {
-                    gameLoopTimeout = setTimeout(gameLoopFn, 1000 / simulationSpeed); // Resume the loop
+                if (typeof simState.loopFn === 'function') {
+                    simState.timeout = setTimeout(simState.loopFn, 1000 / simState.speed); // Resume the loop
                 }
             }
         }
@@ -3221,9 +3235,9 @@
                 console.error('Map generation failed after multiple retries.');
                 return;
             }
-            clearTimeout(gameLoopTimeout);
-            gameLoopFn = null;
-            isPaused = false;
+            clearTimeout(simState.timeout);
+            simState.loopFn = null;
+            simState.isPaused = false;
             pauseIndicator.textContent = '';
             statusDiv.textContent = 'Generating dungeon...';
             restartBtn.style.display = 'none';
@@ -3272,18 +3286,18 @@
                     initRetries++;
                     setTimeout(init, 100); return;
                 }
-                maze = dungeonData.grid;
-                MAP_W = maze[0].length;
-                MAP_H = maze.length;
+                mapState.grid = dungeonData.grid;
+                mapState.width = mapState.grid[0].length;
+                mapState.height = mapState.grid.length;
                 const startPos = dungeonData.start;
                 const endPos = dungeonData.end;
                 currentEndPos = endPos;
                 // Initialize data grids now that we have dimensions
-                exploredGrid = Array.from({ length: MAP_H }, () => Array(MAP_W).fill(false));
-                knownGrid = Array.from({ length: MAP_H }, () => Array(MAP_W).fill(-1));
+                mapState.explored = Array.from({ length: mapState.height }, () => Array(mapState.width).fill(false));
+                mapState.known = Array.from({ length: mapState.height }, () => Array(mapState.width).fill(-1));
                 // Setup DOM elements which depend on map dimensions
                 setupDOM();
-                const path = aStarPath(maze, startPos, endPos);
+                const path = aStarPath(mapState.grid, startPos, endPos);
                 if (!path) {
                     statusDiv.textContent = 'Map is not fully connected, regenerating...';
                     initRetries++;
@@ -3292,16 +3306,16 @@
                 player.pos = startPos;
                 player.startPos = startPos;
                 isEndRendered = false;
-                prevVisible = new Set();
+                fovState.prevVisible = new Set();
                 prevPlayerPos = null;
-                currentVisible = new Set();
-                newlyExplored = [];
-                lastFOVCache = { key: null, radius: null, visible: null };
+                fovState.currentVisible = new Set();
+                explorationState.newlyExplored = [];
+                fovState.lastCache = { key: null, radius: null, visible: null };
                 updateVisionAndExploration(player.startPos);
                 renderInitial(player.startPos, player.startPos, endPos);
                 updateCamera(player.startPos);
                 renderUI();
-                prevVisible = computeVisibleCells(player.startPos);
+                fovState.prevVisible = computeVisibleCells(player.startPos);
                 prevPlayerPos = { ...player.startPos };
                 initRetries = 0;
                 setTimeout(() => simulate(player.startPos, endPos), 500);
@@ -3313,8 +3327,8 @@
             speedValue.textContent = `${ticksPerSecond} tps`;
             restartBtn.addEventListener('click', init);
             speedSlider.addEventListener('input', (e) => {
-                simulationSpeed = parseInt(e.target.value, 10);
-                speedValue.textContent = `${simulationSpeed} tps`;
+                simState.speed = parseInt(e.target.value, 10);
+                speedValue.textContent = `${simState.speed} tps`;
             });
             window.addEventListener('resize', handleResize);
             window.addEventListener('keydown', (e) => {
@@ -3392,11 +3406,11 @@
         }
 
         function buildMinimapBase() {
-          if (!maze || !maze.length) return;
+          if (!mapState.grid || !mapState.grid.length) return;
 
           const pad = minimapPadding;
-          const tilesW = MAP_W + pad * 2;
-          const tilesH = MAP_H + pad * 2;
+          const tilesW = mapState.width + pad * 2;
+          const tilesH = mapState.height + pad * 2;
 
           // Use current canvas backing size (already set by prepareMinimapCanvasBackingStore on open)
           const targetW = minimapCanvas.width  || MINIMAP_DEFAULT_DIMENSION;
@@ -3422,9 +3436,9 @@
 
           // Walls
           ctx.fillStyle = MINIMAP_COLORS.wall;
-          for (let y = 0; y < MAP_H; y++) {
-            for (let x = 0; x < MAP_W; x++) {
-              if (maze[y][x] === TILE_WALL) {
+          for (let y = 0; y < mapState.height; y++) {
+            for (let x = 0; x < mapState.width; x++) {
+              if (mapState.grid[y][x] === TILE_WALL) {
                 ctx.fillRect(ox + x * minimapScale, oy + y * minimapScale, minimapScale, minimapScale);
               }
             }
@@ -3433,7 +3447,7 @@
           // Optional border to make the map bounds obvious
           ctx.strokeStyle = MINIMAP_COLORS.border;
           ctx.lineWidth = Math.max(1, Math.floor(minimapScale / 2));
-          ctx.strokeRect(ox, oy, MAP_W * minimapScale, MAP_H * minimapScale);
+          ctx.strokeRect(ox, oy, mapState.width * minimapScale, mapState.height * minimapScale);
         }
 
         /**
@@ -3458,8 +3472,8 @@
             // --- START: ACCURATE VIEWPORT CALCULATION (FIXED) ---
             // This logic mirrors the main `updateCamera` function to find the exact
             // top-left corner of the visible area in map coordinates.
-            const mapPxW = MAP_W * CELL_SIZE;
-            const mapPxH = MAP_H * CELL_SIZE;
+            const mapPxW = mapState.width * CELL_SIZE;
+            const mapPxH = mapState.height * CELL_SIZE;
             const vw = VIEW_W * CELL_SIZE;
             const vh = VIEW_H * CELL_SIZE;
             const playerPos = getPlayerPos();
@@ -3471,13 +3485,13 @@
             
             const rawViewportX = -canvasTranslateX / CELL_SIZE;
             const rawViewportY = -canvasTranslateY / CELL_SIZE;
-            const maxViewportX = Math.max(0, MAP_W - VIEW_W);
-            const maxViewportY = Math.max(0, MAP_H - VIEW_H);
+            const maxViewportX = Math.max(0, mapState.width - VIEW_W);
+            const maxViewportY = Math.max(0, mapState.height - VIEW_H);
             const viewportTopLeftX_map = Math.min(Math.max(0, rawViewportX), maxViewportX);
             const viewportTopLeftY_map = Math.min(Math.max(0, rawViewportY), maxViewportY);
 
-            const viewportTilesWide = Math.min(VIEW_W, MAP_W);
-            const viewportTilesHigh = Math.min(VIEW_H, MAP_H);
+            const viewportTilesWide = Math.min(VIEW_W, mapState.width);
+            const viewportTilesHigh = Math.min(VIEW_H, mapState.height);
 
             // Overlay: viewport rectangle
             const pad = minimapPadding;
