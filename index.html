@@ -3675,6 +3675,9 @@
         function setupPlayer() {
             const newPlayer = new Player({ name: "Player", x: 0, y: 0 });
 
+            if (!mobManager) {
+                throw new Error("mobManager is not initialized before setupPlayer() is called.");
+            }
             mobManager.add(newPlayer);
 
             // Wearables
