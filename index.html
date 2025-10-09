@@ -543,7 +543,29 @@
         actor.statusDerived = agg;
       }
 
-      function tickStatusesAtTurnStart(actor, turn) {
+      function handleDeath(gameCtx, actor) {
+        if (!actor || actor.hp > 0) return false;
+        if (actor.__dead) return true;
+        actor.__dead = true;
+
+        const manager = gameCtx?.mobManager;
+        if (actor.kind !== "player" && manager?.removeById) {
+          manager.removeById(actor.id);
+        }
+
+        if (actor.kind === "player") {
+          clearTimeout(simState.timeout);
+          simState.timeout = null;
+          simState.loopFn = null;
+          simState.isPaused = true;
+          statusDiv.textContent = "You died";
+          restartBtn.style.display = "block";
+        }
+
+        return true;
+      }
+
+      function tickStatusesAtTurnStart(actor, turn, gameCtx = null) {
         if (!actor) return;
         if (!Array.isArray(actor.statuses)) {
           actor.statuses = [];
@@ -567,6 +589,9 @@
                 potency: st.potency,
               });
               st.nextTickAt += def.tickEvery;
+              if (gameCtx && handleDeath(gameCtx, actor)) {
+                return;
+              }
             }
           }
           if (turn >= st.endsAtTurn) {
@@ -587,6 +612,9 @@
         }
         if (expired.length) {
           actor.statuses = actor.statuses.filter((s) => !expired.includes(s));
+        }
+        if (gameCtx && actor.__dead) {
+          return;
         }
         rebuildStatusDerivedCache(actor);
       }
@@ -1763,8 +1791,12 @@
             return m;
           }
           removeById(id) {
+            const existing = this.list.find((x) => x.id === id);
+            if (!existing) return null;
+            const key = `${existing.x},${existing.y}`;
             this.list = this.list.filter((x) => x.id !== id);
-            this.reindex();
+            this.index.delete(key);
+            return existing;
           }
           getMobAt(x, y) {
             return this.index.get(`${x},${y}`) || null;
@@ -1778,16 +1810,60 @@
             // ticks (for example actors being added or removed externally).
             this.reindex();
 
-            for (const m of this.list) {
+            const startIndex = new Map(this.index);
+            const plannedMoves = [];
+            const mobsThisTurn = [...this.list];
+
+            const occupancyView = {
+              getMobAt: (x, y) => startIndex.get(`${x},${y}`) || null,
+            };
+
+            for (const m of mobsThisTurn) {
+              const startKey = `${m.x},${m.y}`;
+
+              if (!this.list.includes(m)) {
+                startIndex.delete(startKey);
+                continue;
+              }
               if (m.kind === "player") continue;
 
-              const prevKey = `${m.x},${m.y}`;
-              tickStatusesAtTurnStart(m, turn);
-              m.takeTurn(gameCtx);
-              const newKey = `${m.x},${m.y}`;
-              if (prevKey !== newKey) this.index.delete(prevKey);
-              this.index.set(newKey, m);
+              if (handleDeath(gameCtx, m)) {
+                startIndex.delete(startKey);
+                continue;
+              }
+
+              tickStatusesAtTurnStart(m, turn, gameCtx);
+
+              if (!this.list.includes(m) || m.__dead) {
+                startIndex.delete(startKey);
+                continue;
+              }
+
+              const from = { x: m.x, y: m.y };
+              const turnCtx = { ...gameCtx, mobManager: occupancyView };
+              m.takeTurn(turnCtx);
+              const to = { x: m.x, y: m.y };
+
+              if (to.x !== from.x || to.y !== from.y) {
+                plannedMoves.push({ mob: m, from, to });
+              }
             }
+
+            const occupancy = new Map(startIndex);
+            for (const move of plannedMoves) {
+              if (!this.list.includes(move.mob) || move.mob.__dead) continue;
+              const fromKey = `${move.from.x},${move.from.y}`;
+              const toKey = `${move.to.x},${move.to.y}`;
+              if (occupancy.get(fromKey) !== move.mob) continue;
+              if (occupancy.has(toKey)) continue;
+
+              occupancy.delete(fromKey);
+              occupancy.set(toKey, move.mob);
+              move.mob.x = move.to.x;
+              move.mob.y = move.to.y;
+            }
+
+            this.reindex();
           }
         }
 
@@ -2052,6 +2128,13 @@
             target.hp -= roll.total;
             evaluation.targetHp = target.hp;
             evaluation.targetDefeated = target.hp <= 0;
+            if (evaluation.targetDefeated) {
+              const deathCtx =
+                context?.gameCtx ||
+                (context?.mobManager ? { mobManager: context.mobManager } : context) ||
+                null;
+              handleDeath(deathCtx, target);
+            }
           }
           if (
             profile.category === WEAPON_CATEGORY.THROWN &&
@@ -4673,10 +4756,20 @@
           function gameLoop() {
             clearTimeout(simState.timeout);
             if (!simState.isPaused) {
+              if (handleDeath(gameCtx, player)) {
+                return;
+              }
+
               const turn = ++simState.turnCounter;
-              tickStatusesAtTurnStart(player, turn);
+              tickStatusesAtTurnStart(player, turn, gameCtx);
+              if (handleDeath(gameCtx, player)) {
+                return;
+              }
               if (mobManager) {
                 mobManager.tick(gameCtx, turn);
+              }
+              if (handleDeath(gameCtx, player)) {
+                return;
               }
               const currentPlayerX = player.x;
               const currentPlayerY = player.y;
