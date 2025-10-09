@@ -3213,6 +3213,8 @@
                         prevPlayerPos.y = currentPlayerY;
                         if (!hasPrevPlayerPos) hasPrevPlayerPos = true;
                         player.pos = nextMove;
+                        player.x = nextMove.x;
+                        player.y = nextMove.y;
                         nextX = player.x;
                         nextY = player.y;
                         nextPos = { x: nextX, y: nextY };
