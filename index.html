@@ -407,6 +407,16 @@
         WEAPON_CATEGORY.SLING,
         WEAPON_CATEGORY.THROWN,
       ]);
+      const ATTACK_KIND = Object.freeze({
+        RANGED: "ranged",
+        THROW: "throw",
+      });
+      const THROW_CLASS = Object.freeze({
+        PURPOSE_BUILT: "purpose_built",
+        MAKESHIFT: "makeshift",
+        IMPROVISED: "improvised",
+        UNSUITABLE: "unsuitable",
+      });
       // Transformation matrices for the eight octants used during shadowcasting
       // field-of-view calculations. Each entry is [xx, xy, yx, yy] for one octant.
       const FOV_TRANSFORMS = [
@@ -1139,6 +1149,182 @@
           };
         }
 
+        function classifyThrowability(item) {
+          if (!item) return THROW_CLASS.UNSUITABLE;
+          const mass = item.mass ?? 0.1;
+          const longest =
+            typeof item.longestCm === "function"
+              ? item.longestCm()
+              : dimsLongest(item.dims || { l: 1, w: 1, h: 1 });
+          const isDeclaredThrowWeapon =
+            item.weaponProfile?.category === WEAPON_CATEGORY.THROWN ||
+            !!item.throwProfile;
+          if (isDeclaredThrowWeapon) return THROW_CLASS.PURPOSE_BUILT;
+          if (mass > 3.0 || longest > 120) return THROW_CLASS.UNSUITABLE;
+          if (mass <= 0.3 && longest <= 30) return THROW_CLASS.MAKESHIFT;
+          return THROW_CLASS.IMPROVISED;
+        }
+
+        function throwPenaltiesFor(item) {
+          const cls = classifyThrowability(item);
+          switch (cls) {
+            case THROW_CLASS.PURPOSE_BUILT:
+              return {
+                throwClass: cls,
+                allowed: true,
+                rangeMult: 1.0,
+                dmgMult: 1.0,
+                accDelta: 0,
+                consume: true,
+                recover: 0.33,
+              };
+            case THROW_CLASS.MAKESHIFT:
+              return {
+                throwClass: cls,
+                allowed: true,
+                rangeMult: 0.9,
+                dmgMult: 0.9,
+                accDelta: -0.05,
+                consume: true,
+                recover: 0.1,
+              };
+            case THROW_CLASS.IMPROVISED:
+              return {
+                throwClass: cls,
+                allowed: true,
+                rangeMult: 0.7,
+                dmgMult: 0.75,
+                accDelta: -0.15,
+                consume: true,
+                recover: 0,
+              };
+            case THROW_CLASS.UNSUITABLE:
+            default:
+              return {
+                throwClass: cls,
+                allowed: false,
+                rangeMult: 0,
+                dmgMult: 0,
+                accDelta: -1,
+                consume: false,
+                recover: 0,
+              };
+          }
+        }
+
+        function baseThrowProfileForItem(item) {
+          if (!item) return null;
+          if (item.weaponProfile?.category === WEAPON_CATEGORY.THROWN) {
+            const wp = item.weaponProfile;
+            return normalizeThrowProfile(
+              {
+                range: wp.range ? { ...wp.range } : null,
+                damage: wp.damage ? { ...wp.damage } : null,
+                accuracy: wp.accuracy,
+                consumesItem:
+                  wp.consumeWeaponOnUse ?? (wp.ammo ? false : true),
+                recoveryChance: wp.recoveryChance,
+                notes: wp.notes,
+              },
+              item,
+            );
+          }
+          if (item.throwProfile) {
+            return cloneThrowProfile(item.throwProfile);
+          }
+          return normalizeThrowProfile(null, item);
+        }
+
+        function buildEffectiveThrowProfile(item) {
+          if (!(item instanceof Item)) return null;
+          const penalties = throwPenaltiesFor(item);
+          const base = baseThrowProfileForItem(item) || {
+            range: { min: 1, optimal: 1, max: 1 },
+            damage: { diceCount: 0, diceSides: 0, bonus: 0 },
+            accuracy: 0,
+            consumesItem: true,
+            recoveryChance: 0,
+            notes: null,
+          };
+          const hasExplicitProfile =
+            !!item.throwProfile ||
+            item.weaponProfile?.category === WEAPON_CATEGORY.THROWN;
+          const combinedNotes = [];
+          if (base.notes) combinedNotes.push(base.notes);
+          if (!penalties.allowed) {
+            combinedNotes.push("Unsuitable to throw");
+            return {
+              range: { min: 1, optimal: 1, max: 1 },
+              damage: { diceCount: 0, diceSides: 0, bonus: 0 },
+              accuracy: -1,
+              consumesItem: false,
+              recoveryChance: 0,
+              notes: combinedNotes.join(" • ") || null,
+              throwClass: penalties.throwClass,
+              allowed: false,
+            };
+          }
+          const scaledMin = Math.max(
+            1,
+            Math.floor(base.range.min * penalties.rangeMult),
+          );
+          const scaledOptimal = Math.max(
+            scaledMin,
+            Math.floor(base.range.optimal * penalties.rangeMult),
+          );
+          const scaledMax = Math.max(
+            scaledOptimal,
+            Math.floor(base.range.max * penalties.rangeMult),
+          );
+          const range = {
+            min: scaledMin,
+            optimal: scaledOptimal,
+            max: scaledMax,
+          };
+          const damage = {
+            diceCount: base.damage.diceCount,
+            diceSides: Math.max(1, Math.round(base.damage.diceSides * penalties.dmgMult)),
+            bonus: Math.floor(base.damage.bonus * penalties.dmgMult),
+          };
+          const accuracy = (base.accuracy ?? 0) + penalties.accDelta;
+          const consumesItem =
+            hasExplicitProfile && base.consumesItem !== undefined
+              ? base.consumesItem
+              : penalties.consume;
+          const recoveryChance =
+            hasExplicitProfile &&
+            base.recoveryChance !== undefined &&
+            base.recoveryChance !== null
+              ? clamp01(base.recoveryChance)
+              : penalties.recover;
+          return {
+            range,
+            damage,
+            accuracy,
+            consumesItem,
+            recoveryChance,
+            notes: combinedNotes.join(" • ") || null,
+            throwClass: penalties.throwClass,
+            allowed: true,
+          };
+        }
+
+        function getAttackModesForItem(item) {
+          if (!(item instanceof Item)) return [];
+          const modes = [];
+          if (item.weaponProfile?.isRanged) {
+            modes.push({ kind: ATTACK_KIND.RANGED, profile: item.weaponProfile });
+            if (item.weaponProfile.category === WEAPON_CATEGORY.THROWN) {
+              return modes;
+            }
+          }
+          const throwProfile = buildEffectiveThrowProfile(item);
+          if (throwProfile) {
+            modes.push({ kind: ATTACK_KIND.THROW, profile: throwProfile });
+          }
+          return modes;
+        }
+
         function cloneThrowProfile(profile) {
           if (!profile) return null;
           return {
@@ -1271,12 +1457,10 @@
             return !!(this.weaponProfile && this.weaponProfile.isRanged);
           }
           isThrowable() {
-            return !!this.throwProfile;
+            return throwPenaltiesFor(this).allowed;
           }
           getThrowProfile() {
-            return this.throwProfile
-              ? cloneThrowProfile(this.throwProfile)
-              : null;
+            return buildEffectiveThrowProfile(this);
           }
           clone() {
             const copy = {
@@ -1372,7 +1556,11 @@
           if (ItemRegistry.has(def.id)) {
             throw new Error(`Duplicate item id registration attempted: ${def.id}`);
           }
-          ItemRegistry.set(def.id, new Item(def));
+          const prepared = { ...def };
+          if (prepared.weaponProfile?.category === WEAPON_CATEGORY.THROWN) {
+            prepared.throwProfile = null;
+          }
+          ItemRegistry.set(def.id, new Item(prepared));
         }
         function makeItem(id) {
           const t = ItemRegistry.get(id);
@@ -2315,8 +2503,13 @@
             item,
             profile,
             distance,
+            throwClass: profile.throwClass || classifyThrowability(item),
             reason: null,
           };
+          if (profile.allowed === false) {
+            result.reason = "unsuitable";
+            return result;
+          }
           if (distance < profile.range.min) {
             result.reason = "too_close";
             return result;
@@ -2363,12 +2556,81 @@
           return evaluation;
         }
 
+        function evaluateAttack(attacker, target, item, mode, context = {}) {
+          if (!mode || !mode.kind) {
+            return { ok: false, reason: "invalid_mode" };
+          }
+          if (mode.kind === ATTACK_KIND.RANGED) {
+            return evaluateRangedAttack(attacker, target, item, context);
+          }
+          if (mode.kind === ATTACK_KIND.THROW) {
+            return evaluateThrow(attacker, target, item, context);
+          }
+          return { ok: false, reason: "unknown_mode" };
+        }
+
+        function performAttack(attacker, target, item, mode, context = {}) {
+          if (!mode || !mode.kind) {
+            return { ok: false, reason: "invalid_mode" };
+          }
+          if (mode.kind === ATTACK_KIND.RANGED) {
+            return performRangedAttack(attacker, target, item, context);
+          }
+          if (mode.kind === ATTACK_KIND.THROW) {
+            return performThrow(attacker, target, item, context);
+          }
+          return { ok: false, reason: "unknown_mode" };
+        }
+
+        function chooseAttackMode(attacker, target, item, context = {}) {
+          const modes = getAttackModesForItem(item);
+          let best = null;
+          let bestScore = -Infinity;
+          for (const mode of modes) {
+            const ev = evaluateAttack(attacker, target, item, mode, context);
+            if (!ev.ok) continue;
+            const expectedDamage = ev.damage?.avg ?? 0;
+            const timeCost = Math.max(1, ev.timeCost ?? 1);
+            const dps = expectedDamage / timeCost;
+            const ammoPenalty =
+              mode.kind === ATTACK_KIND.RANGED &&
+              !!ev.profile?.ammo
+                ? 0.05
+                : 0;
+            const resourcePenalty =
+              mode.kind === ATTACK_KIND.THROW && ev.profile?.consumesItem
+                ? 0.02
+                : 0;
+            const score = dps - ammoPenalty - resourcePenalty;
+            if (score > bestScore) {
+              bestScore = score;
+              best = mode;
+            }
+          }
+          return best;
+        }
+
         const Throwing = {
+          ATTACK_KIND,
+          THROW_CLASS,
+          classifyThrowability,
+          throwPenaltiesFor,
+          buildEffectiveThrowProfile,
+          getAttackModesForItem,
           getThrowProfile: getThrowProfileForItem,
           describeThrowProfile,
           describeThrowable,
           evaluateThrow,
           performThrow,
+        };
+
+        const Combat = {
+          ATTACK_KIND,
+          THROW_CLASS,
+          getAttackModesForItem,
+          evaluateAttack,
+          performAttack,
+          chooseAttackMode,
         };
 
         // --- ITEM TEMPLATES ---
