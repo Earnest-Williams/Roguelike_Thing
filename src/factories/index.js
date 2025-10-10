@@ -19,8 +19,8 @@ export function ensureItemsRegistered() {
       // already registered – refresh definition
       try {
         upsertItem(def);
-      } catch (_) {
-        // ignore if still failing
+      } catch (upsertErr) {
+        console.error("Failed to upsert item definition for id:", def?.id, upsertErr);
       }
     }
   }
