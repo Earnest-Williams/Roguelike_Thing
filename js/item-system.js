@@ -509,7 +509,7 @@ const ITEM_DEFINITIONS = Object.freeze({
         SLOT.Belt2,
       ],
       handsRequired: 1,
-      dims: { l: 110, w: 6, h: 4 },
+      dims: { l: 110, w: 5, h: 3 },
       mass: 1.8,
       weaponProfile: {
         category: WEAPON_CATEGORY.MELEE,
