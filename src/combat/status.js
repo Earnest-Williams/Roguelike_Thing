@@ -113,10 +113,10 @@ defineStatus({
   stacking: "refresh",
   maxStacks: 1,
   onApply(actor) {
-    // Represent haste by nudging speedMult in mod cache at apply/expire time.
-    actor.modCache.speedMult *= 0.85; // 15% faster actions
+    // Instead of mutating modCache directly, trigger a refold of all modifiers including status effects.
+    actor.refoldModifiers?.();
   },
   onExpire(actor) {
-    actor.modCache.speedMult /= 0.85;
+    actor.refoldModifiers?.();
   },
 });
