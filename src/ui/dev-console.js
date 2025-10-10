@@ -2,7 +2,7 @@
 // @ts-check
 import { createActorFromTemplate, createItem } from "../factories/index.js";
 import { pickLoot } from "../factories/loot.js";
-import { applyStatus } from "../combat/status.js";
+import { applyStatuses } from "../combat/status.js";
 import { performEquippedAttack } from "../game/combat-glue.js";
 import { SLOT } from "../../constants.js";
 import { emit, EVENT } from "./event-log.js";
@@ -43,7 +43,14 @@ export function attachDevConsole(ctx) {
         }
         case "/status": {
           const id = args[0]; const dur = +args[1]||5; const stacks = +args[2]||1;
-          applyStatus(ctx.playerActor, id, dur, stacks); log(`status ${id} dur=${dur} stacks=${stacks}`); break;
+          applyStatuses(
+            { statusAttempts: [{ id, baseDuration: dur, stacks }] },
+            ctx.playerActor,
+            ctx.playerActor,
+            ctx.turn?.() ?? 0,
+          );
+          log(`status ${id} dur=${dur} stacks=${stacks}`);
+          break;
         }
         case "/loot": {
           const table = args[0]; const drop = pickLoot(table);
