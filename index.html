@@ -3155,11 +3155,6 @@
             this.v2 = v2;
             this.circumCircle = calcCircumCircle(v0, v1, v2);
           }
-          inCircumcircle(v) {
-            const dx = this.circumCircle.c.x - v.x;
-            const dy = this.circumCircle.c.y - v.y;
-            return Math.sqrt(dx * dx + dy * dy) <= this.circumCircle.r;
-          }
         }
 
         function calcCircumCircle(v0, v1, v2) {
@@ -3170,7 +3165,14 @@
           const cx = v2.x,
             cy = v2.y;
           const d = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by));
-          if (d === 0) return { c: { x: 0, y: 0 }, r: Infinity }; // collinear
+          if (d === 0)
+            return {
+              center: { x: 0, y: 0 },
+              radius: Infinity,
+              contains() {
+                return true;
+              },
+            }; // collinear
           const ux =
             ((ax * ax + ay * ay) * (by - cy) +
               (bx * bx + by * by) * (cy - ay) +
@@ -3182,8 +3184,16 @@
               (cx * cx + cy * cy) * (bx - ax)) /
             d;
           const center = { x: ux, y: uy };
-          const r = Math.sqrt((ax - ux) ** 2 + (ay - uy) ** 2);
-          return { c: center, r: r };
+          const radius = Math.sqrt((ax - ux) ** 2 + (ay - uy) ** 2);
+          return {
+            center,
+            radius,
+            contains(point) {
+              const dx = center.x - point.x;
+              const dy = center.y - point.y;
+              return Math.sqrt(dx * dx + dy * dy) <= radius;
+            },
+          };
         }
 
         function superTriangle(vertices) {
@@ -3207,7 +3217,7 @@
         function addVertex(vertex, triangles) {
           var edges = [];
           triangles = triangles.filter(function (triangle) {
-            if (triangle.inCircumcircle(vertex)) {
+            if (triangle.circumCircle.contains(vertex)) {
               edges.push(new Edge(triangle.v0, triangle.v1));
               edges.push(new Edge(triangle.v1, triangle.v2));
               edges.push(new Edge(triangle.v2, triangle.v0));
