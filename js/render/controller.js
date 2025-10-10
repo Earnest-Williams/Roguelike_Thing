@@ -5,13 +5,16 @@ import { buildMainViewBatch } from "./presenters.js";
 /**
  * @typedef {import("./types.js").ViewTransform} ViewTransform
  */
+/**
+ * @typedef {import("./types.js").IRenderer} IRenderer
+ */
 
 /**
  * High-level orchestrator that bridges game state and renderer implementation.
  */
 export class RenderController {
   /**
-   * @param {{ init: Function; setViewTransform: Function; clear: Function; drawTiles: Function; resize: Function }} renderer
+   * @param {IRenderer} renderer
    */
   constructor(renderer) {
     this.renderer = renderer;
