@@ -311,7 +311,6 @@
         DEFAULT_INVENTORY_CAPACITY,
         DEFAULT_MONSTER_AGGRO_RANGE,
         SHORT_TERM_MEMORY_PENALTY,
-        MINIMAP_DEFAULT_DIMENSION,
         CARDINAL_DIRECTIONS,
         WEAPON_CATEGORY,
         ATTACK_KIND,
@@ -1063,7 +1062,15 @@
           : null;
         let rendererReady = false;
 
-        let minimapModalEl, minimapCanvas, minimapCtx, minimapCloseBtn;
+        let minimapModalEl = document.getElementById("minimapModal");
+        const minimapCanvasEl = document.getElementById("minimapCanvas");
+        let minimapCloseBtn = document.getElementById("minimapClose");
+        const minimapRenderer = minimapCanvasEl
+          ? new CanvasRenderer(minimapCanvasEl)
+          : null;
+        const minimapController = minimapRenderer
+          ? new RenderController(minimapRenderer)
+          : null;
 
         const simState = {
           timeout: null,
@@ -3852,18 +3859,15 @@
           if (!mapState.grid || !mapState.grid.length) return;
           if (!player || !player.pos) return;
           renderScene();
-          if (minimapModalEl && minimapModalEl.style.display === "flex") {
-            renderMinimapDynamic();
+          if (isMinimapOpen()) {
+            configureMinimapRenderer();
+            renderMinimapScene();
           }
         }
         function handleResize() {
           if (!mapState.grid || !mapState.grid.length) return;
           updateResponsiveLayout(true);
-          if (isMinimapOpen()) {
-            minimapBase = null;
-            prepareMinimapCanvasBackingStore();
-            renderMinimapDynamic();
-          }
+          handleMinimapResize();
         }
         // --- UI & RENDER FUNCTIONS ---
         function setupDOM() {
@@ -4845,6 +4849,10 @@
             rendererReady = true;
           }
 
+          if (minimapController) {
+            configureMinimapRenderer(true);
+          }
+
           setupDOM();
 
           player.pos = startPos;
@@ -4880,7 +4888,10 @@
 
           simState.isReady = false;
           resetSimulationStateForInit();
-          minimapBase = null;
+          minimapState.initialized = false;
+          minimapState.tilesW = 0;
+          minimapState.tilesH = 0;
+          minimapState.view = null;
           mobManager = new MobManager();
           player = setupPlayer();
           rendererReady = false;
@@ -4915,38 +4926,158 @@
           startNewSimulation();
         }
         // ===================== MINIMAP =====================
-        let minimapBase = null; // offscreen static layer (map tiles)
-        let minimapScale = 1; // pixels per tile inside the minimap canvas
-        let minimapPadding = CONFIG.minimap.padding; // visual padding around map in tiles
-
-        const MINIMAP_COLORS = CONFIG.minimap.colors;
+        const MINIMAP_CFG = CONFIG.minimap || {};
+        const MINIMAP_COLORS = MINIMAP_CFG.colors || {};
+        const minimapState = {
+          padding:
+            typeof MINIMAP_CFG.padding === "number" ? MINIMAP_CFG.padding : 0,
+          initialized: false,
+          tilesW: 0,
+          tilesH: 0,
+          cellSize: 4,
+          view: null,
+        };
+        let minimapDomInitialized = false;
 
         function initMinimapDOM() {
-          minimapModalEl = document.getElementById("minimapModal");
-          minimapCanvas = document.getElementById("minimapCanvas");
-          minimapCtx = minimapCanvas.getContext("2d");
-          minimapCloseBtn = document.getElementById("minimapClose");
+          if (minimapDomInitialized) return;
+          minimapModalEl = minimapModalEl || document.getElementById("minimapModal");
+          minimapCloseBtn = minimapCloseBtn || document.getElementById("minimapClose");
+          if (!minimapModalEl || !minimapCloseBtn) return;
 
           minimapCloseBtn.addEventListener("click", closeMinimap);
           document.addEventListener("keydown", (e) => {
             if (e.key === "m" || e.key === "M") toggleMinimap();
             if (e.key === "Escape" && isMinimapOpen()) closeMinimap();
           });
+
+          minimapDomInitialized = true;
         }
 
         function isMinimapOpen() {
           return minimapModalEl && minimapModalEl.style.display === "flex";
         }
 
-        function openMinimap() {
-          if (!minimapModalEl) initMinimapDOM();
-          minimapModalEl.style.display = "flex"; // make it visible first
+        function determineMinimapCellSize(longestSideTiles) {
+          const safeLongest = Math.max(1, longestSideTiles);
+          const maxPixels = Math.floor(
+            Math.min(window.innerWidth, window.innerHeight) * 0.9,
+          );
+          const tentative = Math.floor(maxPixels / safeLongest);
+          if (!Number.isFinite(tentative) || tentative <= 0) return 4;
+          return Math.max(2, tentative);
+        }
 
-          // Defer canvas work until the browser has computed the new layout for the modal.
-          // This prevents reading stale dimensions before the CSS `display:flex` is applied.
+        function configureMinimapRenderer(forceInit = false) {
+          if (!minimapController) return;
+          if (!mapState.width || !mapState.height) return;
+
+          const pad = minimapState.padding;
+          const widthTiles = mapState.width + pad * 2;
+          const heightTiles = mapState.height + pad * 2;
+          if (widthTiles <= 0 || heightTiles <= 0) return;
+
+          const cellSize = determineMinimapCellSize(
+            Math.max(widthTiles, heightTiles),
+          );
+          const needsInit = forceInit || !minimapState.initialized;
+          const dimsChanged =
+            widthTiles !== minimapState.tilesW ||
+            heightTiles !== minimapState.tilesH ||
+            cellSize !== minimapState.cellSize;
+
+          if (needsInit) {
+            minimapController.init(widthTiles, heightTiles, cellSize);
+            minimapState.initialized = true;
+          } else if (dimsChanged) {
+            minimapController.resize(widthTiles, heightTiles, cellSize);
+          }
+
+          minimapState.tilesW = widthTiles;
+          minimapState.tilesH = heightTiles;
+          minimapState.cellSize = cellSize;
+          minimapState.view = {
+            tx: 0,
+            ty: 0,
+            cellSize,
+            viewW: widthTiles * cellSize,
+            viewH: heightTiles * cellSize,
+          };
+        }
+
+        function getPlayerPos() {
+          if (!player) return { x: 0, y: 0 };
+          if (typeof player.x === "number" && typeof player.y === "number") {
+            return { x: player.x, y: player.y };
+          }
+          if (
+            player.pos &&
+            typeof player.pos.x === "number" &&
+            typeof player.pos.y === "number"
+          ) {
+            return { x: player.pos.x, y: player.pos.y };
+          }
+          return { x: 0, y: 0 };
+        }
+
+        function computeMinimapViewportRect(playerPos) {
+          if (!mapState.width || !mapState.height) return null;
+          const { tx, ty } = calculateViewportTransform(playerPos);
+          const rawViewportX = Math.round(-tx / CELL_SIZE);
+          const rawViewportY = Math.round(-ty / CELL_SIZE);
+          const maxViewportX = Math.max(0, mapState.width - VIEW_W);
+          const maxViewportY = Math.max(0, mapState.height - VIEW_H);
+          const viewportTopLeftX = clamp(rawViewportX, 0, maxViewportX);
+          const viewportTopLeftY = clamp(rawViewportY, 0, maxViewportY);
+
+          return {
+            x: minimapState.padding + viewportTopLeftX,
+            y: minimapState.padding + viewportTopLeftY,
+            w: Math.min(VIEW_W, mapState.width),
+            h: Math.min(VIEW_H, mapState.height),
+          };
+        }
+
+        function renderMinimapScene() {
+          if (!minimapController) return;
+          if (!minimapState.initialized) {
+            configureMinimapRenderer(true);
+            if (!minimapState.initialized) return;
+          }
+          if (!mapState.grid || !mapState.grid.length) return;
+
+          const playerPos = getPlayerPos();
+          const viewportRect = computeMinimapViewportRect(playerPos);
+          if (!viewportRect) return;
+
+          const view = minimapState.view || {
+            tx: 0,
+            ty: 0,
+            cellSize: minimapState.cellSize,
+            viewW: minimapState.tilesW * minimapState.cellSize,
+            viewH: minimapState.tilesH * minimapState.cellSize,
+          };
+
+          minimapController.renderMinimap(
+            {
+              map: { grid: mapState.grid, explored: mapState.explored },
+              player: playerPos,
+              padding: minimapState.padding,
+              colors: MINIMAP_COLORS,
+            },
+            view,
+            { viewportRect },
+          );
+        }
+
+        function openMinimap() {
+          if (!minimapController) return;
+          initMinimapDOM();
+          if (!minimapModalEl) return;
+          minimapModalEl.style.display = "flex";
           requestAnimationFrame(() => {
-            prepareMinimapCanvasBackingStore(); // Sets canvas resolution from CSS size
-            renderMinimapDynamic(); // Renders map (and builds base texture if needed)
+            configureMinimapRenderer();
+            renderMinimapScene();
           });
         }
 
@@ -4961,177 +5092,23 @@
         }
 
         function handleMinimapResize() {
-          if (!isMinimapOpen()) return;
-          prepareMinimapCanvasBackingStore();
-          minimapBase = null;
-          renderMinimapDynamic();
+          if (!minimapController) return;
+          if (!mapState.width || !mapState.height) return;
+          configureMinimapRenderer();
+          if (isMinimapOpen()) {
+            renderMinimapScene();
+          }
         }
 
         window.addEventListener("resize", () => {
-          if (!minimapModalEl) return;
+          if (!minimapController) return;
           handleMinimapResize();
         });
 
-        function getPlayerPos() {
-          // Accept either player.x/y or player.pos.x/y
-          if (!player) return { x: 0, y: 0 };
-          if (typeof player.x === "number" && typeof player.y === "number")
-            return { x: player.x, y: player.y };
-          if (
-            player.pos &&
-            typeof player.pos.x === "number" &&
-            typeof player.pos.y === "number"
-          )
-            return { x: player.pos.x, y: player.pos.y };
-          return { x: 0, y: 0 };
-        }
-
-        function prepareMinimapCanvasBackingStore() {
-          // Use visible box size when the modal is open
-          const rect = minimapCanvas.getBoundingClientRect();
-          const dpr = window.devicePixelRatio || 1;
-
-          // Fallback if somehow still zero (should not happen after display:flex)
-          const cssW =
-            rect.width > 0
-              ? rect.width
-              : minimapCanvas.width || MINIMAP_DEFAULT_DIMENSION;
-          const cssH =
-            rect.height > 0
-              ? rect.height
-              : minimapCanvas.height || MINIMAP_DEFAULT_DIMENSION;
-
-          minimapCanvas.width = Math.max(1, Math.round(cssW * dpr));
-          minimapCanvas.height = Math.max(1, Math.round(cssH * dpr));
-        }
-
-        function buildMinimapBase() {
-          if (!mapState.grid || !mapState.grid.length) return;
-
-          const pad = minimapPadding;
-          const tilesW = mapState.width + pad * 2;
-          const tilesH = mapState.height + pad * 2;
-
-          // Use current canvas backing size (already set by prepareMinimapCanvasBackingStore on open)
-          const targetW = minimapCanvas.width || MINIMAP_DEFAULT_DIMENSION;
-          const targetH = minimapCanvas.height || MINIMAP_DEFAULT_DIMENSION;
-
-          minimapScale = Math.max(
-            1,
-            Math.floor(Math.min(targetW / tilesW, targetH / tilesH)),
-          );
-
-          // Offscreen base
-          minimapBase = document.createElement("canvas");
-          minimapBase.width = tilesW * minimapScale;
-          minimapBase.height = tilesH * minimapScale;
-          const ctx = minimapBase.getContext("2d");
-
-          // Background (floors)
-          ctx.fillStyle = MINIMAP_COLORS.floor;
-          ctx.fillRect(0, 0, minimapBase.width, minimapBase.height);
-
-          const ox = pad * minimapScale;
-          const oy = pad * minimapScale;
-
-          // Walls
-          ctx.fillStyle = MINIMAP_COLORS.wall;
-          for (let y = 0; y < mapState.height; y++) {
-            for (let x = 0; x < mapState.width; x++) {
-              if (mapState.grid[y][x] === TILE_WALL) {
-                ctx.fillRect(
-                  ox + x * minimapScale,
-                  oy + y * minimapScale,
-                  minimapScale,
-                  minimapScale,
-                );
-              }
-            }
-          }
-
-          // Optional border to make the map bounds obvious
-          ctx.strokeStyle = MINIMAP_COLORS.border;
-          ctx.lineWidth = Math.max(1, Math.floor(minimapScale / 2));
-          ctx.strokeRect(
-            ox,
-            oy,
-            mapState.width * minimapScale,
-            mapState.height * minimapScale,
-          );
-        }
-
-        /**
-         * Draw dynamic overlay each time the minimap is shown or on demand:
-         * - base layer (blit the offscreen)
-         * - viewport rectangle
-         * - player dot
-         */
-        function renderMinimapDynamic() {
-          if (!minimapBase) buildMinimapBase();
-          const ctx = minimapCtx;
-
-          // Clear and blit base at 1:1 into the visible canvas, centered
-          ctx.clearRect(0, 0, minimapCanvas.width, minimapCanvas.height);
-
-          // Compute draw position to center the base within canvas
-          const dx = Math.floor((minimapCanvas.width - minimapBase.width) / 2);
-          const dy = Math.floor(
-            (minimapCanvas.height - minimapBase.height) / 2,
-          );
-
-          ctx.drawImage(minimapBase, dx, dy);
-
-          // --- START: ACCURATE VIEWPORT CALCULATION (FIXED) ---
-          // This logic mirrors the main view-transform calculation to find the exact
-          // top-left corner of the visible area in map coordinates.
-          const playerPos = getPlayerPos();
-          const { tx: canvasTranslateX, ty: canvasTranslateY } =
-            calculateViewportTransform(playerPos);
-
-          const rawViewportX = Math.round(-canvasTranslateX / CELL_SIZE);
-          const rawViewportY = Math.round(-canvasTranslateY / CELL_SIZE);
-          const maxViewportX = Math.max(0, mapState.width - VIEW_W);
-          const maxViewportY = Math.max(0, mapState.height - VIEW_H);
-          const viewportTopLeftX_map = Math.min(
-            Math.max(0, rawViewportX),
-            maxViewportX,
-          );
-          const viewportTopLeftY_map = Math.min(
-            Math.max(0, rawViewportY),
-            maxViewportY,
-          );
-
-          const viewportTilesWide = Math.min(VIEW_W, mapState.width);
-          const viewportTilesHigh = Math.min(VIEW_H, mapState.height);
-
-          // Overlay: viewport rectangle
-          const pad = minimapPadding;
-          const px0 = dx + (pad + viewportTopLeftX_map) * minimapScale;
-          const py0 = dy + (pad + viewportTopLeftY_map) * minimapScale;
-          // --- END: ACCURATE VIEWPORT CALCULATION ---
-
-          const pw = viewportTilesWide * minimapScale;
-          const ph = viewportTilesHigh * minimapScale;
-
-          ctx.lineWidth = Math.max(1, Math.floor(minimapScale / 2));
-          ctx.strokeStyle = MINIMAP_COLORS.viewport;
-          ctx.strokeRect(px0, py0, pw, ph);
-
-          // Overlay: player
-          const p = getPlayerPos();
-          const cx = dx + (pad + p.x + 0.5) * minimapScale;
-          const cy = dy + (pad + p.y + 0.5) * minimapScale;
-          const r = Math.max(2, Math.floor(minimapScale / 1.5));
-
-          ctx.fillStyle = MINIMAP_COLORS.player;
-          ctx.beginPath();
-          ctx.arc(cx, cy, r, 0, Math.PI * 2);
-          ctx.fill();
-        }
-
-        // Optional: call this after each player move to keep an open minimap fresh
         function minimapMaybeRefreshOnTick() {
-          if (isMinimapOpen()) renderMinimapDynamic();
+          if (isMinimapOpen()) {
+            renderMinimapScene();
+          }
         }
 
         // ===================== END MINIMAP =====================

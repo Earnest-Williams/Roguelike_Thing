@@ -164,3 +164,86 @@ export function buildMainViewBatch({
 
   return batch;
 }
+
+/**
+ * Build tile visuals and palette information for the minimap surface.
+ * @param {Object} params
+ * @param {number[][]} params.grid
+ * @param {boolean[][]} params.explored
+ * @param {{ x: number, y: number }} params.player
+ * @param {number} [params.padding]
+ * @param {Record<string, string>} params.colors
+ * @returns {{ tiles: TileVisual[], width: number, height: number, padding: number, colors: { viewport?: RGBA, border?: RGBA } }}
+ */
+export function buildMinimapPresentation({
+  grid,
+  explored,
+  player,
+  padding = 0,
+  colors = {},
+}) {
+  const pad = Math.max(0, Math.floor(padding));
+  const width = grid[0]?.length || 0;
+  const height = grid.length || 0;
+  const totalW = width + pad * 2;
+  const totalH = height + pad * 2;
+
+  const baseFloor = colors.floor ? toRgba(colors.floor) : toRgba("#111111");
+  const exploredFloor = colors.floorExplored
+    ? toRgba(colors.floorExplored)
+    : baseFloor;
+  const wallColor = colors.wall ? toRgba(colors.wall) : toRgba("#333333");
+  const playerColor = colors.player
+    ? toRgba(colors.player)
+    : toRgba("#ffffff");
+  const viewportColor = colors.viewport
+    ? toRgba(colors.viewport)
+    : undefined;
+  const borderColor = colors.border ? toRgba(colors.border) : undefined;
+
+  /** @type {TileVisual[]} */
+  const tiles = [];
+
+  if (totalW <= 0 || totalH <= 0) {
+    return { tiles, width: 0, height: 0, padding: pad, colors: {} };
+  }
+
+  for (let y = 0; y < totalH; y++) {
+    for (let x = 0; x < totalW; x++) {
+      tiles.push({ x, y, kind: "floor", bg: baseFloor });
+    }
+  }
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const tileValue = grid[y][x];
+      const tx = x + pad;
+      const ty = y + pad;
+      if (tileValue === TILE_WALL) {
+        tiles.push({ x: tx, y: ty, kind: "wall", bg: wallColor });
+      } else if (explored?.[y]?.[x] && exploredFloor !== baseFloor) {
+        tiles.push({ x: tx, y: ty, kind: "floor", bg: exploredFloor });
+      }
+    }
+  }
+
+  if (player && typeof player.x === "number" && typeof player.y === "number") {
+    tiles.push({
+      x: pad + player.x,
+      y: pad + player.y,
+      kind: "player",
+      bg: playerColor,
+    });
+  }
+
+  return {
+    tiles,
+    width: totalW,
+    height: totalH,
+    padding: pad,
+    colors: {
+      viewport: viewportColor,
+      border: borderColor,
+    },
+  };
+}

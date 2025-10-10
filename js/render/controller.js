@@ -1,6 +1,6 @@
 // @ts-check
 
-import { buildMainViewBatch } from "./presenters.js";
+import { buildMainViewBatch, buildMinimapPresentation } from "./presenters.js";
 
 /**
  * @typedef {import("./types.js").ViewTransform} ViewTransform
@@ -65,5 +65,32 @@ export class RenderController {
    */
   resize(mapW, mapH, cellSize) {
     this.renderer.resize(mapW, mapH, cellSize);
+  }
+
+  /**
+   * Render the minimap using the configured renderer implementation.
+   * @param {Object} state
+   * @param {{ grid: number[][], explored: boolean[][] }} state.map
+   * @param {{ x: number, y: number }} state.player
+   * @param {number} [state.padding]
+   * @param {Record<string, string>} [state.colors]
+   * @param {ViewTransform} view
+   * @param {{ viewportRect?: import("./types.js").RendererViewportRect }} [options]
+   */
+  renderMinimap(state, view, options) {
+    this.renderer.setViewTransform(view);
+    const presentation = buildMinimapPresentation({
+      grid: state.map.grid,
+      explored: state.map.explored,
+      player: state.player,
+      padding: state.padding ?? 0,
+      colors: state.colors ?? {},
+    });
+    this.renderer.clear();
+    this.renderer.drawMinimap(presentation.tiles, {
+      viewportRect: options?.viewportRect,
+      padding: presentation.padding,
+      colors: presentation.colors,
+    });
   }
 }
