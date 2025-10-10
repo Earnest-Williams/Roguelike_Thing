@@ -336,6 +336,7 @@
         chebyshevDistance,
         hasLineOfSight,
       } from "./js/utils.js";
+
       import {
         Item,
         ItemStack,
@@ -346,6 +347,10 @@
         getAttackModesForItem,
         getThrowProfileForItem,
       } from "./js/item-system.js";
+
+      // Temporary alias so existing calls to clamp01(...) in this file keep working.
+      // Remove this alias after migrating call sites to clamp01Normalized(...).
+      const clamp01 = clamp01Normalized;
       const CONFIG = {
         visual: {
           view: { width: 41, height: 41 },
