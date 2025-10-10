@@ -130,28 +130,11 @@ function doResolveAttack(rawCtx = {}) {
   };
 }
 
-export function resolveAttack(attackerOrCtx, maybeDefender, maybeCtx) {
-  const singleArg = arguments.length === 1;
-  const looksLikeCtx =
-    singleArg &&
-    attackerOrCtx &&
-    typeof attackerOrCtx === "object" &&
-    ("attacker" in attackerOrCtx ||
-      "defender" in attackerOrCtx ||
-      "S" in attackerOrCtx ||
-      "D" in attackerOrCtx ||
-      "basePhysical" in attackerOrCtx ||
-      "bonusPhysical" in attackerOrCtx ||
-      "conversions" in attackerOrCtx ||
-      "brands" in attackerOrCtx);
+export function resolveAttackFromContext(ctx) {
+  return doResolveAttack(ctx);
+}
 
-  if (looksLikeCtx) {
-    return doResolveAttack(attackerOrCtx);
-  }
-
-  const attacker = attackerOrCtx;
-  const defender = maybeDefender;
-  const ctx = maybeCtx || {};
+export function resolveAttackLegacy(attacker, defender, ctx = {}) {
   const profile = ctx.profile || {};
 
   const baseResult = doResolveAttack({
@@ -172,3 +155,5 @@ export function resolveAttack(attackerOrCtx, maybeDefender, maybeCtx) {
     breakdown: [],
   };
 }
+
+export const resolveAttack = resolveAttackFromContext;

@@ -1,7 +1,7 @@
 // src/game/combat-glue.js
 // @ts-check
 import { getAttackModesForItem } from "../../js/item-system.js";
-import { resolveAttack } from "../combat/attack.js";
+import { resolveAttackLegacy } from "../combat/attack.js";
 import { EVENT, emit } from "../ui/event-log.js";
 
 /**
@@ -81,7 +81,7 @@ export function performEquippedAttack(attacker, defender, weaponItem, distTiles,
   if (!mode) return { ok: false, reason: "no_mode" };
 
   const profile = buildAttackProfileFromMode(attacker, mode);
-  const outcome = resolveAttack(attacker, defender, { profile });
+  const outcome = resolveAttackLegacy(attacker, defender, { profile });
 
   // apply damage
   const before = defender.res.hp;

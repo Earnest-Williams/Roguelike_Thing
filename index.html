@@ -348,7 +348,7 @@
       } from "./js/item-system.js";
       import { CanvasRenderer } from "./js/render/canvas-renderer.js";
       import { RenderController } from "./js/render/controller.js";
-      import { resolveAttack } from "./src/combat/attack.js";
+      import { resolveAttackFromContext } from "./src/combat/attack.js";
 
       const CONFIG = {
         visual: {
@@ -824,7 +824,7 @@
       window.StatusRegistry = StatusRegistry;
       window.getStatus = getStatus;
       window.applyStatuses = applyStatuses;
-      window.resolveAttack = resolveAttack;
+      window.resolveAttack = resolveAttackFromContext;
 
       registerStatus({
         id: "burn",
@@ -1805,7 +1805,7 @@
           target,
           onTargetDefeated,
         }) {
-          const attackResult = resolveAttack(attackCtx);
+          const attackResult = resolveAttackFromContext(attackCtx);
           evaluation.roll = baseRoll;
           evaluation.damageApplied = attackResult.totalDamage;
           evaluation.packetsBeforeDefense =
