@@ -278,10 +278,13 @@ export function updateResources(actor) {
     }
   }
 
+  if (!actor.base) {
+    throw new Error("actor.base is undefined in updateResources; cannot determine resource maximums.");
+  }
   const maxMap = {
-    hp: actor.base?.maxHP ?? Infinity,
-    stamina: actor.base?.maxStamina ?? Infinity,
-    mana: actor.base?.maxMana ?? Infinity,
+    hp: actor.base.maxHP,
+    stamina: actor.base.maxStamina,
+    mana: actor.base.maxMana,
   };
 
   for (const key of RESOURCE_KEYS) {
