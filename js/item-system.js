@@ -400,9 +400,15 @@ export class Item {
     const cloned = new Item(copy);
 
     if (Array.isArray(this.contents)) {
-      cloned.contents = this.contents.map((entry) =>
-        entry instanceof ItemStack ? entry.clone() : entry,
-      );
+      cloned.contents = this.contents.map((entry) => {
+        if (entry instanceof ItemStack) {
+          return entry.clone();
+        }
+        if (entry instanceof Item) {
+          return entry.clone();
+        }
+        return entry;
+      });
     }
 
     return cloned;
