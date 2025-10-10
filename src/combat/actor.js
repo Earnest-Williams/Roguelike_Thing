@@ -185,7 +185,7 @@ export class Actor {
 
   totalCooldownMult() {
     const pct = this.statusDerived?.actionSpeedPct ?? 0;
-    return Math.max(MIN_TOTAL_COOLDOWN_MULTIPLIER, 1 + pct);
+    return Math.max(MIN_TOTAL_COOLDOWN_MULTIPLIER, 1 + pct / 100);
   }
 
   /**
