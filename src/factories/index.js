@@ -3,7 +3,7 @@
 import { BASE_ITEMS } from "../content/items.js";
 import { MOB_TEMPLATES } from "../content/mobs.js";
 import { SLOT } from "../../constants.js";
-import { makeItem, upsertItem } from "../../js/item-system.js";
+import { makeItem, registerItem, upsertItem } from "../../item-system.js";
 import { Actor } from "../combat/actor.js";
 import { foldModsFromEquipment } from "../combat/mod-folding.js";
 
@@ -13,7 +13,16 @@ export function ensureItemsRegistered() {
   if (_registered) return;
   for (const id of Object.keys(BASE_ITEMS)) {
     const def = BASE_ITEMS[id];
-    upsertItem(def);
+    try {
+      registerItem(def);
+    } catch (err) {
+      // already registered – refresh definition
+      try {
+        upsertItem(def);
+      } catch (_) {
+        // ignore if still failing
+      }
+    }
   }
   _registered = true;
 }
@@ -48,7 +57,18 @@ export function createActorFromTemplate(tid) {
 
 /** choose a legal slot by item.equipSlots */
 function chooseSlotFor(item) {
-  const pref = [SLOT.RightHand, SLOT.LeftHand, SLOT.Cloak, SLOT.Head, SLOT.BodyArmor, SLOT.LeftRing, SLOT.RightRing, SLOT.Amulet];
-  for (const s of pref) if (item.canEquipTo?.(s)) return s;
+  const pref = [
+    SLOT.RightHand,
+    SLOT.LeftHand,
+    SLOT.Cloak,
+    SLOT.Head,
+    SLOT.BodyArmor,
+    SLOT.LeftRing,
+    SLOT.RightRing,
+    SLOT.Amulet,
+  ];
+  for (const s of pref) {
+    if (item?.canEquipTo?.(s)) return s;
+  }
   return null;
 }

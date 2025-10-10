@@ -13,7 +13,11 @@ export const BASE_ITEMS = {
     handsRequired: 1,
     dims: { l: 75, w: 5, h: 3 },
     mass: 1.2,
-    weaponProfile: { category: "melee", range: { min: 0, optimal: 1, max: 1 }, damage: { diceCount: 1, diceSides: 6, bonus: 1 } },
+    weaponProfile: {
+      category: "melee",
+      range: { min: 0, optimal: 1, max: 1 },
+      damage: { diceCount: 1, diceSides: 6, bonus: 1 },
+    },
   },
 
   // elemental exemplar
@@ -25,7 +29,11 @@ export const BASE_ITEMS = {
     handsRequired: 1,
     dims: { l: 100, w: 5, h: 3 },
     mass: 1.6,
-    weaponProfile: { category: "melee", range: { min: 0, optimal: 1, max: 1 }, damage: { diceCount: 1, diceSides: 8, bonus: 1 } },
+    weaponProfile: {
+      category: "melee",
+      range: { min: 0, optimal: 1, max: 1 },
+      damage: { diceCount: 1, diceSides: 8, bonus: 1 },
+    },
     brands: [{ id: "fire_edge", kind: "brand", type: "fire", flat: 3, pct: 0.10 }],
     affinities: { fire: 0.05 },
     resists: { fire: 0.05 },
@@ -43,10 +51,12 @@ export const BASE_ITEMS = {
     weaponProfile: {
       category: "bow",
       range: { min: 2, optimal: 7, max: 9 },
-      reloadTime: 1, aimTime: 1, volley: 1,
+      reloadTime: 1,
+      aimTime: 1,
+      volley: 1,
       ammo: { type: "arrow", itemId: "arrow_wood", consumesItem: true },
       damage: { diceCount: 1, diceSides: 6, bonus: 1 },
-      accuracy: 0.1
+      accuracy: 0.1,
     },
   },
 
@@ -56,7 +66,8 @@ export const BASE_ITEMS = {
     name: "Cloak of Winter",
     kind: "armor",
     equipSlots: [SLOT.Cloak],
-    dims: { l: 50, w: 35, h: 10 }, mass: 1.2,
+    dims: { l: 50, w: 35, h: 10 },
+    mass: 1.2,
     resists: { cold: 0.25 },
   },
 };
