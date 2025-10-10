@@ -12,7 +12,10 @@ export class DebugOverlay {
     this.logEl = this.root.querySelector(".dbg-log");
     this.statsEl = this.root.querySelector(".dbg-stats");
 
-    subscribe("*", () => this.renderLog());
+    subscribe("*", () => {
+      this.renderLog();
+      this.renderStats();
+    });
   }
 
   #createRoot() {
