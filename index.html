@@ -3159,7 +3159,7 @@
           }
         }
 
-        // Canonical circumcircle helper: returns { center, radius, contains(p) }
+        // Canonical: returns { center, radius, contains(p) }
         function calcCircumCircle(v0, v1, v2) {
           const ax = v0.x,
             ay = v0.y;
@@ -3202,6 +3202,7 @@
             contains(p) {
               const dx = p.x - center.x;
               const dy = p.y - center.y;
+              // tiny epsilon to avoid borderline FP issues
               return dx * dx + dy * dy <= radius * radius + 1e-9;
             },
           };
