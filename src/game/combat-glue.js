@@ -35,15 +35,18 @@ export function pickAttackMode(attacker, defender, weaponItem, distTiles = 1) {
   const ranged = modes.find((m) => m.kind === "ranged" && inRange(m.profile));
   if (ranged) return ranged;
 
-  // then throw
+  const melee = modes.find(
+    (m) => m.kind === "melee" && m.profile?.range && inRange(m.profile),
+  );
+
   const thr = modes.find(
     (m) => m.kind === "throw" && m.profile.allowed && inRange(m.profile),
   );
-  if (thr) return thr;
 
-  // else melee-like (min==0/1)
-  const melee = modes.find((m) => m.profile.range && inRange(m.profile));
-  return melee || modes[0];
+  if (melee && distTiles <= melee.profile.range.max) return melee;
+  if (thr && (!melee || distTiles > melee.profile.range.max)) return thr;
+
+  return melee || thr || modes[0];
 }
 
 /**

@@ -55,7 +55,12 @@ export function attachDevConsole(ctx) {
         }
         case "/fight": {
           const t = ctx.getTarget?.(); if (!t) { log("no target"); break; }
-          const mh = ctx.playerActor.equipment[SLOT.RightHand] || ctx.playerActor.equipment[SLOT.LeftHand];
+          const equip = ctx.playerActor.equipment || {};
+          const mh =
+            equip[SLOT.RightHand] ||
+            equip.RightHand ||
+            equip[SLOT.LeftHand] ||
+            equip.LeftHand;
           const item = mh?.item || mh;
           const r = performEquippedAttack(ctx.playerActor, t, item, 1);
           log(`attack: ${r.ok} dmg=${r.outcome?.total||0}`); break;
