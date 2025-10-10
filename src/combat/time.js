@@ -53,7 +53,7 @@ export function tickCooldowns(actor) {
   for (const key of Object.keys(actor.cooldowns)) {
     let remain = actor.cooldowns[key];
     remain -= COOLDOWN_PROGRESS_PER_TURN / mult;
-    actor.cooldowns[key] = Math.max(0, remain);
+    actor.cooldowns[key] = Math.max(COOLDOWN_MIN_TURNS, remain);
     if (actor.cooldowns[key] === COOLDOWN_MIN_TURNS) delete actor.cooldowns[key];
   }
 }

@@ -1,6 +1,15 @@
 // src/combat/resources.js
 // @ts-check
 
+import {
+  BASE_PASSIVE_REGEN,
+  DEFAULT_REGEN_HP_PER_TURN,
+  DEFAULT_REGEN_MANA_PER_TURN,
+  DEFAULT_REGEN_STAMINA_PER_TURN,
+  HEALTH_FLOOR,
+  RESOURCE_FLOOR,
+} from "../../constants.js";
+
 /**
  * Applies per-turn regeneration and clamps values.
  * Call after statuses tick (or before, by your chosen order—see loop below).
@@ -10,18 +19,31 @@ export function updateResources(actor) {
   if (!actor) return;
 
   // Base passive regen (customize per your game)
-  const base = { hp: 0, stamina: 1, mana: 1 };
+  const base = BASE_PASSIVE_REGEN;
 
   // Status-derived additions:
-  const add = actor.statusDerived?.regen ?? { hp: 0, stamina: 0, mana: 0 };
+  const add =
+    actor.statusDerived?.regen ?? {
+      hp: DEFAULT_REGEN_HP_PER_TURN,
+      stamina: DEFAULT_REGEN_STAMINA_PER_TURN,
+      mana: DEFAULT_REGEN_MANA_PER_TURN,
+    };
 
-  actor.res.hp = clamp(actor.res.hp + (base.hp + (add.hp ?? 0)), 0, actor.base.maxHP);
+  actor.res.hp = clamp(
+    actor.res.hp + (base.hp + (add.hp ?? 0)),
+    HEALTH_FLOOR,
+    actor.base.maxHP,
+  );
   actor.res.stamina = clamp(
     actor.res.stamina + (base.stamina + (add.stamina ?? 0)),
-    0,
+    RESOURCE_FLOOR,
     actor.base.maxStamina,
   );
-  actor.res.mana = clamp(actor.res.mana + (base.mana + (add.mana ?? 0)), 0, actor.base.maxMana);
+  actor.res.mana = clamp(
+    actor.res.mana + (base.mana + (add.mana ?? 0)),
+    RESOURCE_FLOOR,
+    actor.base.maxMana,
+  );
 }
 
 function clamp(v, lo, hi) {
@@ -33,5 +55,5 @@ function clamp(v, lo, hi) {
  * @param {import("./actor.js").Actor} actor
  */
 export function isDefeated(actor) {
-  return actor.res.hp <= 0;
+  return actor.res.hp <= HEALTH_FLOOR;
 }

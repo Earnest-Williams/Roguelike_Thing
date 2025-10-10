@@ -4,6 +4,10 @@ import {
   ALL_SLOTS_ORDER,
   BASE_DAMAGE_MULTIPLIER,
   BASE_SPEED_MULTIPLIER,
+  DEFAULT_AP_CAP,
+  DEFAULT_BASE_ACTION_AP,
+  MIN_TOTAL_ACTION_COST_MULTIPLIER,
+  MIN_TOTAL_COOLDOWN_MULTIPLIER,
   SLOT,
 } from "../../constants.js";
 import { createEmptyStatusDerived } from "./status.js";
@@ -127,9 +131,9 @@ export class Actor {
     /** @type {number} */
     this.ap = 0;
     /** @type {number} */
-    this.apCap = 100;
+    this.apCap = DEFAULT_AP_CAP;
     /** @type {number} */
-    this.baseActionAP = 100;
+    this.baseActionAP = DEFAULT_BASE_ACTION_AP;
 
     /** @type {Record<string, number>} */
     this.cooldowns = Object.create(null);
@@ -172,11 +176,14 @@ export class Actor {
    * Lower is faster (<1). Use when computing AP cost.
    */
   totalActionCostMult() {
-    return Math.max(0.05, this.modCache.speedMult * this.statusDerived.actionCostMult);
+    return Math.max(
+      MIN_TOTAL_ACTION_COST_MULTIPLIER,
+      this.modCache.speedMult * this.statusDerived.actionCostMult,
+    );
   }
 
   totalCooldownMult() {
-    return Math.max(0.05, this.statusDerived.cooldownMult);
+    return Math.max(MIN_TOTAL_COOLDOWN_MULTIPLIER, this.statusDerived.cooldownMult);
   }
 
   /**
