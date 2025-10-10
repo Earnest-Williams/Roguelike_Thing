@@ -2,6 +2,13 @@
 // @ts-check
 import { tryAttack, tryAttackEquipped, tryMove } from "./actions.js";
 import { apCost } from "./time.js";
+import {
+  BASE_MOVE_AP_COST,
+  DEFAULT_BASE_ACTION_AP,
+  DEFAULT_MELEE_RANGE_TILES,
+  SIMPLE_PLANNER_FALLBACK_BASE_COOLDOWN,
+  SIMPLE_PLANNER_FALLBACK_BASE_DAMAGE,
+} from "../../constants.js";
 
 /**
  * Simple greedy planner: attack if we can afford it, otherwise move.
@@ -9,17 +16,25 @@ import { apCost } from "./time.js";
  */
 export function simplePlanner(target) {
   return (actor) => {
-    const attackCost = apCost(actor, actor.baseActionAP ?? 100);
+    const attackCost = apCost(actor, actor.baseActionAP ?? DEFAULT_BASE_ACTION_AP);
     if (actor.ap >= attackCost) {
-      if (tryAttackEquipped(actor, target, 1)) {
+      if (tryAttackEquipped(actor, target, DEFAULT_MELEE_RANGE_TILES)) {
         return;
       }
-      if (tryAttack(actor, target, { base: 8, type: "fire", key: "swing", baseCooldown: 2, baseAP: actor.baseActionAP })) {
+      if (
+        tryAttack(actor, target, {
+          base: SIMPLE_PLANNER_FALLBACK_BASE_DAMAGE,
+          type: "fire",
+          key: "swing",
+          baseCooldown: SIMPLE_PLANNER_FALLBACK_BASE_COOLDOWN,
+          baseAP: actor.baseActionAP,
+        })
+      ) {
         return;
       }
     }
 
-    const moveCost = apCost(actor, 50);
+    const moveCost = apCost(actor, BASE_MOVE_AP_COST);
     if (actor.ap >= moveCost) {
       tryMove(actor, { dx: 1, dy: 0 });
     }

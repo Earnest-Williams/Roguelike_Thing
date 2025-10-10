@@ -47,3 +47,29 @@ export const EXHAUSTED_STAMINA_REGEN_PER_TURN = -1;
 export const HEALTH_FLOOR = 0;
 
 export { ALL_SLOTS_ORDER, DAMAGE_TYPE, SLOT } from "./js/constants.js";
+
+export const RESOURCE_FLOOR = 0;
+
+export const BASE_PASSIVE_REGEN_HP = 0;
+export const BASE_PASSIVE_REGEN_STAMINA = 1;
+export const BASE_PASSIVE_REGEN_MANA = 1;
+export const BASE_PASSIVE_REGEN = Object.freeze({
+  hp: BASE_PASSIVE_REGEN_HP,
+  stamina: BASE_PASSIVE_REGEN_STAMINA,
+  mana: BASE_PASSIVE_REGEN_MANA,
+});
+
+export const DEFAULT_AP_CAP = 100;
+export const DEFAULT_BASE_ACTION_AP = 100;
+export const MIN_TOTAL_ACTION_COST_MULTIPLIER = 0.05;
+export const MIN_TOTAL_COOLDOWN_MULTIPLIER = 0.05;
+
+export const BASE_MOVE_AP_COST = 50;
+export const DEFAULT_ATTACK_BASE_DAMAGE = 5;
+export const MIN_ATTACK_DAMAGE = 1;
+export const DEFAULT_ATTACK_BASE_COOLDOWN = 1;
+export const DEFAULT_RELOAD_TIME_TURNS = 1;
+export const DEFAULT_MELEE_RANGE_TILES = 1;
+
+export const SIMPLE_PLANNER_FALLBACK_BASE_DAMAGE = 8;
+export const SIMPLE_PLANNER_FALLBACK_BASE_COOLDOWN = 2;
