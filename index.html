@@ -2392,7 +2392,7 @@
         function computeLightOverlayVisuals() {
           const props = getLightProperties();
           const rgb = colorStringToRgb(
-            props.color || LIGHT_CONFIG.fallbackColor,
+            props.color,
             LIGHT_CONFIG.fallbackColor,
           );
           const baseA = Math.max(0, Math.min(1, LIGHT_CONFIG.baseOverlayAlpha));
