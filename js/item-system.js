@@ -779,8 +779,8 @@ const ITEM_DEFINITIONS = Object.freeze({
       name: "Quiver",
       kind: "container",
       equipSlots: [SLOT.Quiver],
-      dims: { l: 80, w: 12, h: 12 },
-      mass: 0.7,
+      dims: { l: 70, w: 15, h: 8 },
+      mass: 0.5,
       container: {
         volumeL: 8,
         maxMassKg: 5,
