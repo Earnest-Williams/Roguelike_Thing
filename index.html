@@ -348,6 +348,7 @@
       } from "./js/item-system.js";
       import { CanvasRenderer } from "./js/render/canvas-renderer.js";
       import { RenderController } from "./js/render/controller.js";
+      import { resolveAttack } from "./src/combat/attack.js";
 
       const CONFIG = {
         visual: {
@@ -785,164 +786,7 @@
         return applied;
       }
 
-      function resolveAttack(ctx) {
-        const S = ctx.attacker ?? ctx.S;
-        const D = ctx.defender ?? ctx.D;
-        const turn = ctx.turn | 0;
-
-        const packetsBeforeDefense = Object.create(null);
-        const addPacket = (type, amount) => {
-          if (!type) return;
-          const value = Math.floor(amount ?? 0);
-          if (!Number.isFinite(value) || value <= 0) return;
-          packetsBeforeDefense[type] =
-            (packetsBeforeDefense[type] || 0) + value;
-        };
-
-        const basePhysicalDescriptor = ctx.basePhysical;
-        let basePhysicalPool = 0;
-        let bonusPhysicalPool = Math.max(0, Math.floor(ctx.bonusPhysical ?? 0));
-
-        if (typeof basePhysicalDescriptor === "number") {
-          basePhysicalPool = Math.max(0, Math.floor(basePhysicalDescriptor));
-        } else if (basePhysicalDescriptor && typeof basePhysicalDescriptor === "object") {
-          for (const [key, raw] of Object.entries(basePhysicalDescriptor)) {
-            const n = Math.floor(Number(raw ?? 0));
-            if (!Number.isFinite(n) || n <= 0) continue;
-            if (key === "flatFromStats") {
-              bonusPhysicalPool += n;
-            } else {
-              basePhysicalPool += n;
-            }
-          }
-        }
-
-        const gather = (value) =>
-          Array.isArray(value)
-            ? value
-            : value && typeof value === "object"
-            ? [value]
-            : [];
-
-        const conversions = [
-          ...gather(ctx.conversions),
-          ...gather(S?.modCache?.offense?.conversions),
-        ];
-        const brands = [
-          ...gather(ctx.brands),
-          ...gather(S?.modCache?.offense?.brandAdds),
-        ];
-
-        for (const conv of conversions) {
-          if (!conv) continue;
-          const pct = Number(conv.pct ?? conv.percent ?? 0);
-          if (!Number.isFinite(pct) || pct <= 0) continue;
-          const toType = conv.to || conv.type;
-          if (!toType) continue;
-          let pool = basePhysicalPool;
-          if (!conv.includeBaseOnly) {
-            pool += bonusPhysicalPool;
-          }
-          if (pool <= 0) continue;
-          let delta = Math.floor(pool * pct);
-          if (!Number.isFinite(delta) || delta <= 0) continue;
-          const baseShare = Math.min(delta, basePhysicalPool);
-          basePhysicalPool -= baseShare;
-          const bonusShare = delta - baseShare;
-          if (!conv.includeBaseOnly && bonusShare > 0) {
-            bonusPhysicalPool = Math.max(0, bonusPhysicalPool - bonusShare);
-          }
-          addPacket(toType, delta);
-        }
-
-        const remainingPhysical = basePhysicalPool + bonusPhysicalPool;
-        if (remainingPhysical > 0) {
-          addPacket("physical", remainingPhysical);
-        }
-
-        for (const brand of brands) {
-          if (!brand) continue;
-          const flat = Math.floor(Number(brand.flat ?? 0));
-          if (!Number.isFinite(flat) || flat <= 0) continue;
-          addPacket(brand.type || brand.damageType || "physical", flat);
-        }
-
-        const mulTyped = (packetMap, getMult) => {
-          for (const type in packetMap) {
-            const mult = getMult(type);
-            if (mult) {
-              const next = Math.max(
-                0,
-                Math.floor(packetMap[type] * (1 + mult)),
-              );
-              packetMap[type] = next;
-            }
-          }
-        };
-
-        mulTyped(
-          packetsBeforeDefense,
-          (t) => S?.modCache?.offense?.affinities?.[t] || 0,
-        );
-
-        const onHitBias =
-          S?.modCache?.polarity?.onHitBias?.baseMult ??
-          S?.modCache?.offense?.polarity?.onHitBias?.baseMult ??
-          0;
-        if (onHitBias) {
-          for (const type in packetsBeforeDefense) {
-            packetsBeforeDefense[type] = Math.floor(
-              packetsBeforeDefense[type] * (1 + onHitBias),
-            );
-          }
-        }
-
-        mulTyped(
-          packetsBeforeDefense,
-          (t) => S?.statusDerived?.damageDealtMult?.[t] || 0,
-        );
-        mulTyped(
-          packetsBeforeDefense,
-          (t) => D?.statusDerived?.damageTakenMult?.[t] || 0,
-        );
-
-        const packetsAfterDefense = Object.create(null);
-        for (const type in packetsBeforeDefense) {
-          if (D?.modCache?.defense?.immunities?.has?.(type)) {
-            continue;
-          }
-          const baseRes =
-            (D?.modCache?.defense?.resists?.[type] || 0) +
-            (D?.statusDerived?.resistDelta?.[type] || 0);
-          const clampedRes = Math.max(-1, Math.min(0.95, baseRes));
-          packetsAfterDefense[type] = Math.max(
-            0,
-            Math.floor(packetsBeforeDefense[type] * (1 - clampedRes)),
-          );
-        }
-
-        const totalDamage = Object.values(packetsAfterDefense).reduce(
-          (acc, value) => acc + value,
-          0,
-        );
-
-        let statusApplied = [];
-        if (ctx.statusAttempts?.length) {
-          statusApplied = applyStatuses(
-            { statusAttempts: ctx.statusAttempts },
-            S,
-            D,
-            turn,
-          );
-        }
-
-        return {
-          packetsBeforeDefense,
-          packetsAfterDefense,
-          totalDamage,
-          statusApplied,
-        };
-      }
+      globalThis.__applyStatusesImpl = applyStatuses;
 
       class RingBuffer {
         constructor(capacity = 64) {
@@ -1967,7 +1811,7 @@
           evaluation.packetsBeforeDefense =
             attackResult.packetsBeforeDefense;
           evaluation.packetsAfterDefense = attackResult.packetsAfterDefense;
-          evaluation.statusApplied = attackResult.statusApplied;
+          evaluation.statusApplied = attackResult.appliedStatuses;
           evaluation.attackResult = attackResult;
 
           const damageAfterDefense = attackResult.totalDamage ?? 0;

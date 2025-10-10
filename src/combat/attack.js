@@ -1,131 +1,174 @@
 // src/combat/attack.js
-// @ts-check
-import {
-  DAMAGE_TYPE,
-  MAX_AFFINITY_CAP,
-  MIN_AFFINITY_CAP,
-} from "../../constants.js";
+import { applyStatuses } from "./status.js";
 
-/**
- * @typedef {import("../combat/actor.js").Actor} Actor
- * @typedef {import("../../item-system.js").Item} Item
- */
+function gather(value) {
+  if (Array.isArray(value)) return value;
+  if (value && typeof value === "object") return [value];
+  return [];
+}
 
-/**
- * @typedef {Object} AttackProfile
- * @property {string} label
- * @property {number} base // base damage before brands/affinity
- * @property {string} type // DAMAGE_TYPE key e.g., "FIRE"|"PHYSICAL" (we’ll lower it)
- */
-
-/**
- * @typedef {Object} AttackContext
- * @property {AttackProfile} profile
- * @property {Item} [sourceItem]
- */
-
-/**
- * Resolve order (Phase-1 cut):
- * 1) Start with base damage by type
- * 2) Apply attacker’s brands (flat, then % for matching type)
- * 3) Apply attacker global dmgMult
- * 4) If defender immune(type) → zero
- * 5) Apply defender resist(type) multiplicatively
- * 6) Apply elemental affinity (attacker) as outgoing bonus (additive %)
- *    (If you want “polarity bias,” treat certain type pairings as +/− in this step)
- */
-export function resolveAttack(attacker, defender, ctx) {
-  const typeKey = String(ctx.profile.type || "physical").toLowerCase();
-  const breakdown = [];
-  let dmg = Math.max(0, Math.floor(Number(ctx.profile.base) || 0));
-  breakdown.push({ step: "base", value: dmg });
-
-  const brands = Array.isArray(attacker?.modCache?.brands)
-    ? attacker.modCache.brands
+function doResolveAttack(rawCtx = {}) {
+  const ctx = rawCtx || {};
+  const S = ctx.attacker ?? ctx.S ?? null;
+  const D = ctx.defender ?? ctx.D ?? null;
+  const turn = Number.isFinite(ctx.turn) ? ctx.turn : 0;
+  const basePhysical = ctx.basePhysical ?? 0;
+  const bonusPhysical = ctx.bonusPhysical ?? 0;
+  const conversions = [
+    ...gather(ctx.conversions),
+    ...gather(S?.modCache?.offense?.conversions),
+  ];
+  const brands = [
+    ...gather(ctx.brands),
+    ...gather(S?.modCache?.offense?.brandAdds),
+  ];
+  const statusAttempts = Array.isArray(ctx.statusAttempts)
+    ? ctx.statusAttempts
     : [];
+
+  const packets = Object.create(null);
+  const addPacket = (type, amount) => {
+    if (!type) return;
+    const v = Math.floor(amount ?? 0);
+    if (v > 0 && Number.isFinite(v)) packets[type] = (packets[type] || 0) + v;
+  };
+
+  let basePool = 0;
+  let bonusPool = Math.max(0, Math.floor(bonusPhysical ?? 0));
+  if (typeof basePhysical === "number") {
+    basePool = Math.max(0, Math.floor(basePhysical));
+  } else if (basePhysical && typeof basePhysical === "object") {
+    for (const [k, raw] of Object.entries(basePhysical)) {
+      const n = Math.floor(Number(raw ?? 0));
+      if (!Number.isFinite(n) || n <= 0) continue;
+      if (k === "flatFromStats") bonusPool += n;
+      else basePool += n;
+    }
+  }
+
+  for (const conv of conversions) {
+    if (!conv) continue;
+    const pct = Number(conv.pct ?? conv.percent ?? 0);
+    if (!Number.isFinite(pct) || pct <= 0) continue;
+    const toType = conv.to || conv.type;
+    if (!toType) continue;
+
+    let pool = basePool;
+    if (!conv.includeBaseOnly) pool += bonusPool;
+    if (pool <= 0) continue;
+
+    let delta = Math.floor(pool * pct);
+    if (!Number.isFinite(delta) || delta <= 0) continue;
+
+    const baseShare = Math.min(delta, basePool);
+    basePool -= baseShare;
+    const bonusShare = delta - baseShare;
+    if (!conv.includeBaseOnly && bonusShare > 0) {
+      bonusPool = Math.max(0, bonusPool - bonusShare);
+    }
+    addPacket(toType, delta);
+  }
+
+  const remainingPhysical = basePool + bonusPool;
+  if (remainingPhysical > 0) addPacket("physical", remainingPhysical);
+
   for (const b of brands) {
-    if (!b || !b.type || b.type.toLowerCase() !== typeKey) continue;
-    if (Number.isFinite(b.flat)) {
-      dmg += b.flat;
-      breakdown.push({
-        step: "brand_flat",
-        source: b.id || b.type,
-        delta: b.flat,
-        value: dmg,
-      });
+    if (!b) continue;
+    const flat = Math.floor(Number(b.flat ?? 0));
+    if (flat > 0) addPacket(b.type || b.damageType || "physical", flat);
+  }
+
+  const mulTyped = (packetMap, getMult) => {
+    for (const t in packetMap) {
+      const m = getMult(t);
+      if (m) packetMap[t] = Math.max(0, Math.floor(packetMap[t] * (1 + m)));
     }
-    if (Number.isFinite(b.pct)) {
-      const before = dmg;
-      dmg *= 1 + b.pct;
-      breakdown.push({
-        step: "brand_pct",
-        source: b.id || b.type,
-        pct: b.pct,
-        delta: dmg - before,
-        value: dmg,
-      });
+  };
+  mulTyped(packets, (t) => S?.modCache?.offense?.affinities?.[t] || 0);
+
+  const onHitBias =
+    S?.modCache?.polarity?.onHitBias?.baseMult ??
+    S?.modCache?.offense?.polarity?.onHitBias?.baseMult ??
+    0;
+  if (onHitBias) {
+    for (const t in packets) packets[t] = Math.floor(packets[t] * (1 + onHitBias));
+  }
+  mulTyped(packets, (t) => S?.statusDerived?.damageDealtMult?.[t] || 0);
+  mulTyped(packets, (t) => D?.statusDerived?.damageTakenMult?.[t] || 0);
+
+  const after = Object.create(null);
+  for (const t in packets) {
+    if (D?.modCache?.defense?.immunities?.has?.(t)) continue;
+    const baseRes =
+      (D?.modCache?.defense?.resists?.[t] || 0) +
+      (D?.statusDerived?.resistDelta?.[t] || 0);
+    const clamped = Math.max(-1, Math.min(0.95, baseRes));
+    after[t] = Math.max(0, Math.floor(packets[t] * (1 - clamped)));
+  }
+
+  const totalDamage = Object.values(after).reduce((a, v) => a + v, 0);
+
+  if (D) {
+    if (Number.isFinite(D.hp)) {
+      D.hp = Math.max(0, Math.floor(D.hp - totalDamage));
+    }
+    if (D.res && Number.isFinite(D.res.hp)) {
+      D.res.hp = Math.max(0, Math.floor(D.res.hp - totalDamage));
     }
   }
 
-  const dmgMult = Number.isFinite(attacker?.modCache?.dmgMult)
-    ? attacker.modCache.dmgMult
-    : 1;
-  if (dmgMult !== 1) {
-    const before = dmg;
-    dmg *= dmgMult;
-    breakdown.push({
-      step: "attacker_mult",
-      mult: dmgMult,
-      delta: dmg - before,
-      value: dmg,
-    });
+  let applied = [];
+  if (statusAttempts.length) {
+    applied = applyStatuses({ statusAttempts }, S, D, turn) || [];
   }
 
-  if (defender.isImmune(typeKey)) {
-    breakdown.push({ step: "immune", value: 0 });
-    return { total: 0, type: typeKey, note: "immune", breakdown };
-  }
-
-  const resist = clamp01(defender.resistOf(typeKey));
-  if (resist) {
-    const before = dmg;
-    dmg *= 1 - resist;
-    breakdown.push({
-      step: "defender_resist",
-      resist,
-      delta: dmg - before,
-      value: dmg,
-    });
-  }
-
-  const affinity = clampSigned(
-    attacker.affinityOf(typeKey),
-    MIN_AFFINITY_CAP,
-    MAX_AFFINITY_CAP,
-  );
-  if (affinity) {
-    const before = dmg;
-    dmg *= 1 + affinity;
-    breakdown.push({
-      step: "attacker_affinity",
-      affinity,
-      delta: dmg - before,
-      value: dmg,
-    });
-  }
-
-  const beforeFloor = dmg;
-  dmg = Math.max(0, Math.floor(dmg));
-  breakdown.push({ step: "floor", delta: dmg - beforeFloor, value: dmg });
-  breakdown.push({ step: "total", value: dmg });
-
-  return { total: dmg, type: typeKey, breakdown };
+  return {
+    packetsBeforeDefense: packets,
+    packetsAfterDefense: after,
+    totalDamage,
+    appliedStatuses: applied,
+  };
 }
 
-function clamp01(x) {
-  return Math.max(0, Math.min(1, Number(x) || 0));
-}
-function clampSigned(x, lo, hi) {
-  x = Number(x) || 0;
-  return Math.max(lo, Math.min(hi, x));
+export function resolveAttack(attackerOrCtx, maybeDefender, maybeCtx) {
+  const singleArg = arguments.length === 1;
+  const looksLikeCtx =
+    singleArg &&
+    attackerOrCtx &&
+    typeof attackerOrCtx === "object" &&
+    ("attacker" in attackerOrCtx ||
+      "defender" in attackerOrCtx ||
+      "S" in attackerOrCtx ||
+      "D" in attackerOrCtx ||
+      "basePhysical" in attackerOrCtx ||
+      "bonusPhysical" in attackerOrCtx ||
+      "conversions" in attackerOrCtx ||
+      "brands" in attackerOrCtx);
+
+  if (looksLikeCtx) {
+    return doResolveAttack(attackerOrCtx);
+  }
+
+  const attacker = attackerOrCtx;
+  const defender = maybeDefender;
+  const ctx = maybeCtx || {};
+  const profile = ctx.profile || {};
+
+  const baseResult = doResolveAttack({
+    attacker,
+    defender,
+    basePhysical: profile.base ?? 0,
+    bonusPhysical: ctx.bonusPhysical ?? 0,
+    conversions: ctx.conversions ?? [],
+    brands: ctx.brands ?? [],
+    statusAttempts: ctx.statusAttempts ?? [],
+    turn: ctx.turn ?? 0,
+  });
+
+  return {
+    ...baseResult,
+    total: baseResult.totalDamage,
+    type: String(profile.type || "physical").toLowerCase(),
+    breakdown: [],
+  };
 }
