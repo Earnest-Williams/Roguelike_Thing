@@ -64,24 +64,35 @@ export class DebugOverlay {
   renderLog() {
     if (!this.logEl) return;
     const entries = latest(60).slice().reverse();
-    this.logEl.innerHTML = entries.map((e) => renderEntry(e)).join("");
+    this.logEl.innerHTML = "";
+    for (const e of entries) {
+      this.logEl.appendChild(renderEntry(e));
+    }
   }
 }
 
 function renderEntry(e) {
+  const div = document.createElement("div");
   if (e.type === EVENT.COMBAT) {
     const p = e.payload;
-    return `<div>⚔️ ${p.who} → ${p.vs} [${p.mode}/${p.profile.type}] dmg=${p.damage} hp:${p.hpBefore}→${p.hpAfter} ${p.note || ""}</div>`;
+    div.textContent =
+      `⚔️ ${p.who} → ${p.vs} [${p.mode}/${p.profile.type}] dmg=${p.damage} hp:${p.hpBefore}→${p.hpAfter} ${p.note || ""}`;
+    return div;
   }
   if (e.type === EVENT.STATUS) {
     const p = e.payload;
-    return `<div>✴️ ${p.who}: ${p.id} ${p.action}${p.stacks ? ` x${p.stacks}` : ""}</div>`;
+    div.textContent =
+      `✴️ ${p.who}: ${p.id} ${p.action}${p.stacks ? ` x${p.stacks}` : ""}`;
+    return div;
   }
   if (e.type === EVENT.TURN) {
     const p = e.payload;
-    return `<div>⏳ ${p.who} turn ap=${p.ap} hp=${p.hp}</div>`;
+    div.textContent =
+      `⏳ ${p.who} turn ap=${p.ap} hp=${p.hp}`;
+    return div;
   }
-  return `<div>• ${e.type}</div>`;
+  div.textContent = `• ${e.type}`;
+  return div;
 }
 
 function fmtMap(obj) {
