@@ -1,6 +1,11 @@
 // src/combat/actor.js
 // @ts-check
-import { ALL_SLOTS_ORDER, SLOT } from "../../constants.js";
+import {
+  ALL_SLOTS_ORDER,
+  BASE_DAMAGE_MULTIPLIER,
+  BASE_SPEED_MULTIPLIER,
+  SLOT,
+} from "../../constants.js";
 
 /**
  * @typedef {import("../../item-system.js").Item} Item
@@ -90,8 +95,8 @@ export class Actor {
       resists: Object.create(null),
       affinities: Object.create(null),
       immunities: new Set(),
-      dmgMult: 1.0,
-      speedMult: 1.0,
+      dmgMult: BASE_DAMAGE_MULTIPLIER,
+      speedMult: BASE_SPEED_MULTIPLIER,
       brands: [],
     };
 
