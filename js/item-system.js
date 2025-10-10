@@ -771,7 +771,7 @@ const ITEM_DEFINITIONS = Object.freeze({
       container: {
         volumeL: 45,
         maxMassKg: 25,
-        maxItemLengthCm: 100,
+        maxItemLengthCm: 80,
       },
     },
     {
