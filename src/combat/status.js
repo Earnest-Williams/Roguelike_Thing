@@ -121,7 +121,11 @@ export function rebuildStatusDerived(actor) {
     }
     if (typeof derived.cooldownMult === "number" && Number.isFinite(derived.cooldownMult)) {
       const mult = derived.cooldownMult;
-      if (mult > 0) {
+      if (mult <= 0) {
+        console.warn(
+          `[Status] Invalid cooldown multiplier (${mult}) from status '${inst.id}'. Must be positive. Ignoring value.`
+        );
+      } else {
         agg.cooldownMult *= mult;
       }
     }
