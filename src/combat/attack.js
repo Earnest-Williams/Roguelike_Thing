@@ -45,7 +45,7 @@ export function resolveAttack(attacker, defender, ctx) {
     : [];
   for (const b of brands) {
     if (!b || !b.type || b.type.toLowerCase() !== typeKey) continue;
-    if (Number.isFinite(b.flat) && b.flat) {
+    if (Number.isFinite(b.flat)) {
       dmg += b.flat;
       breakdown.push({
         step: "brand_flat",
