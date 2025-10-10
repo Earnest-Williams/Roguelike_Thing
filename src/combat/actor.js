@@ -6,6 +6,7 @@ import {
   BASE_SPEED_MULTIPLIER,
   SLOT,
 } from "../../constants.js";
+import { createEmptyStatusDerived } from "./status.js";
 
 /**
  * @typedef {import("../../item-system.js").Item} Item
@@ -29,6 +30,22 @@ import {
  * @property {number} hp
  * @property {number} stamina
  * @property {number} mana
+ */
+
+/**
+ * @typedef {Object} RegenRates
+ * @property {number} hp
+ * @property {number} stamina
+ * @property {number} mana
+ */
+
+/**
+ * @typedef {Object} ChannelingState
+ * @property {string} [statusId]
+ * @property {boolean} [breakOnMove]
+ * @property {boolean} [moved]
+ * @property {(actor: any) => void} [onBreak]
+ * @property {number} [turn]
  */
 
 /**
@@ -90,6 +107,9 @@ export class Actor {
     /** @type {StatusInstance[]} */
     this.statuses = [];
 
+    /** @type {import("./status.js").StatusDerived} */
+    this.statusDerived = createEmptyStatusDerived();
+
     /** @type {ModCache} */
     this.modCache = {
       resists: Object.create(null),
@@ -106,6 +126,12 @@ export class Actor {
       stamina: this.base.maxStamina,
       mana: this.base.maxMana,
     };
+
+    /** @type {RegenRates} */
+    this.regen = { hp: 0, stamina: 0, mana: 0 };
+
+    /** @type {ChannelingState|null} */
+    this.channeling = null;
   }
 
   /**
