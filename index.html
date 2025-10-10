@@ -3160,40 +3160,48 @@
         }
 
         function calcCircumCircle(v0, v1, v2) {
-          const ax = v0.x,
-            ay = v0.y;
-          const bx = v1.x,
-            by = v1.y;
-          const cx = v2.x,
-            cy = v2.y;
+          const ax = v0.x;
+          const ay = v0.y;
+          const bx = v1.x;
+          const by = v1.y;
+          const cx = v2.x;
+          const cy = v2.y;
+
           const d = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by));
-          if (d === 0)
+          if (d === 0) {
+            const center = { x: Infinity, y: Infinity };
+            const radius = Infinity;
             return {
-              center: { x: 0, y: 0 },
-              radius: Infinity,
+              center,
+              radius,
               contains() {
-                return true;
+                return false;
               },
-            }; // collinear
+            };
+          }
+
           const ux =
             ((ax * ax + ay * ay) * (by - cy) +
               (bx * bx + by * by) * (cy - ay) +
               (cx * cx + cy * cy) * (ay - by)) /
             d;
+
           const uy =
             ((ax * ax + ay * ay) * (cx - bx) +
               (bx * bx + by * by) * (ax - cx) +
               (cx * cx + cy * cy) * (bx - ax)) /
             d;
+
           const center = { x: ux, y: uy };
-          const radius = Math.sqrt((ax - ux) ** 2 + (ay - uy) ** 2);
+          const radius = Math.hypot(ux - ax, uy - ay);
+
           return {
             center,
             radius,
-            contains(point) {
-              const dx = center.x - point.x;
-              const dy = center.y - point.y;
-              return Math.sqrt(dx * dx + dy * dy) <= radius;
+            contains(p) {
+              const dx = p.x - center.x;
+              const dy = p.y - center.y;
+              return dx * dx + dy * dy <= radius * radius + 1e-9;
             },
           };
         }
