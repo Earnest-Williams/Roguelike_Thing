@@ -32,6 +32,7 @@ export const RANGED_WEAPON_CATEGORIES = new Set([
 ]);
 
 export const ATTACK_KIND = Object.freeze({
+  MELEE: "melee",
   RANGED: "ranged",
   THROW: "throw",
 });

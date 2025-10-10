@@ -73,8 +73,8 @@ export function buildAttackProfileFromMode(attacker, mode) {
  * @param {import("../../js/item-system.js").Item} weaponItem
  * @param {number} [distTiles]
  */
-export function performEquippedAttack(attacker, defender, weaponItem, distTiles) {
-  const mode = pickAttackMode(attacker, defender, weaponItem, distTiles);
+export function performEquippedAttack(attacker, defender, weaponItem, distTiles, preselectedMode = null) {
+  const mode = preselectedMode || pickAttackMode(attacker, defender, weaponItem, distTiles);
   if (!mode) return { ok: false, reason: "no_mode" };
 
   const profile = buildAttackProfileFromMode(attacker, mode);
@@ -95,5 +95,11 @@ export function performEquippedAttack(attacker, defender, weaponItem, distTiles)
     note: outcome.note || "",
   });
 
-  return { ok: true, outcome };
+  const now =
+    typeof performance !== "undefined" && typeof performance.now === "function"
+      ? performance.now()
+      : Date.now();
+  emit("attack_type_hint", { type: outcome.type, until: now + 250 });
+
+  return { ok: true, outcome, profile, mode };
 }

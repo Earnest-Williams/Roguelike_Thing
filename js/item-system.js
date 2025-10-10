@@ -252,10 +252,21 @@ export function getAttackModesForItem(item) {
     item.weaponProfile?.category === WEAPON_CATEGORY.THROWN;
   if (item.weaponProfile?.isRanged && !isThrownWeapon) {
     modes.push({ kind: ATTACK_KIND.RANGED, profile: item.weaponProfile });
+  } else if (item.weaponProfile && !item.weaponProfile.isRanged) {
+    modes.push({ kind: ATTACK_KIND.MELEE, profile: item.weaponProfile });
   }
   const throwProfile = buildEffectiveThrowProfile(item);
   if (throwProfile) {
     modes.push({ kind: ATTACK_KIND.THROW, profile: throwProfile });
+  }
+  if (!modes.length && item.isWeapon()) {
+    modes.push({
+      kind: ATTACK_KIND.MELEE,
+      profile: {
+        range: { min: 0, optimal: 1, max: 1 },
+        damage: normalizeDamageProfile(item.weaponProfile?.damage),
+      },
+    });
   }
   return modes;
 }

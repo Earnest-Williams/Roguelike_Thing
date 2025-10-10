@@ -5,6 +5,8 @@ import { applyStatus } from "../src/combat/status.js";
 import { runTurn } from "../src/combat/loop.js";
 import { simplePlanner } from "../src/combat/loop.sample-planner.js";
 import { foldModsFromEquipment } from "../src/combat/mod-folding.js";
+import { makeItem } from "../js/item-system.js";
+import { SLOT } from "../constants.js";
 
 function assert(cond, msg) {
   if (!cond) throw new Error(msg);
@@ -13,6 +15,7 @@ function assert(cond, msg) {
 const a = new Actor({
   id: "hero",
   baseStats: { str: 10, dex: 10, int: 8, vit: 10, maxHP: 20, maxStamina: 10, maxMana: 5, baseSpeed: 1 },
+  equipment: { [SLOT.RightHand]: makeItem("long_sword") },
 });
 a.setFoldedMods(foldModsFromEquipment(a.equipment));
 
