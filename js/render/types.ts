@@ -18,7 +18,16 @@ export interface ViewTransform {
 
 export type RendererViewportRect = { x: number; y: number; w: number; h: number };
 
-export type RendererMinimapOptions = { viewportRect?: RendererViewportRect };
+export type RendererMinimapColors = {
+  viewport?: RGBA;
+  border?: RGBA;
+};
+
+export type RendererMinimapOptions = {
+  viewportRect?: RendererViewportRect;
+  padding?: number;
+  colors?: RendererMinimapColors;
+};
 
 export interface IRenderer {
   init(widthTiles: number, heightTiles: number, cellSize: number): void;

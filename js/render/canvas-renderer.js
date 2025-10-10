@@ -94,11 +94,57 @@ export class CanvasRenderer {
   }
 
   /**
-   * @param {TileVisual[]} _batch
-   * @param {{ viewportRect?: { x: number, y: number, w: number, h: number } }} [_opts]
+   * @param {TileVisual[]} batch
+   * @param {{ viewportRect?: { x: number, y: number, w: number, h: number }, padding?: number, colors?: import("./types.js").RendererMinimapColors }} [opts]
    */
-  drawMinimap(_batch, _opts) {
-    // Placeholder: minimap rendering is handled separately today.
+  drawMinimap(batch, opts) {
+    const ctx = this.ctx;
+    const c = this.cell;
+    ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+    for (const t of batch) {
+      const px = t.x * c;
+      const py = t.y * c;
+      if (t.bg && t.kind !== "player") {
+        ctx.fillStyle = rgbaToString(t.bg);
+        ctx.fillRect(px, py, c, c);
+      }
+
+      if (t.kind === "player") {
+        const radius = Math.max(2, Math.floor(c * 0.4));
+        const fill = t.bg ? rgbaToString(t.bg) : "#fff";
+        ctx.fillStyle = fill;
+        ctx.beginPath();
+        ctx.arc(px + c / 2, py + c / 2, radius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    const padding = typeof opts?.padding === "number" ? Math.max(0, Math.floor(opts.padding)) : 0;
+    const colors = opts?.colors || {};
+
+    if (colors.border && this.width > padding * 2 && this.height > padding * 2) {
+      const borderX = padding * c;
+      const borderY = padding * c;
+      const borderW = (this.width - padding * 2) * c;
+      const borderH = (this.height - padding * 2) * c;
+      if (borderW > 0 && borderH > 0) {
+        ctx.strokeStyle = rgbaToString(colors.border);
+        ctx.lineWidth = Math.max(1, Math.floor(c / 2));
+        ctx.strokeRect(borderX + 0.5, borderY + 0.5, Math.max(0, borderW - 1), Math.max(0, borderH - 1));
+      }
+    }
+
+    if (opts?.viewportRect && colors.viewport) {
+      const { x, y, w, h } = opts.viewportRect;
+      const px = x * c;
+      const py = y * c;
+      const pw = w * c;
+      const ph = h * c;
+      ctx.strokeStyle = rgbaToString(colors.viewport);
+      ctx.lineWidth = Math.max(1, Math.floor(c / 2));
+      ctx.strokeRect(px + 0.5, py + 0.5, Math.max(0, pw - 1), Math.max(0, ph - 1));
+    }
   }
 
   /**

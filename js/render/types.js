@@ -32,8 +32,16 @@
  */
 
 /**
+ * @typedef {Object} RendererMinimapColors
+ * @property {RGBA} [viewport]
+ * @property {RGBA} [border]
+ */
+
+/**
  * @typedef {Object} RendererMinimapOptions
  * @property {RendererViewportRect} [viewportRect]
+ * @property {number} [padding]
+ * @property {RendererMinimapColors} [colors]
  */
 
 /**
