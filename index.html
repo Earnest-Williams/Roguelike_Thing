@@ -3159,13 +3159,14 @@
           }
         }
 
+        // Canonical circumcircle helper: returns { center, radius, contains(p) }
         function calcCircumCircle(v0, v1, v2) {
-          const ax = v0.x;
-          const ay = v0.y;
-          const bx = v1.x;
-          const by = v1.y;
-          const cx = v2.x;
-          const cy = v2.y;
+          const ax = v0.x,
+            ay = v0.y;
+          const bx = v1.x,
+            by = v1.y;
+          const cx = v2.x,
+            cy = v2.y;
 
           const d = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by));
           if (d === 0) {
