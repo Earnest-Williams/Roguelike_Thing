@@ -599,7 +599,7 @@ const ITEM_DEFINITIONS = Object.freeze({
       handsRequired: 1,
       stackable: true,
       maxStack: 6,
-      dims: { l: 180, w: 4, h: 4 },
+      dims: { l: 150, w: 5, h: 5 },
       mass: 1.0,
       throwProfile: {
         range: { min: 1, optimal: 5, max: 8 },
