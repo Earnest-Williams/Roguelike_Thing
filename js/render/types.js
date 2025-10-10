@@ -23,4 +23,27 @@
  * @property {number} viewH
  */
 
+/**
+ * @typedef {Object} RendererViewportRect
+ * @property {number} x
+ * @property {number} y
+ * @property {number} w
+ * @property {number} h
+ */
+
+/**
+ * @typedef {Object} RendererMinimapOptions
+ * @property {RendererViewportRect} [viewportRect]
+ */
+
+/**
+ * @typedef {Object} IRenderer
+ * @property {(widthTiles: number, heightTiles: number, cellSize: number) => void} init
+ * @property {(view: ViewTransform) => void} setViewTransform
+ * @property {(batch: TileVisual[]) => void} drawTiles
+ * @property {(batch: TileVisual[], opts?: RendererMinimapOptions) => void} drawMinimap
+ * @property {() => void} clear
+ * @property {(widthTiles: number, heightTiles: number, cellSize: number) => void} resize
+ */
+
 export {};

@@ -10,7 +10,10 @@ export class NullRenderer {
   clear() {}
   /** @param {TileVisual[]} _batch */
   drawTiles(_batch) {}
-  /** @param {TileVisual[]} _batch */
-  drawMinimap(_batch) {}
+  /**
+   * @param {TileVisual[]} _batch
+   * @param {{ viewportRect?: { x: number, y: number, w: number, h: number } }} [_opts]
+   */
+  drawMinimap(_batch, _opts) {}
   resize() {}
 }
