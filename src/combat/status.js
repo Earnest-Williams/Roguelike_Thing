@@ -8,6 +8,7 @@ import {
   HASTE_MAX_STACKS,
   STATUS_TICK_DELTA_TURNS,
 } from "../../constants.js";
+import { EVENT, emit } from "../ui/event-log.js";
 
 /**
  * @typedef {Object} StatusDerived
@@ -117,6 +118,12 @@ export function applyStatus(
       e.remaining = durationTurns;
       def.onApply?.(actor, e);
       rebuildStatusDerived(actor);
+      emit(EVENT.STATUS, {
+        who: actor.name,
+        id,
+        stacks: e.stacks,
+        action: "apply",
+      });
       return;
     }
   } else if (def.stacking === "add_stacks") {
@@ -126,6 +133,12 @@ export function applyStatus(
       e.remaining = Math.max(e.remaining, durationTurns);
       def.onApply?.(actor, e);
       rebuildStatusDerived(actor);
+      emit(EVENT.STATUS, {
+        who: actor.name,
+        id,
+        stacks: e.stacks,
+        action: "apply",
+      });
       return;
     }
   }
@@ -134,6 +147,7 @@ export function applyStatus(
   actor.statuses.push(inst);
   def.onApply?.(actor, inst);
   rebuildStatusDerived(actor);
+  emit(EVENT.STATUS, { who: actor.name, id, stacks: inst.stacks, action: "apply" });
 }
 
 /**
@@ -165,6 +179,7 @@ export function tickStatuses(actor, turn = STATUS_TICK_DELTA_TURNS) {
       continue;
     }
 
+    emit(EVENT.STATUS, { who: actor.name, id: inst.id, action: "expire" });
     def.onExpire?.(actor, inst, turn);
   }
 
