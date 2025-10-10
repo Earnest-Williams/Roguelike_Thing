@@ -1228,24 +1228,31 @@
             return this.stacks;
           }
 
+          /* duplicate inventory methods removed (kept the later canonical copy) */
+          consumeMatching(predicate, qty = 1) {
+            const found = this.findStack(predicate);
+            if (!found) return false;
+            return this.consumeAt(found.index, qty);
+          }
+        }
+
+        const INVENTORY_CONTAINER_METHODS = {
           usedMassKg() {
             let m = 0;
             for (const s of this.stacks) if (s) m += s.totalMassKg();
             return m;
-          }
+          },
           usedVolumeL() {
             let v = 0;
             for (const s of this.stacks) if (s) v += s.totalVolumeL();
             return v;
-          }
+          },
           longestItemCm() {
             let L = 0;
             for (const s of this.stacks)
               if (s) L = Math.max(L, s.item.longestCm());
             return L;
-          }
-
-          // capacity check vs backpack constraints
+          },
           fitsConstraints(stack) {
             if (!this.constraints) return true; // no backpack equipped => unrestricted (you may change this)
             const cap = this.constraints;
@@ -1261,8 +1268,7 @@
             if (typeof cap.accepts === "function" && !cap.accepts(stack.item))
               return false;
             return true;
-          }
-
+          },
           add(itemOrStack) {
             const incoming =
               itemOrStack instanceof ItemStack
@@ -1335,8 +1341,7 @@
             if (incoming.qty <= 0) return true;
             rollback();
             return false;
-          }
-
+          },
           removeByIndex(idx, qty = Infinity) {
             const s = this.stacks[idx];
             if (!s) return null;
@@ -1344,7 +1349,7 @@
             s.qty -= take;
             if (s.qty <= 0) this.stacks[idx] = null;
             return new ItemStack(s.item.clone(), take);
-          }
+          },
           findStack(predicate) {
             if (typeof predicate !== "function") return null;
             for (let i = 0; i < this.stacks.length; i++) {
@@ -1354,7 +1359,7 @@
               }
             }
             return null;
-          }
+          },
           consumeAt(index, qty = 1) {
             if (index < 0 || index >= this.stacks.length) return false;
             const stack = this.stacks[index];
@@ -1364,13 +1369,10 @@
             stack.qty -= qty;
             if (stack.qty === 0) this.stacks[index] = null;
             return true;
-          }
-          consumeMatching(predicate, qty = 1) {
-            const found = this.findStack(predicate);
-            if (!found) return false;
-            return this.consumeAt(found.index, qty);
-          }
-        }
+          },
+        };
+
+        Object.assign(Inventory.prototype, INVENTORY_CONTAINER_METHODS);
 
         // ---- Equipment ----
         // Enforces slot compatibility and 2H weapon occupancy.
