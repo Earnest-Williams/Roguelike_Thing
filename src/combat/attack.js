@@ -127,7 +127,6 @@ function doResolveAttack(rawCtx = {}) {
     packetsAfterDefense: after,
     totalDamage,
     appliedStatuses: applied,
-    statusApplied: applied,
   };
 }
 
