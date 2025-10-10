@@ -8,7 +8,14 @@ import {
 import { clamp, clamp01 } from "./utils.js";
 
 function dimsVolumeL(d) {
-  return (d.l * d.w * d.h) / 1000.0;
+  if (!d || typeof d !== "object") {
+    return 0.001;
+  }
+  const dims = [d.l, d.w, d.h].map((value) =>
+    Number.isFinite(value) && value > 0 ? value : 1,
+  );
+  const volumeCm3 = dims.reduce((acc, value) => acc * value, 1);
+  return volumeCm3 / 1000.0;
 } // cm^3 to liters
 
 function dimsLongest(d) {
