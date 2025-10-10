@@ -248,11 +248,10 @@ export function buildEffectiveThrowProfile(item) {
 export function getAttackModesForItem(item) {
   if (!(item instanceof Item)) return [];
   const modes = [];
-  if (item.weaponProfile?.isRanged) {
+  const isThrownWeapon =
+    item.weaponProfile?.category === WEAPON_CATEGORY.THROWN;
+  if (item.weaponProfile?.isRanged && !isThrownWeapon) {
     modes.push({ kind: ATTACK_KIND.RANGED, profile: item.weaponProfile });
-    if (item.weaponProfile.category === WEAPON_CATEGORY.THROWN) {
-      return modes;
-    }
   }
   const throwProfile = buildEffectiveThrowProfile(item);
   if (throwProfile) {
