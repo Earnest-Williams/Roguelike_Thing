@@ -47,7 +47,10 @@ export function attachDevConsole(ctx) {
         }
         case "/loot": {
           const table = args[0]; const drop = pickLoot(table);
-          if (drop) ctx.addItemToInventory(drop);
+          if (drop) {
+            ctx.addItemToInventory(drop);
+            showLootToast(drop);
+          }
           const affixInfo = describeAffixes(drop);
           const label = drop ? `${drop.name || drop.id}${affixInfo}` : "nothing";
           log(`loot ${table}: ${label}`);
@@ -87,11 +90,71 @@ export function attachDevConsole(ctx) {
 }
 
 function describeAffixes(drop) {
-  const affixes = Array.isArray(drop?.affixes) ? drop.affixes : null;
-  if (!affixes || !affixes.length) return "";
-  const parts = affixes
-    .map((a) => a?.id)
+  const names = affixNames(drop);
+  return names.length ? ` [${names.join(" · ")}]` : "";
+}
+
+function affixNames(drop) {
+  if (!drop) return [];
+  const affixes = Array.isArray(drop.affixes) ? drop.affixes : [];
+  return affixes
+    .map((a) => (a && typeof a.id === "string" ? a.id : null))
     .filter(Boolean)
-    .map((id) => id.replace(/_/g, " ").replace(/\b([a-z])/g, (_, ch) => ch.toUpperCase()));
-  return parts.length ? ` [${parts.join(" · ")}]` : "";
+    .map(formatAffixName);
+}
+
+function formatAffixName(id) {
+  return String(id)
+    .replace(/_/g, " ")
+    .replace(/\b([a-z])/g, (_, ch) => ch.toUpperCase());
+}
+
+let lootToastContainer = null;
+
+function ensureLootToastContainer() {
+  if (lootToastContainer && lootToastContainer.isConnected) return lootToastContainer;
+  const el = document.createElement("div");
+  el.style.position = "fixed";
+  el.style.right = "16px";
+  el.style.bottom = "96px";
+  el.style.display = "flex";
+  el.style.flexDirection = "column";
+  el.style.alignItems = "flex-end";
+  el.style.gap = "8px";
+  el.style.pointerEvents = "none";
+  el.style.zIndex = "2000";
+  document.body.appendChild(el);
+  lootToastContainer = el;
+  return el;
+}
+
+function showLootToast(drop) {
+  const names = affixNames(drop);
+  if (!names.length) return;
+  const container = ensureLootToastContainer();
+  const toast = document.createElement("div");
+  toast.textContent = `${drop.name || drop.id} — ${names.join(" · ")}`;
+  toast.style.background = "rgba(15,23,42,0.92)";
+  toast.style.color = "#f8fafc";
+  toast.style.padding = "8px 12px";
+  toast.style.borderRadius = "8px";
+  toast.style.fontFamily = "monospace";
+  toast.style.fontSize = "12px";
+  toast.style.boxShadow = "0 8px 24px rgba(15,23,42,0.35)";
+  toast.style.opacity = "0";
+  toast.style.transform = "translateY(8px)";
+  toast.style.transition = "opacity 150ms ease-out, transform 150ms ease-out";
+  container.appendChild(toast);
+  const raf = typeof requestAnimationFrame === "function" ? requestAnimationFrame : (fn) => setTimeout(fn, 16);
+  raf(() => {
+    toast.style.opacity = "1";
+    toast.style.transform = "translateY(0)";
+  });
+  setTimeout(() => {
+    toast.style.opacity = "0";
+    toast.style.transform = "translateY(8px)";
+    setTimeout(() => {
+      if (toast.parentElement === container) toast.remove();
+    }, 200);
+  }, 2600);
 }
