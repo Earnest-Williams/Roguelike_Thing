@@ -60,7 +60,7 @@ export function applyAffixes(baseDef, rng=Math.random) {
     if (prefix) parts.push(formatAffixName(prefix.id));
     parts.push(baseDef.name || baseDef.id || "Item");
     if (suffix) parts.push(formatAffixName(suffix.id));
-    it.name = parts.join(" ");
+    it.name = parts.filter(Boolean).join(" ");
   }
   return it;
 }
