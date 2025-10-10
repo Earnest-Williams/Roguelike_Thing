@@ -85,8 +85,8 @@ export function performEquippedAttack(attacker, defender, weaponItem, distTiles)
   defender.res.hp = Math.max(0, defender.res.hp - outcome.total);
 
   emit(EVENT.COMBAT, {
-    who: attacker.name,
-    vs: defender.name,
+    who: attacker.name ?? attacker.id,
+    vs: defender.name ?? defender.id,
     mode: mode.kind,
     profile,
     damage: outcome.total,
