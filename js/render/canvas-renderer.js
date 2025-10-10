@@ -73,8 +73,7 @@ export class CanvasRenderer {
       if (t.glyph) {
         const size = Math.max(10, Math.floor(c * 0.85));
         const isPlayer = t.kind === "player";
-        const isMob = t.kind === "mob";
-        const fontWeight = isPlayer || isMob ? "bold " : "";
+        const fontWeight = t.kind === "player" || t.kind === "mob" ? "bold " : "";
         ctx.font = `${fontWeight}${size}px monospace`;
         if (t.fg) {
           ctx.fillStyle = rgbaToString(t.fg);
