@@ -348,9 +348,6 @@
         getThrowProfileForItem,
       } from "./js/item-system.js";
 
-      // Temporary alias so existing calls to clamp01(...) in this file keep working.
-      // Remove this alias after migrating call sites to clamp01Normalized(...).
-      const clamp01 = clamp01Normalized;
       const CONFIG = {
         visual: {
           view: { width: 41, height: 41 },
@@ -3285,7 +3282,7 @@
         // ----- CONFIG -----
         const HYBRID_CFG = CONFIG.generator.hybrid;
         // Utility
-        // clamp01 helper imported earlier handles the normalization; reuse it here.
+        // clamp01Normalized helper imported from utils handles the normalization; reuse it here.
         const manhattan = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
         // -------------------------
         // Phase A: Large rooms
@@ -3473,7 +3470,7 @@
           }
           // Optionally thin out density
           const targetCount = Math.round(
-            kept.length * clamp01(cfg.keepRatio),
+            kept.length * clamp01Normalized(cfg.keepRatio),
           );
           const smallRooms = shuffle(kept).slice(0, targetCount);
           // Carve
