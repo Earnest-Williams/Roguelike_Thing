@@ -782,10 +782,10 @@ const ITEM_DEFINITIONS = Object.freeze({
       dims: { l: 70, w: 15, h: 8 },
       mass: 0.5,
       container: {
-        volumeL: 8,
+        volumeL: 6,
         maxMassKg: 5,
-        maxItemLengthCm: 90,
-        accepts: (it) => it.kind === "ammo",
+        maxItemLengthCm: 80,
+        accepts: (it) => it.kind === "ammo" && it.id.startsWith("arrow_"),
       },
     },
   ],
