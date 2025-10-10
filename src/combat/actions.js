@@ -27,7 +27,7 @@ import {
  * @param {{dx:number, dy:number}} dir
  */
 export function tryMove(actor, dir) {
-  const moveMult = 1 + (actor.statusDerived?.moveAPDelta ?? 0);
+  const moveMult = 1 + ((actor.statusDerived?.moveAPDelta ?? 0) / 100);
   const base = Math.round(BASE_MOVE_AP_COST * moveMult);
   const cost = apCost(actor, Math.max(MIN_AP_COST, base));
   if (!spendAP(actor, cost)) return false;
