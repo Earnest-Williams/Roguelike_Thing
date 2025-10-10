@@ -3285,7 +3285,7 @@
         // ----- CONFIG -----
         const HYBRID_CFG = CONFIG.generator.hybrid;
         // Utility
-        // clamp01Normalized helper imported earlier handles the normalization; reuse it here.
+        // clamp01 helper imported earlier handles the normalization; reuse it here.
         const manhattan = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
         // -------------------------
         // Phase A: Large rooms
@@ -3473,7 +3473,7 @@
           }
           // Optionally thin out density
           const targetCount = Math.round(
-            kept.length * clamp01Normalized(cfg.keepRatio),
+            kept.length * clamp01(cfg.keepRatio),
           );
           const smallRooms = shuffle(kept).slice(0, targetCount);
           // Carve
