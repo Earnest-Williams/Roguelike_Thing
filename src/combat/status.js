@@ -8,7 +8,7 @@ import {
   HASTE_MAX_STACKS,
   STATUS_TICK_DELTA_TURNS,
 } from "../../constants.js";
-import { EVENT, emit } from "../ui/event-log.js";
+import { EVENT, emit } from "../shared/event-log.js";
 
 /**
  * @typedef {Object} StatusDerived
