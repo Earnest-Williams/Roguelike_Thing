@@ -1,6 +1,13 @@
 // src/combat/time.js
 // @ts-check
 
+import {
+  BASE_AP_GAIN_PER_TURN,
+  COOLDOWN_MIN_TURNS,
+  COOLDOWN_PROGRESS_PER_TURN,
+  MIN_AP_COST,
+} from "../../constants.js";
+
 /**
  * AP accrual per turn, scaled by (1 / totalActionCostMult).
  * Faster actors (lower mult) earn more usable AP effectively.
@@ -9,7 +16,7 @@
 export function gainAP(actor) {
   if (!actor) return;
   const mult = actor.totalActionCostMult(); // lower = faster
-  const gain = Math.round(100 / mult); // base 100 per turn at mult=1
+  const gain = Math.round(BASE_AP_GAIN_PER_TURN / mult);
   actor.ap = Math.min(actor.apCap, actor.ap + gain);
 }
 
@@ -21,7 +28,7 @@ export function gainAP(actor) {
  */
 export function apCost(actor, baseCostAP) {
   const mult = actor.totalActionCostMult();
-  return Math.max(1, Math.round(baseCostAP * mult));
+  return Math.max(MIN_AP_COST, Math.round(baseCostAP * mult));
 }
 
 /**
@@ -45,9 +52,9 @@ export function tickCooldowns(actor) {
   const mult = actor.totalCooldownMult(); // >1 means slower cooldowns
   for (const key of Object.keys(actor.cooldowns)) {
     let remain = actor.cooldowns[key];
-    remain -= 1 / mult;
-    actor.cooldowns[key] = Math.max(0, remain);
-    if (actor.cooldowns[key] === 0) delete actor.cooldowns[key];
+    remain -= COOLDOWN_PROGRESS_PER_TURN / mult;
+    actor.cooldowns[key] = Math.max(COOLDOWN_MIN_TURNS, remain);
+    if (actor.cooldowns[key] === COOLDOWN_MIN_TURNS) delete actor.cooldowns[key];
   }
 }
 

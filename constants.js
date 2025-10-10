@@ -1,9 +1,15 @@
 export const DEFAULT_STATUS_DURATION_TURNS = 5;
 export const DEFAULT_STATUS_STACKS = 1;
+export const MIN_STATUS_STACKS = 1;
 export const STATUS_TICK_DELTA_TURNS = 1;
 
 export const BURN_MAX_STACKS = 5;
 export const HASTE_MAX_STACKS = 1;
+export const FATIGUE_MAX_STACKS = 5;
+export const CHILLED_MAX_STACKS = 3;
+export const REGENERATION_MAX_STACKS = 1;
+export const ADRENALINE_MAX_STACKS = 1;
+export const EXHAUSTED_MAX_STACKS = 1;
 
 export const BASE_DAMAGE_MULTIPLIER = 1.0;
 export const BASE_SPEED_MULTIPLIER = 1.0;
@@ -14,5 +20,30 @@ export const MAX_AFFINITY_CAP = 0.9;
 
 export const MIN_SPEED_MULTIPLIER = 0.2;
 export const MAX_SPEED_MULTIPLIER = 5;
+
+export const BASE_AP_GAIN_PER_TURN = 100;
+export const MIN_AP_COST = 1;
+export const COOLDOWN_PROGRESS_PER_TURN = 1;
+export const COOLDOWN_MIN_TURNS = 0;
+
+export const DEFAULT_MOVE_COST_MULTIPLIER = 1.0;
+export const DEFAULT_ACTION_COST_MULTIPLIER = 1.0;
+export const DEFAULT_COOLDOWN_MULTIPLIER = 1.0;
+export const DEFAULT_REGEN_HP_PER_TURN = 0;
+export const DEFAULT_REGEN_STAMINA_PER_TURN = 0;
+export const DEFAULT_REGEN_MANA_PER_TURN = 0;
+
+export const BURN_TICK_DAMAGE_PER_STACK = 1;
+export const HASTE_SPEED_MULTIPLIER_PER_STACK = 0.85;
+export const HASTE_COOLDOWN_MULTIPLIER = 0.9;
+export const FATIGUE_ACTION_COST_MULTIPLIER_PER_STACK = 1.05;
+export const CHILLED_FACTOR_PER_STACK = 1.1;
+export const REGENERATION_HP_PER_TURN = 1;
+export const ADRENALINE_ACTION_COST_MULTIPLIER = 0.85;
+export const ADRENALINE_COOLDOWN_MULTIPLIER = 0.85;
+export const ADRENALINE_STAMINA_REGEN_PER_TURN = 1;
+export const EXHAUSTED_ACTION_COST_MULTIPLIER = 1.25;
+export const EXHAUSTED_STAMINA_REGEN_PER_TURN = -1;
+export const HEALTH_FLOOR = 0;
 
 export { ALL_SLOTS_ORDER, DAMAGE_TYPE, SLOT } from "./js/constants.js";

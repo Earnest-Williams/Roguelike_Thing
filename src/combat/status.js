@@ -2,10 +2,34 @@
 // @ts-check
 
 import {
+  ADRENALINE_ACTION_COST_MULTIPLIER,
+  ADRENALINE_COOLDOWN_MULTIPLIER,
+  ADRENALINE_MAX_STACKS,
+  ADRENALINE_STAMINA_REGEN_PER_TURN,
   BURN_MAX_STACKS,
+  BURN_TICK_DAMAGE_PER_STACK,
+  CHILLED_FACTOR_PER_STACK,
+  CHILLED_MAX_STACKS,
+  DEFAULT_ACTION_COST_MULTIPLIER,
+  DEFAULT_COOLDOWN_MULTIPLIER,
+  DEFAULT_MOVE_COST_MULTIPLIER,
+  DEFAULT_REGEN_HP_PER_TURN,
+  DEFAULT_REGEN_MANA_PER_TURN,
+  DEFAULT_REGEN_STAMINA_PER_TURN,
   DEFAULT_STATUS_DURATION_TURNS,
   DEFAULT_STATUS_STACKS,
+  EXHAUSTED_ACTION_COST_MULTIPLIER,
+  EXHAUSTED_MAX_STACKS,
+  EXHAUSTED_STAMINA_REGEN_PER_TURN,
+  FATIGUE_ACTION_COST_MULTIPLIER_PER_STACK,
+  FATIGUE_MAX_STACKS,
+  HASTE_COOLDOWN_MULTIPLIER,
   HASTE_MAX_STACKS,
+  HASTE_SPEED_MULTIPLIER_PER_STACK,
+  HEALTH_FLOOR,
+  MIN_STATUS_STACKS,
+  REGENERATION_HP_PER_TURN,
+  REGENERATION_MAX_STACKS,
   STATUS_TICK_DELTA_TURNS,
 } from "../../constants.js";
 import { EVENT, emit } from "../ui/event-log.js";
@@ -60,10 +84,14 @@ export function getStatusDef(id) {
  */
 export function createEmptyStatusDerived() {
   return {
-    moveCostMult: 1.0,
-    actionCostMult: 1.0,
-    cooldownMult: 1.0,
-    regen: { hp: 0, stamina: 0, mana: 0 },
+    moveCostMult: DEFAULT_MOVE_COST_MULTIPLIER,
+    actionCostMult: DEFAULT_ACTION_COST_MULTIPLIER,
+    cooldownMult: DEFAULT_COOLDOWN_MULTIPLIER,
+    regen: {
+      hp: DEFAULT_REGEN_HP_PER_TURN,
+      stamina: DEFAULT_REGEN_STAMINA_PER_TURN,
+      mana: DEFAULT_REGEN_MANA_PER_TURN,
+    },
   };
 }
 
@@ -110,11 +138,12 @@ export function applyStatus(
   const def = getStatusDef(id);
   if (!def) return;
 
+  const normalizedStacks = Math.max(MIN_STATUS_STACKS, stacks);
   const existing = actor.statuses.filter(s => s.id === id);
   if (def.stacking === "refresh") {
     if (existing.length) {
       const e = existing[0];
-      e.stacks = Math.min(def.maxStacks, Math.max(1, stacks));
+      e.stacks = Math.min(def.maxStacks, normalizedStacks);
       e.remaining = durationTurns;
       def.onApply?.(actor, e);
       rebuildStatusDerived(actor);
@@ -129,7 +158,7 @@ export function applyStatus(
   } else if (def.stacking === "add_stacks") {
     if (existing.length) {
       const e = existing[0];
-      e.stacks = Math.min(def.maxStacks, e.stacks + stacks);
+      e.stacks = Math.min(def.maxStacks, e.stacks + normalizedStacks);
       e.remaining = Math.max(e.remaining, durationTurns);
       def.onApply?.(actor, e);
       rebuildStatusDerived(actor);
@@ -143,7 +172,12 @@ export function applyStatus(
     }
   }
   // independent or none existing
-  const inst = { id, stacks: Math.max(1, Math.min(def.maxStacks, stacks)), remaining: durationTurns, payload };
+  const inst = {
+    id,
+    stacks: Math.min(def.maxStacks, normalizedStacks),
+    remaining: durationTurns,
+    payload,
+  };
   actor.statuses.push(inst);
   def.onApply?.(actor, inst);
   rebuildStatusDerived(actor);
@@ -194,7 +228,10 @@ defineStatus({
   maxStacks: BURN_MAX_STACKS,
   onTick(actor, inst) {
     // Each stack pings 1 damage per turn (demo). Gate by hp floor.
-    actor.res.hp = Math.max(0, actor.res.hp - inst.stacks);
+    actor.res.hp = Math.max(
+      HEALTH_FLOOR,
+      actor.res.hp - inst.stacks * BURN_TICK_DAMAGE_PER_STACK,
+    );
   },
 });
 
@@ -210,30 +247,33 @@ defineStatus({
     actor.refoldModifiers?.();
   },
   derive(actor, inst) {
-    const stacks = Math.max(1, inst?.stacks ?? 1);
-    const speedMult = Math.pow(0.85, stacks);
+    const stacks = Math.max(MIN_STATUS_STACKS, inst?.stacks ?? MIN_STATUS_STACKS);
+    const speedMult = Math.pow(HASTE_SPEED_MULTIPLIER_PER_STACK, stacks);
     actor.statusDerived.actionCostMult *= speedMult;
-    actor.statusDerived.cooldownMult *= 0.9;
+    actor.statusDerived.cooldownMult *= HASTE_COOLDOWN_MULTIPLIER;
   },
 });
 
 defineStatus({
   id: "fatigue",
   stacking: "add_stacks",
-  maxStacks: 5,
+  maxStacks: FATIGUE_MAX_STACKS,
   derive(actor, inst) {
     const stacks = Math.max(0, inst?.stacks ?? 0);
-    actor.statusDerived.actionCostMult *= Math.pow(1.05, stacks);
+    actor.statusDerived.actionCostMult *= Math.pow(
+      FATIGUE_ACTION_COST_MULTIPLIER_PER_STACK,
+      stacks,
+    );
   },
 });
 
 defineStatus({
   id: "chilled",
   stacking: "add_stacks",
-  maxStacks: 3,
+  maxStacks: CHILLED_MAX_STACKS,
   derive(actor, inst) {
     const stacks = Math.max(0, inst?.stacks ?? 0);
-    const factor = Math.pow(1.1, stacks);
+    const factor = Math.pow(CHILLED_FACTOR_PER_STACK, stacks);
     actor.statusDerived.actionCostMult *= factor;
     actor.statusDerived.cooldownMult *= factor;
   },
@@ -242,29 +282,29 @@ defineStatus({
 defineStatus({
   id: "regeneration",
   stacking: "refresh",
-  maxStacks: 1,
+  maxStacks: REGENERATION_MAX_STACKS,
   derive(actor) {
-    actor.statusDerived.regen.hp += 1;
+    actor.statusDerived.regen.hp += REGENERATION_HP_PER_TURN;
   },
 });
 
 defineStatus({
   id: "adrenaline",
   stacking: "refresh",
-  maxStacks: 1,
+  maxStacks: ADRENALINE_MAX_STACKS,
   derive(actor) {
-    actor.statusDerived.actionCostMult *= 0.85;
-    actor.statusDerived.cooldownMult *= 0.85;
-    actor.statusDerived.regen.stamina += 1;
+    actor.statusDerived.actionCostMult *= ADRENALINE_ACTION_COST_MULTIPLIER;
+    actor.statusDerived.cooldownMult *= ADRENALINE_COOLDOWN_MULTIPLIER;
+    actor.statusDerived.regen.stamina += ADRENALINE_STAMINA_REGEN_PER_TURN;
   },
 });
 
 defineStatus({
   id: "exhausted",
   stacking: "refresh",
-  maxStacks: 1,
+  maxStacks: EXHAUSTED_MAX_STACKS,
   derive(actor) {
-    actor.statusDerived.actionCostMult *= 1.25;
-    actor.statusDerived.regen.stamina -= 1;
+    actor.statusDerived.actionCostMult *= EXHAUSTED_ACTION_COST_MULTIPLIER;
+    actor.statusDerived.regen.stamina += EXHAUSTED_STAMINA_REGEN_PER_TURN;
   },
 });
