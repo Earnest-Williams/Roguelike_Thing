@@ -347,6 +347,8 @@
         getAttackModesForItem,
         getThrowProfileForItem,
       } from "./js/item-system.js";
+      import { CanvasRenderer } from "./js/render/canvas-renderer.js";
+      import { RenderController } from "./js/render/controller.js";
 
       const CONFIG = {
         visual: {
@@ -1046,7 +1048,6 @@
       const Game = (() => {
         const viewportEl = document.getElementById("maze-viewport");
         const canvas = document.getElementById("maze-canvas");
-        const ctx = canvas.getContext("2d");
         const statusDiv = document.getElementById("status");
         const restartBtn = document.getElementById("restartBtn");
         const equipmentSlotsDiv = document.getElementById("equipment-slots");
@@ -1055,6 +1056,12 @@
         const speedValue = document.getElementById("speed-value");
         const pauseIndicator = document.getElementById("pause-indicator");
         const containerEl = document.getElementById("container");
+
+        const canvasRenderer = canvas ? new CanvasRenderer(canvas) : null;
+        const renderController = canvasRenderer
+          ? new RenderController(canvasRenderer)
+          : null;
+        let rendererReady = false;
 
         let minimapModalEl, minimapCanvas, minimapCtx, minimapCloseBtn;
 
@@ -3756,9 +3763,18 @@
             viewportEl.style.width = `${VIEW_W * CELL_SIZE}px`;
             viewportEl.style.height = `${VIEW_H * CELL_SIZE}px`;
           }
-          if (canvas) {
+          if (
+            renderController &&
+            rendererReady &&
+            mapState.width > 0 &&
+            mapState.height > 0
+          ) {
+            renderController.resize(mapState.width, mapState.height, CELL_SIZE);
+          } else if (canvas && mapState.width > 0 && mapState.height > 0) {
             canvas.width = mapState.width * CELL_SIZE;
             canvas.height = mapState.height * CELL_SIZE;
+            canvas.style.width = `${canvas.width}px`;
+            canvas.style.height = `${canvas.height}px`;
           }
         }
         function updateResponsiveLayout(forceRedraw = true) {
@@ -3832,48 +3848,10 @@
           if (forceRedraw) redrawAfterResize();
         }
         function redrawAfterResize() {
+          if (!rendererReady) return;
           if (!mapState.grid || !mapState.grid.length) return;
           if (!player || !player.pos) return;
-          refreshLightingVisuals();
-          const lightCtx = createLightOverlayContext();
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-          for (let y = 0; y < mapState.height; y++) {
-            for (let x = 0; x < mapState.width; x++) {
-              if (!mapState.explored[y][x]) continue;
-              const key = posKey({ x, y });
-              const isVisible = fovState.currentVisible.has(key);
-              const isStart =
-                player.startPos &&
-                x === player.startPos.x &&
-                y === player.startPos.y;
-              const isEnd =
-                currentEndPos &&
-                x === currentEndPos.x &&
-                y === currentEndPos.y &&
-                isEndRendered;
-              drawCell(x, y, isVisible, false, isStart, isEnd, lightCtx);
-            }
-          }
-          const playerKey = posKey(player.pos);
-          const isPlayerVisible = fovState.currentVisible.has(playerKey);
-          const isStart =
-            player.startPos &&
-            player.pos.x === player.startPos.x &&
-            player.pos.y === player.startPos.y;
-          const isEnd =
-            currentEndPos &&
-            player.pos.x === currentEndPos.x &&
-            player.pos.y === currentEndPos.y;
-          drawCell(
-            player.pos.x,
-            player.pos.y,
-            isPlayerVisible,
-            true,
-            isStart,
-            isEnd,
-            lightCtx,
-          );
-          updateCamera(player.pos);
+          renderScene();
           if (minimapModalEl && minimapModalEl.style.display === "flex") {
             renderMinimapDynamic();
           }
@@ -4001,84 +3979,56 @@
           return { tx, ty };
         }
 
-        // Keep the viewport centred on the player without allowing the camera to
-        // drift past the map edges. This is effectively a clamped translation
-        // that mimics a traditional roguelike "camera" following the hero.
-        function updateCamera(playerPos) {
+        function buildViewTransform(playerPos) {
           const { tx, ty } = calculateViewportTransform(playerPos);
-          canvas.style.transform = `translate3d(${tx}px, ${ty}px, 0)`;
+          const view = {
+            tx,
+            ty,
+            cellSize: CELL_SIZE,
+            viewW: VIEW_W * CELL_SIZE,
+            viewH: VIEW_H * CELL_SIZE,
+          };
+          return view;
         }
-        // Render a single map tile. The function intentionally duplicates a bit
-        // of style logic (instead of delegating to CSS classes) so we can keep
-        // rendering on the canvas fast and free from layout thrashing.
-        function drawCell(
-          x,
-          y,
-          isVisible,
-          isPlayer = false,
-          isStart = false,
-          isEnd = false,
-          lightCtx = null,
-        ) {
-          const cellX = x * CELL_SIZE;
-          const cellY = y * CELL_SIZE;
-          if (!mapState.explored[y][x]) return; // Unexplored cells retain the base background color
-          const { colors } = CONFIG.visual;
-          let bgColor = colors.unseen;
-          let text = "";
-          let textColor = colors.defaultText;
-          let fontWeight = "";
-          const isWall = mapState.grid[y][x] === TILE_WALL;
-          if (isWall) {
-            bgColor = colors.wall;
-            textColor = "transparent";
-          } else {
-            bgColor = colors.floor;
-            text = "·";
-            textColor = colors.floorGlyph;
+
+        function renderScene() {
+          if (!renderController || !rendererReady) return;
+          if (!mapState.grid || !mapState.grid.length) return;
+          if (!player || !player.pos) return;
+
+          const playerPos = player.pos;
+          const currentVisible =
+            fovState.currentVisible instanceof Set
+              ? fovState.currentVisible
+              : new Set();
+          const view = buildViewTransform(playerPos);
+
+          refreshLightingVisuals();
+          const lightCtx = createLightOverlayContext();
+          if (
+            currentEndPos &&
+            mapState.explored[currentEndPos.y]?.[currentEndPos.x]
+          ) {
+            isEndRendered = true;
           }
-          if (isStart) bgColor = colors.start;
-          if (isEnd) bgColor = colors.end;
-          if (isPlayer) {
-            bgColor = colors.player;
-            text = "@";
-            textColor = colors.playerGlyph;
-            fontWeight = "bold ";
-          }
-          ctx.fillStyle = bgColor;
-          if (isPlayer) {
-            ctx.beginPath();
-            ctx.arc(
-              cellX + HALF_CELL,
-              cellY + HALF_CELL,
-              HALF_CELL,
-              0,
-              2 * Math.PI,
-            );
-            ctx.fill();
-          } else {
-            ctx.fillRect(cellX, cellY, CELL_SIZE, CELL_SIZE);
-          }
-          if (text) {
-            const glyphSize = Math.max(10, Math.floor(CELL_SIZE * 0.85));
-            ctx.font = `${fontWeight}${glyphSize}px monospace`;
-            ctx.fillStyle = textColor;
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            ctx.fillText(text, cellX + HALF_CELL, cellY + HALF_CELL);
-          }
-          if (isVisible) {
-            const overlayRgb = fovState.overlayRgb;
-            if (overlayRgb) {
-              const alpha = computeTileOverlayAlpha(x, y, lightCtx);
-              ctx.fillStyle = `rgba(${overlayRgb.r},${overlayRgb.g},${overlayRgb.b},${alpha.toFixed(
-                3,
-              )})`;
-            } else {
-              ctx.fillStyle = fovState.overlayStyle;
-            }
-            ctx.fillRect(cellX, cellY, CELL_SIZE, CELL_SIZE);
-          }
+
+          const overlayColor = fovState.overlayRgb
+            ? { ...fovState.overlayRgb, a: 1 }
+            : null;
+
+          renderController.render(
+            {
+              map: { grid: mapState.grid, explored: mapState.explored },
+              fov: { visible: currentVisible },
+              player: { x: playerPos.x, y: playerPos.y },
+              start: player.startPos ?? null,
+              end: isEndRendered ? currentEndPos : null,
+              colors: CONFIG.visual.colors,
+              overlayAlphaAt: (x, y) => computeTileOverlayAlpha(x, y, lightCtx),
+              overlayColor,
+            },
+            view,
+          );
         }
         // Updates the persistent fog-of-war state as the player moves. This both
         // records which tiles were ever seen (explorationState) and promotes nearby
@@ -4444,80 +4394,6 @@
           }
           return [];
         }
-        function renderInitial(playerPos, startPos, endPos) {
-          refreshLightingVisuals();
-          const lightCtx = createLightOverlayContext();
-          fovState.currentVisible = computeVisibleCells(playerPos);
-          // Draw all initially explored cells
-          for (const pos of explorationState.newlyExplored) {
-            const key = posKey(pos);
-            const isVis = fovState.currentVisible.has(key);
-            const isS = pos.x === startPos.x && pos.y === startPos.y;
-            const isE = pos.x === endPos.x && pos.y === endPos.y;
-            if (isE) isEndRendered = true;
-            drawCell(pos.x, pos.y, isVis, false, isS, isE, lightCtx);
-          }
-          // Draw player
-          drawCell(playerPos.x, playerPos.y, true, true, true, false, lightCtx); // Start is player pos initially
-        }
-        function renderDelta(prevPlayerPos, playerPos, endPos) {
-          refreshLightingVisuals();
-          const lightCtx = createLightOverlayContext();
-          // Redraw cells where visibility turned off
-          for (const key of fovState.prevVisible) {
-            if (!fovState.currentVisible.has(key)) {
-              const [x, y] = key.split(",").map(Number);
-              const isS = x === player.startPos.x && y === player.startPos.y;
-              const isE = x === endPos.x && y === endPos.y;
-              drawCell(x, y, false, false, isS, isE, lightCtx);
-            }
-          }
-          // Redraw old player position (without player)
-          if (prevPlayerPos) {
-            const oldKey = posKey(prevPlayerPos);
-            const isVis = fovState.currentVisible.has(oldKey);
-            const isS =
-              prevPlayerPos.x === player.startPos.x &&
-              prevPlayerPos.y === player.startPos.y;
-            const isE =
-              prevPlayerPos.x === endPos.x && prevPlayerPos.y === endPos.y;
-            drawCell(prevPlayerPos.x, prevPlayerPos.y, isVis, false, isS, isE, lightCtx);
-          }
-          // Draw newly explored cells
-          for (const pos of explorationState.newlyExplored) {
-            const key = posKey(pos);
-            const isVis = fovState.currentVisible.has(key);
-            const isS =
-              pos.x === player.startPos.x && pos.y === player.startPos.y;
-            let isE = pos.x === endPos.x && pos.y === endPos.y;
-            if (isE && !isEndRendered) {
-              isEndRendered = true;
-            }
-            drawCell(pos.x, pos.y, isVis, false, isS, isE, lightCtx);
-          }
-          // Draw newly visible cells that were already explored
-          for (const key of fovState.currentVisible) {
-            if (!fovState.prevVisible.has(key)) {
-              const [x, y] = key.split(",").map(Number);
-              const alreadyNew = explorationState.newlyExplored.some(
-                (p) => p.x === x && p.y === y,
-              );
-              if (!alreadyNew) {
-                const isS = x === player.startPos.x && y === player.startPos.y;
-                const isE = x === endPos.x && y === endPos.y;
-                drawCell(x, y, true, false, isS, isE, lightCtx);
-              }
-            }
-          }
-          // Draw new player position
-          const newKey = posKey(playerPos);
-          const isVis = fovState.currentVisible.has(newKey);
-          const isS =
-            playerPos.x === player.startPos.x &&
-            playerPos.y === player.startPos.y;
-          const isE = playerPos.x === endPos.x && playerPos.y === endPos.y;
-          drawCell(playerPos.x, playerPos.y, isVis, true, isS, isE, lightCtx);
-        }
         // --- SIMULATION LOGIC ---
         // Main autonomous exploration loop. The routine alternates between three
         // behaviours: beeline to the exit once discovered, opportunistically
@@ -4779,12 +4655,7 @@
               }
             }
             fovState.currentVisible = computeVisibleCells(nextPos);
-            renderDelta(
-              hasPrevPlayerPos ? prevPlayerPos : null,
-              nextPos,
-              endPos,
-            );
-            updateCamera(nextPos);
+            renderScene();
             fovState.prevVisible = new Set(fovState.currentVisible);
             minimapMaybeRefreshOnTick();
 
@@ -4816,11 +4687,7 @@
                 simState.timeout = null;
                 simState.loopFn = null;
                 statusDiv.textContent = "Exit found!";
-                renderDelta(
-                  hasPrevPlayerPos ? prevPlayerPos : null,
-                  currentPos,
-                  endPos,
-                );
+                renderScene();
                 restartBtn.style.display = "block";
                 return;
               }
@@ -4973,6 +4840,11 @@
             Array(mapState.width).fill(-1),
           );
 
+          if (renderController) {
+            renderController.init(mapState.width, mapState.height, CELL_SIZE);
+            rendererReady = true;
+          }
+
           setupDOM();
 
           player.pos = startPos;
@@ -4985,10 +4857,10 @@
           fovState.lastCache = { key: null, radius: null, visible: null };
 
           updateVisionAndExploration(player.startPos);
-          renderInitial(player.startPos, player.startPos, endPos);
-          updateCamera(player.startPos);
+          fovState.currentVisible = computeVisibleCells(player.startPos);
+          renderScene();
           renderUI();
-          fovState.prevVisible = computeVisibleCells(player.startPos);
+          fovState.prevVisible = new Set(fovState.currentVisible);
           prevPlayerPos.x = player.startPos.x;
           prevPlayerPos.y = player.startPos.y;
           hasPrevPlayerPos = true;
@@ -5011,6 +4883,7 @@
           minimapBase = null;
           mobManager = new MobManager();
           player = setupPlayer();
+          rendererReady = false;
 
           setTimeout(() => {
             const result = generateAndValidateDungeon();
@@ -5209,7 +5082,7 @@
           ctx.drawImage(minimapBase, dx, dy);
 
           // --- START: ACCURATE VIEWPORT CALCULATION (FIXED) ---
-          // This logic mirrors the main `updateCamera` function to find the exact
+          // This logic mirrors the main view-transform calculation to find the exact
           // top-left corner of the visible area in map coordinates.
           const playerPos = getPlayerPos();
           const { tx: canvasTranslateX, ty: canvasTranslateY } =
