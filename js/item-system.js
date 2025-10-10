@@ -756,9 +756,9 @@ const ITEM_DEFINITIONS = Object.freeze({
       dims: { l: 40, w: 30, h: 10 },
       mass: 0.6,
       container: {
-        volumeL: 30,
-        maxMassKg: 15,
-        maxItemLengthCm: 80,
+        volumeL: 20,
+        maxMassKg: 12,
+        maxItemLengthCm: 60,
       },
     },
     {
