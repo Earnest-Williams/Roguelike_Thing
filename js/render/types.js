@@ -12,6 +12,9 @@
  * @property {RGBA} [bg]
  * @property {number} [overlayA]
  * @property {RGBA} [overlayColor]
+ * @property {string} [badge]
+ * @property {RGBA} [badgeColor]
+ * @property {RGBA} [badgeBg]
  */
 
 /**

@@ -18,6 +18,19 @@ import { colorStringToRgba as toRgba } from "../utils.js";
  * @param {Record<string, string>} params.colors
  * @param {(x: number, y: number) => number | undefined} params.overlayAlphaAt
  * @param {RGBA | null | undefined} [params.overlayColor]
+ * @param {Array<{
+ *   x: number,
+ *   y: number,
+ *   kind?: string,
+ *   glyph?: string,
+ *   fg?: string | RGBA,
+ *   bg?: string | RGBA,
+ *   overlayA?: number,
+ *   overlayColor?: string | RGBA,
+ *   badge?: string,
+ *   badgeColor?: string | RGBA,
+ *   badgeBg?: string | RGBA,
+ * }>} [params.entities]
  * @returns {TileVisual[]}
  */
 export function buildMainViewBatch({
@@ -30,6 +43,7 @@ export function buildMainViewBatch({
   colors,
   overlayAlphaAt,
   overlayColor = null,
+  entities = [],
 }) {
   const batch = [];
   if (!Array.isArray(grid) || grid.length === 0) return batch;
@@ -45,7 +59,7 @@ export function buildMainViewBatch({
   const floorGlyph = colors.floorGlyph ? toRgba(colors.floorGlyph) : toRgba("#888888");
   const playerGlyph = colors.playerGlyph ? toRgba(colors.playerGlyph) : toRgba("#ffffff");
 
-  const overlayRgb = overlayColor || null;
+  const overlayRgb = normalizeColor(overlayColor) || null;
 
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
@@ -106,6 +120,37 @@ export function buildMainViewBatch({
     overlayA: 0,
     overlayColor: overlayRgb || undefined,
   });
+
+  if (Array.isArray(entities) && entities.length > 0) {
+    for (const ent of entities) {
+      if (!ent || typeof ent.x !== "number" || typeof ent.y !== "number") continue;
+      /** @type {TileVisual} */
+      const visual = {
+        x: ent.x,
+        y: ent.y,
+        kind: ent.kind || "entity",
+        glyph: ent.glyph,
+        fg: normalizeColor(ent.fg) || undefined,
+        bg: normalizeColor(ent.bg) || undefined,
+      };
+      if (typeof ent.overlayA === "number") {
+        const clamped = Math.max(0, Math.min(1, ent.overlayA));
+        if (clamped > 0) {
+          visual.overlayA = clamped;
+          const oc = normalizeColor(ent.overlayColor);
+          if (oc) visual.overlayColor = oc;
+        }
+      }
+      if (ent.badge) {
+        visual.badge = ent.badge;
+        const badgeColor = normalizeColor(ent.badgeColor);
+        if (badgeColor) visual.badgeColor = badgeColor;
+        const badgeBg = normalizeColor(ent.badgeBg);
+        if (badgeBg) visual.badgeBg = badgeBg;
+      }
+      batch.push(visual);
+    }
+  }
 
   return batch;
 }
@@ -181,7 +226,7 @@ export function buildMinimapPresentation({
     });
   }
 
-  return {
+  return { 
     tiles,
     width: totalW,
     height: totalH,
@@ -191,4 +236,35 @@ export function buildMinimapPresentation({
       border: borderColor,
     },
   };
+}
+
+/**
+ * @param {string | RGBA | null | undefined} input
+ * @returns {RGBA | null}
+ */
+function normalizeColor(input) {
+  if (!input) return null;
+  if (typeof input === "string") {
+    try {
+      return toRgba(input);
+    } catch (_) {
+      return null;
+    }
+  }
+  if (typeof input === "object") {
+    const maybe = /** @type {any} */ (input);
+    if (
+      typeof maybe.r === "number" &&
+      typeof maybe.g === "number" &&
+      typeof maybe.b === "number"
+    ) {
+      return {
+        r: maybe.r,
+        g: maybe.g,
+        b: maybe.b,
+        a: typeof maybe.a === "number" ? maybe.a : 1,
+      };
+    }
+  }
+  return null;
 }
