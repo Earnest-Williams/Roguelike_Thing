@@ -1,6 +1,6 @@
 // src/combat/loop.sample-planner.js
 // @ts-check
-import { tryAttack, tryMove } from "./actions.js";
+import { tryAttack, tryAttackEquipped, tryMove } from "./actions.js";
 import { apCost } from "./time.js";
 
 /**
@@ -11,6 +11,9 @@ export function simplePlanner(target) {
   return (actor) => {
     const attackCost = apCost(actor, actor.baseActionAP ?? 100);
     if (actor.ap >= attackCost) {
+      if (tryAttackEquipped(actor, target, 1)) {
+        return;
+      }
       if (tryAttack(actor, target, { base: 8, type: "fire", key: "swing", baseCooldown: 2, baseAP: actor.baseActionAP })) {
         return;
       }

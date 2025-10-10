@@ -3,7 +3,7 @@
 import { rebuildStatusDerived, tickStatuses } from "./status.js";
 import { gainAP, tickCooldowns } from "./time.js";
 import { updateResources, isDefeated } from "./resources.js";
-import { EVENT, emit } from "../shared/event-log.js";
+import { EVENT, emit } from "../ui/event-log.js";
 
 /**
  * Runs one turn for an actor.

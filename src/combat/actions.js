@@ -2,7 +2,7 @@
 // @ts-check
 import { apCost, spendAP, startCooldown, isReady } from "./time.js";
 import { resolveAttack } from "./attack.js";
-import { performEquippedAttack } from "../game/combat-glue.js";
+import { performEquippedAttack, pickAttackMode } from "../game/combat-glue.js";
 import { SLOT } from "../../constants.js";
 
 /**
@@ -65,6 +65,21 @@ function mainHandItem(actor) {
 export function tryAttackEquipped(attacker, defender, distTiles = 1) {
   const item = mainHandItem(attacker);
   if (!item) return false;
-  const res = performEquippedAttack(attacker, defender, item, distTiles);
-  return !!res.ok;
+  const mode = pickAttackMode(attacker, defender, item, distTiles);
+  if (!mode) return false;
+
+  const key = `${item.id || item.name || "equipped"}:${mode.kind}`;
+  if (!isReady(attacker, key)) return false;
+
+  const baseAP = Math.max(1, attacker.baseActionAP ?? 100);
+  const cost = apCost(attacker, baseAP);
+  if (!spendAP(attacker, cost)) return false;
+
+  const res = performEquippedAttack(attacker, defender, item, distTiles, mode);
+  if (!res.ok) return false;
+
+  const baseCooldown = Math.max(0, mode.profile?.reloadTime ?? 1);
+  startCooldown(attacker, key, baseCooldown);
+
+  return true;
 }
