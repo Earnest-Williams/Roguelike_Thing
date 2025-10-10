@@ -401,7 +401,9 @@ export class Item {
     const cloned = new Item(copy);
 
     if (Array.isArray(this.contents)) {
-      cloned.contents = this.contents.slice();
+      cloned.contents = this.contents.map((entry) =>
+        entry instanceof ItemStack ? entry.clone() : entry,
+      );
     }
 
     return cloned;
@@ -440,6 +442,9 @@ export class ItemStack {
   }
   totalVolumeL() {
     return this.item.volumeLPerUnit() * this.qty;
+  }
+  clone() {
+    return new ItemStack(this.item.clone(), this.qty);
   }
   canMerge(other) {
     return this.stackable && other.stackable && this.id === other.id;
