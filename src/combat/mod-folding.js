@@ -1,6 +1,15 @@
 // src/combat/mod-folding.js
 // @ts-check
-import { ALL_SLOTS_ORDER } from "../../constants.js";
+import {
+  ALL_SLOTS_ORDER,
+  BASE_DAMAGE_MULTIPLIER,
+  BASE_SPEED_MULTIPLIER,
+  MAX_AFFINITY_CAP,
+  MAX_RESIST_CAP,
+  MIN_AFFINITY_CAP,
+  MIN_SPEED_MULTIPLIER,
+  MAX_SPEED_MULTIPLIER,
+} from "../../constants.js";
 
 /**
  * Normalizes “mod payload” fields we allow on items:
@@ -54,8 +63,8 @@ export function foldModsFromEquipment(equipment) {
     resists: Object.create(null),
     affinities: Object.create(null),
     immunities: new Set(),
-    dmgMult: 1.0,
-    speedMult: 1.0,
+    dmgMult: BASE_DAMAGE_MULTIPLIER,
+    speedMult: BASE_SPEED_MULTIPLIER,
     brands: [],
   };
 
@@ -95,13 +104,19 @@ export function foldModsFromEquipment(equipment) {
 
   // Clamp/normalize
   for (const k of Object.keys(folded.resists)) {
-    folded.resists[k] = Math.max(0, Math.min(0.9, folded.resists[k])); // cap 90% resist as a sane default
+    folded.resists[k] = Math.max(0, Math.min(MAX_RESIST_CAP, folded.resists[k])); // cap default resist ceiling
   }
   for (const k of Object.keys(folded.affinities)) {
-    folded.affinities[k] = Math.max(-0.9, Math.min(0.9, folded.affinities[k]));
+    folded.affinities[k] = Math.max(
+      MIN_AFFINITY_CAP,
+      Math.min(MAX_AFFINITY_CAP, folded.affinities[k]),
+    );
   }
   folded.dmgMult = Math.max(0, folded.dmgMult);
-  folded.speedMult = Math.max(0.2, Math.min(5, folded.speedMult));
+  folded.speedMult = Math.max(
+    MIN_SPEED_MULTIPLIER,
+    Math.min(MAX_SPEED_MULTIPLIER, folded.speedMult),
+  );
 
   return folded;
 }

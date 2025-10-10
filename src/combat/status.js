@@ -1,6 +1,14 @@
 // src/combat/status.js
 // @ts-check
 
+import {
+  BURN_MAX_STACKS,
+  DEFAULT_STATUS_DURATION_TURNS,
+  DEFAULT_STATUS_STACKS,
+  HASTE_MAX_STACKS,
+  STATUS_TICK_DELTA_TURNS,
+} from "../../constants.js";
+
 /**
  * Lightweight status registry with stacking and ticking.
  * Extend handlers as needed.
@@ -44,7 +52,13 @@ export function getStatusDef(id) {
  * @param {number} stacks
  * @param {any} [payload]
  */
-export function applyStatus(actor, id, durationTurns = 5, stacks = 1, payload = null) {
+export function applyStatus(
+  actor,
+  id,
+  durationTurns = DEFAULT_STATUS_DURATION_TURNS,
+  stacks = DEFAULT_STATUS_STACKS,
+  payload = null,
+) {
   const def = getStatusDef(id);
   if (!def) return;
 
@@ -77,7 +91,7 @@ export function applyStatus(actor, id, durationTurns = 5, stacks = 1, payload = 
  * @param {import("./actor.js").Actor} actor
  * @param {number} [dtTurns]
  */
-export function tickStatuses(actor, dtTurns = 1) {
+export function tickStatuses(actor, dtTurns = STATUS_TICK_DELTA_TURNS) {
   for (const s of actor.statuses) {
     const def = getStatusDef(s.id);
     if (!def) continue;
@@ -101,7 +115,7 @@ export function tickStatuses(actor, dtTurns = 1) {
 defineStatus({
   id: "burn",
   stacking: "add_stacks",
-  maxStacks: 5,
+  maxStacks: BURN_MAX_STACKS,
   onTick(actor, inst) {
     // Each stack pings 1 damage per turn (demo). Gate by hp floor.
     actor.res.hp = Math.max(0, actor.res.hp - inst.stacks);
@@ -111,7 +125,7 @@ defineStatus({
 defineStatus({
   id: "haste",
   stacking: "refresh",
-  maxStacks: 1,
+  maxStacks: HASTE_MAX_STACKS,
   onApply(actor) {
     // Instead of mutating modCache directly, trigger a refold of all modifiers including status effects.
     actor.refoldModifiers?.();

@@ -1,6 +1,10 @@
 // src/combat/attack.js
 // @ts-check
-import { DAMAGE_TYPE } from "../../constants.js";
+import {
+  DAMAGE_TYPE,
+  MAX_AFFINITY_CAP,
+  MIN_AFFINITY_CAP,
+} from "../../constants.js";
 
 /**
  * @typedef {import("../combat/actor.js").Actor} Actor
@@ -55,7 +59,11 @@ export function resolveAttack(attacker, defender, ctx) {
   dmg *= (1 - resist);
 
   // 6) attacker affinity
-  const affinity = clampSigned(attacker.affinityOf(typeKey), -0.9, 0.9);
+  const affinity = clampSigned(
+    attacker.affinityOf(typeKey),
+    MIN_AFFINITY_CAP,
+    MAX_AFFINITY_CAP,
+  );
   dmg *= (1 + affinity);
 
   // (Optional) polarity bias hook — customize mapping later:
