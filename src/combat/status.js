@@ -9,20 +9,12 @@ import {
   STATUS_TICK_DELTA_TURNS,
 } from "../../constants.js";
 
-const RESOURCE_KEYS = ["hp", "stamina", "mana"]; // used for regen aggregation
-
 /**
  * @typedef {Object} StatusDerived
- * @property {boolean} canAct
- * @property {number} moveAPDelta
- * @property {number} actionSpeedPct
+ * @property {number} moveCostMult
+ * @property {number} actionCostMult
  * @property {number} cooldownMult
- * @property {number} accuracyFlat
- * @property {number} critChancePct
- * @property {Record<string, number>} damageDealtMult
- * @property {Record<string, number>} damageTakenMult
- * @property {Record<string, number>} resistDelta
- * @property {Record<string, number>} regen
+ * @property {{hp:number, stamina:number, mana:number}} regen
  */
 
 /**
@@ -42,7 +34,7 @@ const RESOURCE_KEYS = ["hp", "stamina", "mana"]; // used for regen aggregation
  * @property {(actor: import("./actor.js").Actor, inst: import("./actor.js").StatusInstance)=>void} [onApply]
  * @property {(actor: import("./actor.js").Actor, inst: import("./actor.js").StatusInstance, turn: number)=>void} [onTick]  // per turn
  * @property {(actor: import("./actor.js").Actor, inst: import("./actor.js").StatusInstance, turn: number)=>void} [onExpire]
- * @property {(ctx: { actor: import("./actor.js").Actor, inst: import("./actor.js").StatusInstance }) => Partial<StatusDerived>|null|undefined} [derive]
+ * @property {(actor: import("./actor.js").Actor, inst: import("./actor.js").StatusInstance)=>void} [derive]
  */
 
 /** @type {Map<string, StatusDef>} */
@@ -62,32 +54,15 @@ export function getStatusDef(id) {
   return REG.get(id) || null;
 }
 
-function createEmptyDamageTypeMap() {
-  return Object.create(null);
-}
-
-function createEmptyRegenMap() {
-  /** @type {Record<string, number>} */
-  const regen = Object.create(null);
-  for (const key of RESOURCE_KEYS) regen[key] = 0;
-  return regen;
-}
-
 /**
  * @returns {StatusDerived}
  */
 export function createEmptyStatusDerived() {
   return {
-    canAct: true,
-    moveAPDelta: 0,
-    actionSpeedPct: 0,
-    cooldownMult: 1,
-    accuracyFlat: 0,
-    critChancePct: 0,
-    damageDealtMult: createEmptyDamageTypeMap(),
-    damageTakenMult: createEmptyDamageTypeMap(),
-    resistDelta: createEmptyDamageTypeMap(),
-    regen: createEmptyRegenMap(),
+    moveCostMult: 1.0,
+    actionCostMult: 1.0,
+    cooldownMult: 1.0,
+    regen: { hp: 0, stamina: 0, mana: 0 },
   };
 }
 
@@ -99,6 +74,7 @@ export function rebuildStatusDerived(actor) {
   if (!actor) return createEmptyStatusDerived();
 
   const agg = createEmptyStatusDerived();
+  actor.statusDerived = agg;
   if (!Array.isArray(actor.statuses)) {
     actor.statuses = [];
   }
@@ -107,61 +83,25 @@ export function rebuildStatusDerived(actor) {
     if (!inst) continue;
     const def = getStatusDef(inst.id);
     if (!def || typeof def.derive !== "function") continue;
-    const derived = def.derive({ actor, inst });
-    if (!derived) continue;
 
-    if (typeof derived.canAct === "boolean") {
-      agg.canAct = agg.canAct && derived.canAct;
-    }
-    if (typeof derived.moveAPDelta === "number" && Number.isFinite(derived.moveAPDelta)) {
-      agg.moveAPDelta += derived.moveAPDelta;
-    }
-    if (typeof derived.actionSpeedPct === "number" && Number.isFinite(derived.actionSpeedPct)) {
-      agg.actionSpeedPct += derived.actionSpeedPct;
-    }
-    if (typeof derived.cooldownMult === "number" && Number.isFinite(derived.cooldownMult)) {
-      const mult = derived.cooldownMult;
-      if (mult <= 0) {
-        console.warn(
-          `[Status] Invalid cooldown multiplier (${mult}) from status '${inst.id}'. Must be positive. Ignoring value.`
-        );
-      } else {
-        agg.cooldownMult *= mult;
+    const before = actor.statusDerived;
+    def.derive(actor, inst);
+    const after = actor.statusDerived || agg;
+
+    if (after !== agg) {
+      agg.moveCostMult = Number.isFinite(after.moveCostMult) ? after.moveCostMult : agg.moveCostMult;
+      agg.actionCostMult = Number.isFinite(after.actionCostMult) ? after.actionCostMult : agg.actionCostMult;
+      agg.cooldownMult = Number.isFinite(after.cooldownMult) ? after.cooldownMult : agg.cooldownMult;
+      if (after.regen) {
+        agg.regen = {
+          hp: Number.isFinite(after.regen.hp) ? after.regen.hp : agg.regen.hp,
+          stamina: Number.isFinite(after.regen.stamina) ? after.regen.stamina : agg.regen.stamina,
+          mana: Number.isFinite(after.regen.mana) ? after.regen.mana : agg.regen.mana,
+        };
       }
-    }
-    if (typeof derived.accuracyFlat === "number" && Number.isFinite(derived.accuracyFlat)) {
-      agg.accuracyFlat += derived.accuracyFlat;
-    }
-    if (typeof derived.critChancePct === "number" && Number.isFinite(derived.critChancePct)) {
-      agg.critChancePct += derived.critChancePct;
-    }
-    if (derived.damageDealtMult) {
-      for (const [type, value] of Object.entries(derived.damageDealtMult)) {
-        const num = Number(value);
-        if (!Number.isFinite(num)) continue;
-        agg.damageDealtMult[type] = (agg.damageDealtMult[type] ?? 0) + num;
-      }
-    }
-    if (derived.damageTakenMult) {
-      for (const [type, value] of Object.entries(derived.damageTakenMult)) {
-        const num = Number(value);
-        if (!Number.isFinite(num)) continue;
-        agg.damageTakenMult[type] = (agg.damageTakenMult[type] ?? 0) + num;
-      }
-    }
-    if (derived.resistDelta) {
-      for (const [type, value] of Object.entries(derived.resistDelta)) {
-        const num = Number(value);
-        if (!Number.isFinite(num)) continue;
-        agg.resistDelta[type] = (agg.resistDelta[type] ?? 0) + num;
-      }
-    }
-    if (derived.regen) {
-      for (const key of RESOURCE_KEYS) {
-        const delta = Number(derived.regen[key]);
-        if (!Number.isFinite(delta) || delta === 0) continue;
-        agg.regen[key] = (agg.regen[key] ?? 0) + delta;
-      }
+      actor.statusDerived = agg;
+    } else if (before !== after) {
+      actor.statusDerived = agg;
     }
   }
 
@@ -249,95 +189,6 @@ export function tickStatuses(actor, turn = STATUS_TICK_DELTA_TURNS) {
   rebuildStatusDerived(actor);
 }
 
-/**
- * Applies passive regeneration and clamps resources.
- * Also maintains channeling state (breaks on movement/interruption).
- * @param {import("./actor.js").Actor} actor
- */
-export function updateResources(actor) {
-  if (!actor) return;
-
-  if (!actor.res) {
-    actor.res = { hp: 0, stamina: 0, mana: 0 };
-  }
-
-  const regenSources = [];
-  if (actor.regen) regenSources.push(actor.regen);
-  if (actor.statusDerived?.regen) regenSources.push(actor.statusDerived.regen);
-
-  for (const key of RESOURCE_KEYS) {
-    let delta = 0;
-    for (const source of regenSources) {
-      if (!source) continue;
-      const value = Number(source[key]);
-      if (!Number.isFinite(value)) continue;
-      delta += value;
-    }
-    if (delta !== 0) {
-      actor.res[key] = (actor.res[key] ?? 0) + delta;
-    }
-  }
-
-  if (!actor.base) {
-    throw new Error("actor.base is undefined in updateResources; cannot determine resource maximums.");
-  }
-  const maxMap = {
-    hp: actor.base.maxHP,
-    stamina: actor.base.maxStamina,
-    mana: actor.base.maxMana,
-  };
-
-  for (const key of RESOURCE_KEYS) {
-    const max = Number(maxMap[key]);
-    if (Number.isFinite(max)) {
-      actor.res[key] = Math.min(max, actor.res[key] ?? 0);
-    }
-    actor.res[key] = Math.max(0, actor.res[key] ?? 0);
-  }
-
-  const channel = actor.channeling;
-  if (channel) {
-    const interrupted = channel.breakOnMove && channel.moved;
-    if (interrupted) {
-      if (channel.statusId) {
-        const idx = actor.statuses?.findIndex((s) => s.id === channel.statusId) ?? -1;
-        if (idx >= 0 && actor.statuses) {
-          const [inst] = actor.statuses.splice(idx, 1);
-          const def = inst ? getStatusDef(inst.id) : null;
-          def?.onExpire?.(actor, inst, channel.turn ?? 0);
-        }
-        rebuildStatusDerived(actor);
-      }
-      channel.onBreak?.(actor);
-      actor.channeling = null;
-    } else if (channel.breakOnMove) {
-      channel.moved = false;
-    }
-  }
-}
-
-/**
- * Computes the action AP cost after status-based speed modifiers.
- * @param {import("./actor.js").Actor} actor
- * @param {number} baseAP
- */
-export function computeActionAP(actor, baseAP) {
-  const pct = actor?.statusDerived?.actionSpeedPct ?? 0;
-  const cost = baseAP * (1 + pct);
-  return Number.isFinite(cost) && cost > 0 ? Math.max(1, cost) : 1;
-}
-
-/**
- * Scales a cooldown using the cumulative cooldown multiplier.
- * @param {import("./actor.js").Actor} actor
- * @param {number} baseCooldown
- */
-export function scaleCooldown(actor, baseCooldown) {
-  const mult = actor?.statusDerived?.cooldownMult ?? 1;
-  const scaled = baseCooldown * mult;
-  return Number.isFinite(scaled) && scaled >= 0 ? scaled : 0;
-}
-
 // ---- Example stock statuses (you can move these elsewhere) ----
 defineStatus({
   id: "burn",
@@ -346,12 +197,6 @@ defineStatus({
   onTick(actor, inst) {
     // Each stack pings 1 damage per turn (demo). Gate by hp floor.
     actor.res.hp = Math.max(0, actor.res.hp - inst.stacks);
-  },
-  derive: ({ inst }) => {
-    const stacks = inst?.stacks ?? 1;
-    return {
-      damageTakenMult: { fire: 0.1 * stacks },
-    };
   },
 });
 
@@ -366,8 +211,62 @@ defineStatus({
   onExpire(actor) {
     actor.refoldModifiers?.();
   },
-  derive: ({ inst }) => {
-    const stacks = inst?.stacks ?? 1;
-    return { actionSpeedPct: -0.15 * stacks, cooldownMult: 0.9 };
+  derive(actor, inst) {
+    const stacks = Math.max(1, inst?.stacks ?? 1);
+    const speedMult = Math.pow(0.85, stacks);
+    actor.statusDerived.actionCostMult *= speedMult;
+    actor.statusDerived.cooldownMult *= 0.9;
+  },
+});
+
+defineStatus({
+  id: "fatigue",
+  stacking: "add_stacks",
+  maxStacks: 5,
+  derive(actor, inst) {
+    const stacks = Math.max(0, inst?.stacks ?? 0);
+    actor.statusDerived.actionCostMult *= Math.pow(1.05, stacks);
+  },
+});
+
+defineStatus({
+  id: "chilled",
+  stacking: "add_stacks",
+  maxStacks: 3,
+  derive(actor, inst) {
+    const stacks = Math.max(0, inst?.stacks ?? 0);
+    const factor = Math.pow(1.1, stacks);
+    actor.statusDerived.actionCostMult *= factor;
+    actor.statusDerived.cooldownMult *= factor;
+  },
+});
+
+defineStatus({
+  id: "regeneration",
+  stacking: "refresh",
+  maxStacks: 1,
+  derive(actor) {
+    actor.statusDerived.regen.hp += 1;
+  },
+});
+
+defineStatus({
+  id: "adrenaline",
+  stacking: "refresh",
+  maxStacks: 1,
+  derive(actor) {
+    actor.statusDerived.actionCostMult *= 0.85;
+    actor.statusDerived.cooldownMult *= 0.85;
+    actor.statusDerived.regen.stamina += 1;
+  },
+});
+
+defineStatus({
+  id: "exhausted",
+  stacking: "refresh",
+  maxStacks: 1,
+  derive(actor) {
+    actor.statusDerived.actionCostMult *= 1.25;
+    actor.statusDerived.regen.stamina -= 1;
   },
 });

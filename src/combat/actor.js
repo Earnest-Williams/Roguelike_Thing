@@ -33,13 +33,6 @@ import { createEmptyStatusDerived } from "./status.js";
  */
 
 /**
- * @typedef {Object} RegenRates
- * @property {number} hp
- * @property {number} stamina
- * @property {number} mana
- */
-
-/**
  * @typedef {Object} ChannelingState
  * @property {string} [statusId]
  * @property {boolean} [breakOnMove]
@@ -127,11 +120,19 @@ export class Actor {
       mana: this.base.maxMana,
     };
 
-    /** @type {RegenRates} */
-    this.regen = { hp: 0, stamina: 0, mana: 0 };
-
     /** @type {ChannelingState|null} */
     this.channeling = null;
+
+    // Temporal state
+    /** @type {number} */
+    this.ap = 0;
+    /** @type {number} */
+    this.apCap = 100;
+    /** @type {number} */
+    this.baseActionAP = 100;
+
+    /** @type {Record<string, number>} */
+    this.cooldowns = Object.create(null);
   }
 
   /**
@@ -164,6 +165,18 @@ export class Actor {
    */
   affinityOf(type) {
     return this.modCache.affinities[type] ?? 0;
+  }
+
+  /**
+   * Returns the combined speed multiplier (modCache.speedMult * statusDerived.actionCostMult).
+   * Lower is faster (<1). Use when computing AP cost.
+   */
+  totalActionCostMult() {
+    return Math.max(0.05, this.modCache.speedMult * this.statusDerived.actionCostMult);
+  }
+
+  totalCooldownMult() {
+    return Math.max(0.05, this.statusDerived.cooldownMult);
   }
 
   /**

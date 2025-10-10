@@ -1,0 +1,52 @@
+// src/combat/actions.js
+// @ts-check
+import { apCost, spendAP, startCooldown, isReady } from "./time.js";
+import { resolveAttack } from "./attack.js";
+
+/**
+ * @typedef {import("./actor.js").Actor} Actor
+ */
+
+/**
+ * Move action (example). Returns boolean success.
+ * @param {Actor} actor
+ * @param {{dx:number, dy:number}} dir
+ */
+export function tryMove(actor, dir) {
+  const base = Math.round(50 * (actor.statusDerived.moveCostMult ?? 1));
+  const cost = apCost(actor, Math.max(1, base));
+  if (!spendAP(actor, cost)) return false;
+
+  actor.x = (actor.x || 0) + dir.dx;
+  actor.y = (actor.y || 0) + dir.dy;
+  return true;
+}
+
+/**
+ * Attack action (example). Applies cooldown and spends AP.
+ * @param {Actor} attacker
+ * @param {Actor} defender
+ * @param {{label?:string, base?:number, type?:string, key?:string, baseCooldown?:number, baseAP?:number}} [opts]
+ */
+export function tryAttack(attacker, defender, opts = {}) {
+  const key = opts.key || "basic_attack";
+  if (!isReady(attacker, key)) return false;
+
+  const baseAP = Math.max(1, opts.baseAP ?? attacker.baseActionAP ?? 100);
+  const cost = apCost(attacker, baseAP);
+  if (!spendAP(attacker, cost)) return false;
+
+  const profile = {
+    label: opts.label || "Basic Attack",
+    base: Math.max(1, opts.base ?? 5),
+    type: String(opts.type || "physical"),
+  };
+  const result = resolveAttack(attacker, defender, { profile });
+
+  defender.res.hp = Math.max(0, defender.res.hp - result.total);
+
+  const baseCd = Math.max(0, opts.baseCooldown ?? 1);
+  startCooldown(attacker, key, baseCd);
+
+  return true;
+}
