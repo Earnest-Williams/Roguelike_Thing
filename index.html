@@ -1227,13 +1227,6 @@
           list() {
             return this.stacks;
           }
-
-          /* duplicate inventory methods removed (kept the later canonical copy) */
-          consumeMatching(predicate, qty = 1) {
-            const found = this.findStack(predicate);
-            if (!found) return false;
-            return this.consumeAt(found.index, qty);
-          }
         }
 
         const INVENTORY_CONTAINER_METHODS = {
@@ -1369,6 +1362,11 @@
             stack.qty -= qty;
             if (stack.qty === 0) this.stacks[index] = null;
             return true;
+          },
+          consumeMatching(predicate, qty = 1) {
+            const found = this.findStack(predicate);
+            if (!found) return false;
+            return this.consumeAt(found.index, qty);
           },
         };
 
