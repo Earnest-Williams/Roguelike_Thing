@@ -32,7 +32,7 @@ import { DAMAGE_TYPE } from "../../constants.js";
  */
 export function resolveAttack(attacker, defender, ctx) {
   const typeKey = String(ctx.profile.type || "physical").toLowerCase();
-  let dmg = Math.max(0, ctx.profile.base | 0);
+  let dmg = Math.max(0, Math.floor(Number(ctx.profile.base) || 0));
 
   // 2) brands
   for (const b of attacker.modCache.brands) {
