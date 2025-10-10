@@ -32,6 +32,7 @@ function resolveEntry(entry, rng) {
     try {
       registerItem(clone);
     } catch (_) {
+      // Ignore error if item already exists; upsertItem will handle both insert and update cases.
       upsertItem(clone);
     }
     return makeItem(id);
