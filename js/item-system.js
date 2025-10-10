@@ -766,7 +766,7 @@ const ITEM_DEFINITIONS = Object.freeze({
       name: "Rucksack",
       kind: "container",
       equipSlots: [SLOT.Backpack],
-      dims: { l: 70, w: 45, h: 30 },
+      dims: { l: 60, w: 35, h: 20 },
       mass: 1.8,
       container: {
         volumeL: 45,
