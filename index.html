@@ -676,7 +676,7 @@
             S.modCache.status ?? createDefaultStatusModCache();
           p += getModNumber(attackerMods.inflictBonus, a.id);
           p -= getModNumber(defenderStatusMods.resistBonus, a.id);
-          p = Math.max(0, Math.min(1, p));
+          p = clamp01Normalized(p);
           if (p <= 0) continue;
 
           if (
@@ -2337,7 +2337,7 @@
         }
 
         function computeTileOverlayAlpha(x, y, lightCtx) {
-          const baseA = Math.max(0, Math.min(1, LIGHT_CONFIG.baseOverlayAlpha));
+          const baseA = clamp01Normalized(LIGHT_CONFIG.baseOverlayAlpha);
           const variance = Math.max(0, LIGHT_CONFIG.flickerVariance || 0);
           if (!lightCtx || variance <= 0) {
             return baseA;
@@ -2397,7 +2397,7 @@
             props.color,
             LIGHT_CONFIG.fallbackColor,
           );
-          const baseA = Math.max(0, Math.min(1, LIGHT_CONFIG.baseOverlayAlpha));
+          const baseA = clamp01Normalized(LIGHT_CONFIG.baseOverlayAlpha);
           return {
             style: `rgba(${rgb.r},${rgb.g},${rgb.b},${baseA.toFixed(3)})`,
             rgb,
