@@ -347,7 +347,11 @@ export class Item {
     this.flickerRate = typeof o.flickerRate === "number" ? o.flickerRate : 0;
     this.container = o.container ? { ...o.container } : null;
     if (this.container) this.contents = [];
-    this.throwProfile = normalizeThrowProfile(o.throwProfile || null, this);
+    const hasExplicitThrowProfile =
+      o.throwProfile !== undefined && o.throwProfile !== null;
+    this.throwProfile = hasExplicitThrowProfile
+      ? normalizeThrowProfile(o.throwProfile, this)
+      : null;
     this.weaponProfile = normalizeWeaponProfile(o.weaponProfile);
   }
   isWeapon() {
