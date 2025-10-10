@@ -84,25 +84,8 @@ export function rebuildStatusDerived(actor) {
     const def = getStatusDef(inst.id);
     if (!def || typeof def.derive !== "function") continue;
 
-    const before = actor.statusDerived;
+    // Each derive function should mutate actor.statusDerived (agg) in place to accumulate its effect.
     def.derive(actor, inst);
-    const after = actor.statusDerived || agg;
-
-    if (after !== agg) {
-      agg.moveCostMult = Number.isFinite(after.moveCostMult) ? after.moveCostMult : agg.moveCostMult;
-      agg.actionCostMult = Number.isFinite(after.actionCostMult) ? after.actionCostMult : agg.actionCostMult;
-      agg.cooldownMult = Number.isFinite(after.cooldownMult) ? after.cooldownMult : agg.cooldownMult;
-      if (after.regen) {
-        agg.regen = {
-          hp: Number.isFinite(after.regen.hp) ? after.regen.hp : agg.regen.hp,
-          stamina: Number.isFinite(after.regen.stamina) ? after.regen.stamina : agg.regen.stamina,
-          mana: Number.isFinite(after.regen.mana) ? after.regen.mana : agg.regen.mana,
-        };
-      }
-      actor.statusDerived = agg;
-    } else if (before !== after) {
-      actor.statusDerived = agg;
-    }
   }
 
   actor.statusDerived = agg;
