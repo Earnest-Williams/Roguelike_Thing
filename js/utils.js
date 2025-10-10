@@ -27,11 +27,22 @@ export const clamp01Normalized = (value) => {
   return clamp(value, 0, 1);
 };
 
-export function colorStringToRgb(color, fallbackColor = "#ffe9a6") {
+const colorRgbaCache = new Map();
+
+function clampColorComponent(value) {
+  return clamp(Math.round(value), 0, 255) | 0;
+}
+
+function parseColorComponents(color) {
   if (typeof color !== "string") {
-    return colorStringToRgb(fallbackColor, fallbackColor);
+    return null;
   }
+
   const trimmed = color.trim();
+  if (!trimmed) {
+    return null;
+  }
+
   if (trimmed.startsWith("#")) {
     let hex = trimmed.slice(1);
     if (hex.length === 3) {
@@ -47,22 +58,73 @@ export function colorStringToRgb(color, fallbackColor = "#ffe9a6") {
           r: (value >> 16) & 0xff,
           g: (value >> 8) & 0xff,
           b: value & 0xff,
+          a: 1,
         };
       }
     }
+    return null;
   }
-  const match = trimmed.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
-  if (match) {
-    return {
-      r: Math.max(0, Math.min(255, parseInt(match[1], 10) || 0)),
-      g: Math.max(0, Math.min(255, parseInt(match[2], 10) || 0)),
-      b: Math.max(0, Math.min(255, parseInt(match[3], 10) || 0)),
-    };
+
+  const match = trimmed.match(/^rgba?\(([^)]+)\)$/i);
+  if (!match) {
+    return null;
   }
-  if (trimmed !== fallbackColor) {
+
+  const parts = match[1]
+    .split(",")
+    .map((p) => parseFloat(p.trim()))
+    .filter((n) => Number.isFinite(n));
+
+  if (parts.length < 3) {
+    return null;
+  }
+
+  const [r, g, b, alpha = 1] = parts;
+  return {
+    r: clampColorComponent(r),
+    g: clampColorComponent(g),
+    b: clampColorComponent(b),
+    a: clamp(alpha, 0, 1),
+  };
+}
+
+export function colorStringToRgb(color, fallbackColor = "#ffe9a6") {
+  const parsed = parseColorComponents(color);
+  if (parsed) {
+    const { r, g, b } = parsed;
+    return { r, g, b };
+  }
+
+  if (color !== fallbackColor) {
     return colorStringToRgb(fallbackColor, fallbackColor);
   }
+
   return { r: 255, g: 255, b: 255 };
+}
+
+export function colorStringToRgba(color, fallbackColor = "#ffe9a6") {
+  const cacheKey = `${color}|${fallbackColor}`;
+  if (colorRgbaCache.has(cacheKey)) {
+    return /** @type {{ r: number; g: number; b: number; a: number }} */ (
+      colorRgbaCache.get(cacheKey)
+    );
+  }
+
+  const parsed = parseColorComponents(color);
+  if (parsed) {
+    colorRgbaCache.set(cacheKey, parsed);
+    return parsed;
+  }
+
+  if (color !== fallbackColor) {
+    const fallback = colorStringToRgba(fallbackColor, fallbackColor);
+    colorRgbaCache.set(cacheKey, fallback);
+    return fallback;
+  }
+
+  const defaultColor = { r: 255, g: 255, b: 255, a: 1 };
+  colorRgbaCache.set(cacheKey, defaultColor);
+  return defaultColor;
 }
 
 export const getNow =

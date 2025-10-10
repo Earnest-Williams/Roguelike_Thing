@@ -4,62 +4,7 @@
 /** @typedef {import("./types.js").RGBA} RGBA */
 
 import { TILE_WALL } from "../constants.js";
-
-const colorCache = new Map();
-
-/**
- * @param {string} color
- * @returns {RGBA}
- */
-function toRgba(color) {
-  if (colorCache.has(color)) {
-    return /** @type {RGBA} */ (colorCache.get(color));
-  }
-  const normalized = color.trim();
-  let r = 0;
-  let g = 0;
-  let b = 0;
-  let a = 1;
-  if (normalized.startsWith("#")) {
-    if (normalized.length === 7) {
-      r = parseInt(normalized.slice(1, 3), 16);
-      g = parseInt(normalized.slice(3, 5), 16);
-      b = parseInt(normalized.slice(5, 7), 16);
-    } else if (normalized.length === 4) {
-      r = parseInt(normalized[1] + normalized[1], 16);
-      g = parseInt(normalized[2] + normalized[2], 16);
-      b = parseInt(normalized[3] + normalized[3], 16);
-    } else {
-      throw new Error(`Unsupported hex color: ${color}`);
-    }
-  } else {
-    const match = normalized.match(/^rgba?\(([^)]+)\)$/i);
-    if (!match) {
-      throw new Error(`Unsupported color format: ${color}`);
-    }
-    const parts = match[1]
-      .split(",")
-      .map((p) => parseFloat(p.trim()))
-      .filter((n) => !Number.isNaN(n));
-    if (parts.length < 3) {
-      throw new Error(`Unsupported color format: ${color}`);
-    }
-    [r, g, b] = parts;
-    r = clampColor(r);
-    g = clampColor(g);
-    b = clampColor(b);
-    if (parts.length >= 4) {
-      a = Math.max(0, Math.min(1, parts[3]));
-    }
-  }
-  const rgba = { r, g, b, a };
-  colorCache.set(color, rgba);
-  return rgba;
-}
-
-function clampColor(value) {
-  return Math.max(0, Math.min(255, Math.round(value)));
-}
+import { colorStringToRgba as toRgba } from "../utils.js";
 
 /**
  * Convert state into renderable tile visuals for the main map.
