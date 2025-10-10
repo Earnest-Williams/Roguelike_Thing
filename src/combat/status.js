@@ -35,6 +35,29 @@ import {
 import { EVENT, emit } from "../ui/event-log.js";
 
 /**
+ * Proxy bridge so browser/runtime specific status application logic can live
+ * outside of the shared combat module. The resolver will call through this
+ * export which, by default, delegates to an implementation registered on the
+ * global object (set by index.html). If no implementation is registered we
+ * gracefully return an empty list.
+ *
+ * @param {{statusAttempts?: any[]}|null} ctx
+ * @param {any} S
+ * @param {any} D
+ * @param {number} turn
+ * @returns {any[]}
+ */
+export function applyStatuses(ctx, S, D, turn) {
+  if (typeof globalThis !== "undefined") {
+    const impl = globalThis.__applyStatusesImpl;
+    if (typeof impl === "function") {
+      return impl(ctx, S, D, turn);
+    }
+  }
+  return [];
+}
+
+/**
  * @typedef {Object} StatusDerived
  * @property {number} moveCostMult
  * @property {number} actionCostMult
