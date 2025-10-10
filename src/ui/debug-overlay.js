@@ -33,7 +33,7 @@ export class DebugOverlay {
     const lines = [];
     const name = a.name ?? a.id ?? "?";
     const hp = a.res?.hp;
-    const maxHp = a.base?.maxHP;
+    const maxHp = a.base?.maxHP ?? a.baseStats?.maxHP;
     const ap = a.ap;
     const apCap = a.apCap;
     lines.push(`Actor: ${name}  HP:${hp}/${maxHp}  AP:${ap}/${apCap}`);
