@@ -596,6 +596,7 @@ const ITEM_DEFINITIONS = Object.freeze({
         SLOT.Belt3,
         SLOT.Belt4,
       ],
+      handsRequired: 1,
       stackable: true,
       maxStack: 6,
       dims: { l: 180, w: 4, h: 4 },
