@@ -321,7 +321,7 @@ export function updateResources(actor) {
 export function computeActionAP(actor, baseAP) {
   const pct = actor?.statusDerived?.actionSpeedPct ?? 0;
   const cost = baseAP * (1 + pct);
-  return Number.isFinite(cost) && cost > 0 ? cost : 0;
+  return Number.isFinite(cost) && cost > 0 ? Math.max(1, cost) : 1;
 }
 
 /**
