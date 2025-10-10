@@ -22,7 +22,7 @@ export function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
-export const clamp01 = (value) => {
+export const clamp01Normalized = (value) => {
   if (!Number.isFinite(value)) return 0;
   return clamp(value, 0, 1);
 };
