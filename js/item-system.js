@@ -510,7 +510,7 @@ const ITEM_DEFINITIONS = Object.freeze({
       ],
       handsRequired: 1,
       dims: { l: 110, w: 5, h: 3 },
-      mass: 1.8,
+      mass: 1.6,
       weaponProfile: {
         category: WEAPON_CATEGORY.MELEE,
         range: { min: 0, optimal: 1, max: 1 },
