@@ -753,8 +753,8 @@ const ITEM_DEFINITIONS = Object.freeze({
       name: "Cloth Sack",
       kind: "container",
       equipSlots: [SLOT.Backpack],
-      dims: { l: 60, w: 45, h: 20 },
-      mass: 1.2,
+      dims: { l: 40, w: 30, h: 10 },
+      mass: 0.6,
       container: {
         volumeL: 30,
         maxMassKg: 15,
