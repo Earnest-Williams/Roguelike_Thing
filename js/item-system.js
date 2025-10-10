@@ -12,7 +12,13 @@ function dimsVolumeL(d) {
 } // cm^3 to liters
 
 function dimsLongest(d) {
-  return Math.max(d.l, d.w, d.h);
+  if (!d || typeof d !== "object") {
+    return 1;
+  }
+  const values = [d.l, d.w, d.h]
+    .map((value) => (Number.isFinite(value) && value > 0 ? value : 0));
+  const longest = Math.max(...values, 0);
+  return longest > 0 ? longest : 1;
 }
 
 function normalizeDamageProfile(dmg) {
