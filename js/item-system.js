@@ -773,6 +773,7 @@ const ITEM_DEFINITIONS = Object.freeze({
         volumeL: 45,
         maxMassKg: 25,
         maxItemLengthCm: 80,
+        accepts: (it) => it.longestCm() <= 80,
       },
     },
     {
