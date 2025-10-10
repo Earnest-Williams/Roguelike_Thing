@@ -57,6 +57,34 @@ function mergeNumberMap(into, add) {
  * @param {Partial<Record<string, Item|ItemStack>>} equipment
  * @returns {ModCache}
  */
+function foldItemInto(item, folded) {
+  if (!item) return;
+  if (Array.isArray(item.brands)) {
+    for (const b of item.brands) {
+      folded.brands.push({
+        kind: "brand",
+        id: b.id ?? `${item.id}#brand`,
+        type: b.type ?? null,
+        flat: Number.isFinite(b.flat) ? b.flat : 0,
+        pct: Number.isFinite(b.pct) ? b.pct : 0,
+      });
+    }
+  }
+  mergeNumberMap(folded.resists, item.resists);
+  mergeNumberMap(folded.affinities, item.affinities);
+
+  if (Array.isArray(item.immunities)) {
+    for (const t of item.immunities) folded.immunities.add(String(t));
+  }
+
+  if (typeof item.dmgMult === "number" && Number.isFinite(item.dmgMult)) {
+    folded.dmgMult *= item.dmgMult;
+  }
+  if (typeof item.speedMult === "number" && Number.isFinite(item.speedMult)) {
+    folded.speedMult *= item.speedMult;
+  }
+}
+
 export function foldModsFromEquipment(equipment) {
   /** @type {ModCache} */
   const folded = {
@@ -68,38 +96,20 @@ export function foldModsFromEquipment(equipment) {
     brands: [],
   };
 
+  const seen = new Set();
   for (const slot of ALL_SLOTS_ORDER) {
     const raw = equipment[slot];
     const item = asItem(raw);
     if (!item) continue;
+    seen.add(slot);
+    foldItemInto(item, folded);
+  }
 
-    // Optional payloads on your item defs:
-    // item.brands, item.resists, item.affinities, item.immunities, item.dmgMult, item.speedMult
-    if (Array.isArray(item.brands)) {
-      for (const b of item.brands) {
-        // Normalize minimal brand fields
-        folded.brands.push({
-          kind: "brand",
-          id: b.id ?? `${item.id}#brand`,
-          type: b.type ?? null,
-          flat: Number.isFinite(b.flat) ? b.flat : 0,
-          pct: Number.isFinite(b.pct) ? b.pct : 0,
-        });
-      }
-    }
-    mergeNumberMap(folded.resists, item.resists);
-    mergeNumberMap(folded.affinities, item.affinities);
-
-    if (Array.isArray(item.immunities)) {
-      for (const t of item.immunities) folded.immunities.add(String(t));
-    }
-
-    if (typeof item.dmgMult === "number" && Number.isFinite(item.dmgMult)) {
-      folded.dmgMult *= item.dmgMult;
-    }
-    if (typeof item.speedMult === "number" && Number.isFinite(item.speedMult)) {
-      folded.speedMult *= item.speedMult;
-    }
+  for (const key of Object.keys(equipment)) {
+    if (seen.has(key)) continue;
+    const item = asItem(equipment[key]);
+    if (!item) continue;
+    foldItemInto(item, folded);
   }
 
   // Clamp/normalize
