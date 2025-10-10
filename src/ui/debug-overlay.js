@@ -171,7 +171,7 @@ function formatBreakdownStep(step) {
     case "brand_flat":
       return `brand ${step.source ?? "?"} +${delta}`;
     case "brand_pct":
-      return `brand ${step.source ?? "?"} ${(step.pct * 100).toFixed(0)}% (${fmtDelta(delta)})`;
+      return `brand ${step.source ?? "?"} ${((Number.isFinite(step.pct) ? step.pct : 0) * 100).toFixed(0)}% (${fmtDelta(delta)})`;
     case "attacker_mult":
       return `atk mult x${fmtNumber(step.mult)} (${fmtDelta(delta)})`;
     case "defender_resist":
