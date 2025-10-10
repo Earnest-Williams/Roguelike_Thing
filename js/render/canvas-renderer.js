@@ -4,6 +4,7 @@
 /** @typedef {import("./types.js").ViewTransform} ViewTransform */
 
 const DEFAULT_OVERLAY_RGBA = { r: 255, g: 255, b: 102, a: 1 };
+const DEFAULT_BADGE_BG = { r: 15, g: 23, b: 42, a: 0.85 };
 
 /**
  * Basic canvas-backed renderer that implements the IRenderer contract.
@@ -71,7 +72,9 @@ export class CanvasRenderer {
       }
       if (t.glyph) {
         const size = Math.max(10, Math.floor(c * 0.85));
-        const fontWeight = t.kind === "player" ? "bold " : "";
+        const isPlayer = t.kind === "player";
+        const isMob = t.kind === "mob";
+        const fontWeight = isPlayer || isMob ? "bold " : "";
         ctx.font = `${fontWeight}${size}px monospace`;
         if (t.fg) {
           ctx.fillStyle = rgbaToString(t.fg);
@@ -89,6 +92,34 @@ export class CanvasRenderer {
           Math.max(0, t.overlayA),
         ).toFixed(3)})`;
         ctx.fillRect(px, py, c, c);
+      }
+      if (t.badge) {
+        const fontSize = Math.max(8, Math.floor(c * 0.4));
+        ctx.font = `600 ${fontSize}px monospace`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "bottom";
+        const textX = px + c / 2;
+        const textY = py - Math.max(2, Math.floor(fontSize * 0.1));
+        const metrics = ctx.measureText(t.badge);
+        const textWidth = metrics.width;
+        const padX = Math.max(2, Math.floor(fontSize * 0.4));
+        const padY = Math.max(1, Math.floor(fontSize * 0.3));
+        const bgWidth = textWidth + padX * 2;
+        const bgHeight = fontSize + padY * 2;
+        const bgX = textX - bgWidth / 2;
+        const bgY = textY - bgHeight + padY;
+        const bgColor = t.badgeBg || DEFAULT_BADGE_BG;
+        ctx.fillStyle = `rgba(${bgColor.r},${bgColor.g},${bgColor.b},${Math.min(
+          1,
+          Math.max(0, bgColor.a ?? 1),
+        ).toFixed(3)})`;
+        ctx.fillRect(bgX, bgY, bgWidth, bgHeight);
+        const badgeColor = t.badgeColor || { r: 255, g: 255, b: 255, a: 1 };
+        ctx.fillStyle = `rgba(${badgeColor.r},${badgeColor.g},${badgeColor.b},${Math.min(
+          1,
+          Math.max(0, badgeColor.a ?? 1),
+        ).toFixed(3)})`;
+        ctx.fillText(t.badge, textX, textY);
       }
     }
   }

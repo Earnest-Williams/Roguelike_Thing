@@ -3,7 +3,7 @@
 import { LOOT_TABLES } from "../content/loot.js";
 import { BASE_ITEMS } from "../content/items.js";
 import { applyAffixes } from "../content/affixes.js";
-import { registerItem, upsertItem, makeItem } from "item-system";
+import { registerItem, upsertItem, makeItem } from "../../item-system.js";
 
 export function randInt(rng, lo, hi) {
   return lo + Math.floor(rng() * (hi - lo + 1));

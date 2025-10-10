@@ -39,6 +39,7 @@ export class RenderController {
    * @param {Record<string, string>} state.colors
    * @param {(x: number, y: number) => number | undefined} state.overlayAlphaAt
    * @param {import("./types.js").RGBA | null | undefined} [state.overlayColor]
+   * @param {Array<any>} [state.entities]
    * @param {ViewTransform} view
    */
   render(state, view) {
@@ -53,6 +54,7 @@ export class RenderController {
       colors: state.colors,
       overlayAlphaAt: state.overlayAlphaAt,
       overlayColor: state.overlayColor ?? null,
+      entities: state.entities ?? [],
     });
     this.renderer.clear();
     this.renderer.drawTiles(batch);

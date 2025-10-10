@@ -3990,6 +3990,22 @@
           return view;
         }
 
+        const RESIST_BADGE_CONFIG = {
+          fire: { icon: "🔥", color: "#fb923c" },
+          cold: { icon: "❄︎", color: "#38bdf8" },
+          lightning: { icon: "⚡", color: "#facc15" },
+          poison: { icon: "☠", color: "#86efac" },
+          acid: { icon: "🧪", color: "#bef264" },
+          shadow: { icon: "⬤", color: "#c084fc" },
+          void: { icon: "⬤", color: "#94a3b8" },
+          arcane: { icon: "✦", color: "#c4b5fd" },
+          physical: { icon: "🛡", color: "#f4f4f5" },
+        };
+        const BADGE_BG_COLOR = "rgba(15,23,42,0.85)";
+        const DEFAULT_BADGE_ICON = "⬡";
+        const DEFAULT_BADGE_COLOR = "#f8fafc";
+        const MIN_BADGE_VALUE = 0.05;
+
         function renderScene() {
           if (!renderController || !rendererReady) return;
           if (!mapState.grid || !mapState.grid.length) return;
@@ -4015,6 +4031,8 @@
             ? { ...fovState.overlayRgb, a: 1 }
             : null;
 
+          const mobEntities = buildMobVisuals(mobManager, currentVisible);
+
           renderController.render(
             {
               map: { grid: mapState.grid, explored: mapState.explored },
@@ -4025,10 +4043,84 @@
               colors: CONFIG.visual.colors,
               overlayAlphaAt: (x, y) => computeTileOverlayAlpha(x, y, lightCtx),
               overlayColor,
+              entities: mobEntities,
             },
             view,
           );
         }
+        function buildMobVisuals(manager, visibleSet) {
+          if (!manager || !Array.isArray(manager.list)) return [];
+          if (!(visibleSet instanceof Set)) return [];
+          const visuals = [];
+          for (const mob of manager.list) {
+            if (!mob || mob.kind === "player") continue;
+            const key = `${mob.x},${mob.y}`;
+            if (!visibleSet.has(key)) continue;
+            const badge = describeDominantResistBadge(mob);
+            visuals.push({
+              x: mob.x,
+              y: mob.y,
+              kind: "mob",
+              glyph: mob.glyph || "m",
+              fg: mob.color || "#f87171",
+              badge: badge ? badge.text : undefined,
+              badgeColor: badge ? badge.color : undefined,
+              badgeBg: badge ? badge.bg : undefined,
+            });
+          }
+          return visuals;
+        }
+        function describeDominantResistBadge(mob) {
+          const entry = dominantResistEntry(mob);
+          if (!entry) return null;
+          const [type, value] = entry;
+          const pct = Math.round(value * 100);
+          if (pct <= 0) return null;
+          const key = String(type || "").toLowerCase();
+          const cfg = RESIST_BADGE_CONFIG[key] || null;
+          const icon = cfg?.icon || DEFAULT_BADGE_ICON;
+          const color = cfg?.color || DEFAULT_BADGE_COLOR;
+          return {
+            text: `${icon} ${pct}%`,
+            color,
+            bg: BADGE_BG_COLOR,
+          };
+        }
+        function dominantResistEntry(mob) {
+          const resists = resolveResistSource(mob);
+          if (!resists) return null;
+          let bestType = null;
+          let bestValue = -Infinity;
+          for (const [type, raw] of iterateResistEntries(resists)) {
+            const value = Number(raw);
+            if (!Number.isFinite(value)) continue;
+            if (value > bestValue) {
+              bestValue = value;
+              bestType = type;
+            }
+          }
+          if (!bestType || bestValue < MIN_BADGE_VALUE) return null;
+          return [bestType, bestValue];
+        }
+        function resolveResistSource(mob) {
+          if (!mob) return null;
+          const direct = mob.modCache?.resists;
+          if (direct && hasEntries(direct)) return direct;
+          const nested = mob.modCache?.defense?.resists;
+          if (nested && hasEntries(nested)) return nested;
+          return null;
+        }
+        function hasEntries(obj) {
+          if (!obj) return false;
+          if (obj instanceof Map) return obj.size > 0;
+          return Object.keys(obj).length > 0;
+        }
+        function iterateResistEntries(resists) {
+          if (!resists) return [];
+          if (resists instanceof Map) return resists.entries();
+          return Object.entries(resists);
+        }
+
         // Updates the persistent fog-of-war state as the player moves. This both
         // records which tiles were ever seen (explorationState) and promotes nearby
         // floor cells to "frontiers" so the explorer knows where to head next.
