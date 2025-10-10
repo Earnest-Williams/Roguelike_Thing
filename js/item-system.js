@@ -364,6 +364,21 @@ export class Item {
     this.flickerRate = typeof o.flickerRate === "number" ? o.flickerRate : 0;
     this.container = o.container ? { ...o.container } : null;
     if (this.container) this.contents = [];
+    this.brands = Array.isArray(o.brands)
+      ? o.brands.map((b) => ({ ...b }))
+      : o.brands === undefined
+      ? undefined
+      : null;
+    this.resists = o.resists ? { ...o.resists } : undefined;
+    this.affinities = o.affinities ? { ...o.affinities } : undefined;
+    this.immunities = Array.isArray(o.immunities)
+      ? o.immunities.slice()
+      : o.immunities;
+    this.dmgMult = o.dmgMult;
+    this.speedMult = o.speedMult;
+    this.affixes = Array.isArray(o.affixes)
+      ? o.affixes.map((a) => ({ ...a }))
+      : o.affixes;
     const hasExplicitThrowProfile =
       o.throwProfile !== undefined && o.throwProfile !== null;
     this.throwProfile = hasExplicitThrowProfile
@@ -402,6 +417,17 @@ export class Item {
       container: null,
       throwProfile: this.throwProfile ? cloneThrowProfile(this.throwProfile) : null,
       weaponProfile: cloneWeaponProfile(this.weaponProfile),
+      brands: this.brands ? this.brands.map((b) => ({ ...b })) : undefined,
+      resists: this.resists ? { ...this.resists } : undefined,
+      affinities: this.affinities ? { ...this.affinities } : undefined,
+      immunities: Array.isArray(this.immunities)
+        ? this.immunities.slice()
+        : this.immunities,
+      dmgMult: this.dmgMult,
+      speedMult: this.speedMult,
+      affixes: Array.isArray(this.affixes)
+        ? this.affixes.map((a) => ({ ...a }))
+        : this.affixes,
     };
 
     if (this.container) {
@@ -477,6 +503,14 @@ export class ItemStack {
 
 const ItemRegistry = new Map();
 
+function instantiateItem(def) {
+  const prepared = { ...def };
+  if (prepared.weaponProfile?.category === WEAPON_CATEGORY.THROWN) {
+    prepared.throwProfile = null;
+  }
+  return new Item(prepared);
+}
+
 export function registerItem(def) {
   if (!def || typeof def.id !== "string" || !def.id) {
     throw new Error("Item definition must include a stable string id");
@@ -484,11 +518,14 @@ export function registerItem(def) {
   if (ItemRegistry.has(def.id)) {
     throw new Error(`Duplicate item id registration attempted: ${def.id}`);
   }
-  const prepared = { ...def };
-  if (prepared.weaponProfile?.category === WEAPON_CATEGORY.THROWN) {
-    prepared.throwProfile = null;
+  ItemRegistry.set(def.id, instantiateItem(def));
+}
+
+export function upsertItem(def) {
+  if (!def || typeof def.id !== "string" || !def.id) {
+    throw new Error("Item definition must include a stable string id");
   }
-  ItemRegistry.set(def.id, new Item(prepared));
+  ItemRegistry.set(def.id, instantiateItem(def));
 }
 
 export function makeItem(id) {

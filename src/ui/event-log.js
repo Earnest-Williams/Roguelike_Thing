@@ -5,6 +5,7 @@ export const EVENT = Object.freeze({
   TURN: "turn",
   COMBAT: "combat",
   STATUS: "status",
+  CONSOLE: "console",
 });
 
 /** @type {Map<string, Set<Function>>} */

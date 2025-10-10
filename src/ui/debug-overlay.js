@@ -11,7 +11,9 @@ export class DebugOverlay {
     this.root = root || this.#createRoot();
     this.logEl = this.root.querySelector(".dbg-log");
     this.statsEl = this.root.querySelector(".dbg-stats");
+    this.filterEl = this.root.querySelector(".dbg-filter");
     this.lastCombat = null;
+    this.filterSet = new Set([EVENT.COMBAT, EVENT.STATUS, EVENT.TURN, EVENT.CONSOLE]);
 
     subscribe("*", () => {
       this.renderLog();
@@ -20,6 +22,9 @@ export class DebugOverlay {
       this.lastCombat = entry;
       this.renderStats();
     });
+
+    this.#initFilters();
+    this.renderLog();
   }
 
   #createRoot() {
@@ -28,10 +33,61 @@ export class DebugOverlay {
       "fixed top-2 right-2 z-50 bg-black/70 text-white font-mono text-xs rounded-lg p-3 w-[360px] max-h-[60vh] overflow-hidden flex flex-col gap-2";
     el.innerHTML = `
       <div class="dbg-stats whitespace-pre leading-4"></div>
+      <div class="dbg-filter flex flex-wrap gap-2"></div>
       <div class="dbg-log flex-1 overflow-auto border-t border-white/20 pt-2"></div>
     `;
     document.body.appendChild(el);
     return el;
+  }
+
+  #chipClass(active) {
+    const base =
+      "px-2 py-1 rounded border text-[10px] tracking-wide uppercase transition-colors";
+    return active
+      ? `${base} border-cyan-300 bg-cyan-500/20`
+      : `${base} border-white/20 text-white/60 hover:border-white/40`;
+  }
+
+  #initFilters() {
+    if (!this.filterEl) return;
+    const entries = [
+      { type: EVENT.COMBAT, label: "COMBAT" },
+      { type: EVENT.STATUS, label: "STATUS" },
+      { type: EVENT.TURN, label: "TURN" },
+      { type: EVENT.CONSOLE, label: "CONSOLE" },
+    ];
+    this.filterButtons = new Map();
+    this.filterEl.innerHTML = "";
+    for (const entry of entries) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.dataset.type = entry.type;
+      btn.textContent = entry.label;
+      btn.className = this.#chipClass(true);
+      btn.addEventListener("click", () => {
+        if (this.filterSet.has(entry.type)) {
+          this.filterSet.delete(entry.type);
+        } else {
+          this.filterSet.add(entry.type);
+        }
+        if (this.filterSet.size === 0) {
+          this.filterSet.add(entry.type);
+        }
+        this.#updateFilterButtons();
+        this.renderLog();
+      });
+      this.filterButtons.set(entry.type, btn);
+      this.filterEl.appendChild(btn);
+    }
+    this.#updateFilterButtons();
+  }
+
+  #updateFilterButtons() {
+    if (!this.filterButtons) return;
+    for (const [type, btn] of this.filterButtons.entries()) {
+      const active = this.filterSet.has(type);
+      btn.className = this.#chipClass(active);
+    }
   }
 
   renderStats() {
@@ -81,7 +137,10 @@ export class DebugOverlay {
 
   renderLog() {
     if (!this.logEl) return;
-    const entries = latest(60).slice().reverse();
+    const entries = latest(60)
+      .slice()
+      .reverse()
+      .filter((e) => this.filterSet.has(e.type));
     this.logEl.innerHTML = entries.map((e) => renderEntry(e)).join("");
   }
 }
@@ -98,6 +157,10 @@ function renderEntry(e) {
   if (e.type === EVENT.TURN) {
     const p = e.payload;
     return `<div>⏳ ${p.who} turn ap=${p.ap} hp=${p.hp}</div>`;
+  }
+  if (e.type === EVENT.CONSOLE) {
+    const p = e.payload;
+    return `<div>🛠️ ${p.msg}</div>`;
   }
   return `<div>• ${e.type}</div>`;
 }
