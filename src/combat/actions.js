@@ -2,6 +2,8 @@
 // @ts-check
 import { apCost, spendAP, startCooldown, isReady } from "./time.js";
 import { resolveAttack } from "./attack.js";
+import { performEquippedAttack } from "../game/combat-glue.js";
+import { SLOT } from "../../constants.js";
 
 /**
  * @typedef {import("./actor.js").Actor} Actor
@@ -49,4 +51,20 @@ export function tryAttack(attacker, defender, opts = {}) {
   startCooldown(attacker, key, baseCd);
 
   return true;
+}
+
+function mainHandItem(actor) {
+  if (!actor?.equipment) return null;
+  const right = actor.equipment[SLOT.RightHand] || actor.equipment.RightHand;
+  const left = actor.equipment[SLOT.LeftHand] || actor.equipment.LeftHand;
+  const entry = right || left || null;
+  if (!entry) return null;
+  return entry?.item || entry;
+}
+
+export function tryAttackEquipped(attacker, defender, distTiles = 1) {
+  const item = mainHandItem(attacker);
+  if (!item) return false;
+  const res = performEquippedAttack(attacker, defender, item, distTiles);
+  return !!res.ok;
 }

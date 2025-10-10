@@ -3,6 +3,7 @@
 import { rebuildStatusDerived, tickStatuses } from "./status.js";
 import { gainAP, tickCooldowns } from "./time.js";
 import { updateResources, isDefeated } from "./resources.js";
+import { EVENT, emit } from "../shared/event-log.js";
 
 /**
  * Runs one turn for an actor.
@@ -27,6 +28,8 @@ export function runTurn(actor, actionPlanner) {
   tickCooldowns(actor);
   tickStatuses(actor);
   updateResources(actor);
+
+  emit(EVENT.TURN, { who: actor.name, ap: actor.ap, hp: actor.res.hp });
 
   return isDefeated(actor);
 }
