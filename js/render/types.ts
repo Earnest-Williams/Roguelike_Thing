@@ -16,11 +16,15 @@ export interface ViewTransform {
   viewW: number; viewH: number;
 }
 
+export type RendererViewportRect = { x: number; y: number; w: number; h: number };
+
+export type RendererMinimapOptions = { viewportRect?: RendererViewportRect };
+
 export interface IRenderer {
   init(widthTiles: number, heightTiles: number, cellSize: number): void;
   setViewTransform(v: ViewTransform): void;
   drawTiles(batch: TileVisual[]): void;
-  drawMinimap(batch: TileVisual[], opts?: { viewportRect?: { x: number; y: number; w: number; h: number } }): void;
+  drawMinimap(batch: TileVisual[], opts?: RendererMinimapOptions): void;
   clear(): void;
   resize(widthTiles: number, heightTiles: number, cellSize: number): void;
 }
