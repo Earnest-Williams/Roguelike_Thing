@@ -11,9 +11,14 @@ export class DebugOverlay {
     this.root = root || this.#createRoot();
     this.logEl = this.root.querySelector(".dbg-log");
     this.statsEl = this.root.querySelector(".dbg-stats");
+    this.lastCombat = null;
 
     subscribe("*", () => {
       this.renderLog();
+    });
+    subscribe(EVENT.COMBAT, (entry) => {
+      this.lastCombat = entry;
+      this.renderStats();
     });
   }
 
@@ -50,14 +55,25 @@ export class DebugOverlay {
       ? a.statuses.map((s) => `${s.id}(${s.stacks},${Math.round(s.remaining ?? 0)})`).join(", ")
       : "-";
     lines.push(`Statuses: ${statuses || "-"}`);
-    lines.push(`Resists: ${fmtMap(a.modCache?.resists)}`);
-    lines.push(`Affins : ${fmtMap(a.modCache?.affinities)}`);
-    const brands = Array.isArray(a.modCache?.brands)
-      ? a.modCache.brands
-          .map((b) => `${b.type}+${b.flat || 0}/${Math.round((b.pct || 0) * 100)}%`)
-          .join(", ")
-      : "";
-    lines.push(`Brands : ${brands || "-"}`);
+    lines.push(`Resists: ${fmtMap(resolveResists(a))}`);
+    lines.push(`Affins : ${fmtMap(resolveAffinities(a))}`);
+    lines.push(`Brands : ${fmtBrands(a)}`);
+
+    if (this.lastCombat?.payload) {
+      const p = this.lastCombat.payload;
+      lines.push("Last Attack:");
+      lines.push(
+        `  ${p.who} → ${p.vs} [${p.profile?.type ?? "?"}] = ${p.damage} (${p.mode})`,
+      );
+      if (Array.isArray(p.breakdown) && p.breakdown.length) {
+        for (const step of p.breakdown.slice(0, 8)) {
+          lines.push(`    ${formatBreakdownStep(step)}`);
+        }
+        if (p.breakdown.length > 8) {
+          lines.push("    …");
+        }
+      }
+    }
     if (this.statsEl) {
       this.statsEl.textContent = lines.join("\n");
     }
@@ -88,9 +104,98 @@ function renderEntry(e) {
 
 function fmtMap(obj) {
   if (!obj) return "-";
+  if (obj instanceof Map) {
+    const pairs = [];
+    for (const [k, v] of obj.entries()) {
+      pairs.push([k, v]);
+    }
+    return fmtPairs(pairs);
+  }
   const keys = Object.keys(obj);
   if (!keys.length) return "-";
-  return keys
-    .map((k) => `${k}:${Math.round((Number(obj[k]) || 0) * 100)}%`)
-    .join(" ");
+  return fmtPairs(keys.map((k) => [k, obj[k]]));
+}
+
+function fmtPairs(entries) {
+  const out = [];
+  for (const [k, raw] of entries) {
+    const num = Number(raw);
+    if (!Number.isFinite(num)) continue;
+    if (Math.abs(num) < 1e-4) continue;
+    out.push(`${k}:${Math.round(num * 100)}%`);
+  }
+  return out.length ? out.join(" ") : "-";
+}
+
+function resolveResists(actor) {
+  return actor?.modCache?.resists || actor?.modCache?.defense?.resists || null;
+}
+
+function resolveAffinities(actor) {
+  return (
+    actor?.modCache?.affinities || actor?.modCache?.offense?.affinities || null
+  );
+}
+
+function fmtBrands(actor) {
+  const direct = Array.isArray(actor?.modCache?.brands)
+    ? actor.modCache.brands
+    : null;
+  const legacy = Array.isArray(actor?.modCache?.offense?.brandAdds)
+    ? actor.modCache.offense.brandAdds
+    : null;
+  const list = direct || legacy;
+  if (!list || !list.length) return "-";
+  return list
+    .map((b) => {
+      const type = b.type || b.id || "?";
+      const flat = Number.isFinite(b.flat) ? b.flat : b.value ?? 0;
+      const pct = Number.isFinite(b.pct)
+        ? b.pct
+        : Number.isFinite(b.percent)
+        ? b.percent
+        : 0;
+      const pctStr = Math.round(pct * 100);
+      return `${type}+${flat}/${pctStr}%`;
+    })
+    .join(", ");
+}
+
+function formatBreakdownStep(step) {
+  if (!step) return "?";
+  const value = Number.isFinite(step.value) ? step.value : null;
+  const delta = Number.isFinite(step.delta) ? step.delta : null;
+  switch (step.step) {
+    case "base":
+      return `base=${value}`;
+    case "brand_flat":
+      return `brand ${step.source ?? "?"} +${delta}`;
+    case "brand_pct":
+      return `brand ${step.source ?? "?"} ${(step.pct * 100).toFixed(0)}% (${fmtDelta(delta)})`;
+    case "attacker_mult":
+      return `atk mult x${fmtNumber(step.mult)} (${fmtDelta(delta)})`;
+    case "defender_resist":
+      return `resist ${(step.resist * 100).toFixed(0)}% (${fmtNumber(delta)})`;
+    case "attacker_affinity":
+      return `affinity ${(step.affinity * 100).toFixed(0)}% (${fmtDelta(delta)})`;
+    case "immune":
+      return "immune";
+    case "floor":
+      return `floor → ${value}`;
+    case "total":
+      return `total=${value}`;
+    default:
+      return `${step.step}: ${value}`;
+  }
+}
+
+function fmtNumber(value, digits = 2) {
+  if (!Number.isFinite(value)) return "0";
+  return Number(value).toFixed(digits);
+}
+
+function fmtDelta(value, digits = 2) {
+  if (!Number.isFinite(value)) return "0";
+  const prefix = value >= 0 ? "+" : "";
+  return `${prefix}${fmtNumber(value, digits)}`;
 }

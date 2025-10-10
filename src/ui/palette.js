@@ -12,11 +12,13 @@ export function colorForType(type) {
 }
 
 export function dominantAffinity(actor) {
-  if (!actor?.modCache?.affinities) return "physical";
+  const affinityMap =
+    actor?.modCache?.affinities || actor?.modCache?.offense?.affinities || null;
+  if (!affinityMap) return "physical";
   let best = "physical";
   let val = -Infinity;
-  for (const k of Object.keys(actor.modCache.affinities)) {
-    const v = actor.modCache.affinities[k];
+  for (const k of Object.keys(affinityMap)) {
+    const v = affinityMap[k];
     if (v > val) {
       val = v;
       best = k;

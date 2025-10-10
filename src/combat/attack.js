@@ -36,42 +36,90 @@ import {
  */
 export function resolveAttack(attacker, defender, ctx) {
   const typeKey = String(ctx.profile.type || "physical").toLowerCase();
+  const breakdown = [];
   let dmg = Math.max(0, Math.floor(Number(ctx.profile.base) || 0));
+  breakdown.push({ step: "base", value: dmg });
 
-  // 2) brands
-  for (const b of attacker.modCache.brands) {
-    if (b.type && b.type.toLowerCase() === typeKey) {
-      if (Number.isFinite(b.flat)) dmg += b.flat;
-      if (Number.isFinite(b.pct) && b.pct) dmg *= (1 + b.pct);
+  const brands = Array.isArray(attacker?.modCache?.brands)
+    ? attacker.modCache.brands
+    : [];
+  for (const b of brands) {
+    if (!b || !b.type || b.type.toLowerCase() !== typeKey) continue;
+    if (Number.isFinite(b.flat) && b.flat) {
+      dmg += b.flat;
+      breakdown.push({
+        step: "brand_flat",
+        source: b.id || b.type,
+        delta: b.flat,
+        value: dmg,
+      });
+    }
+    if (Number.isFinite(b.pct) && b.pct) {
+      const before = dmg;
+      dmg *= 1 + b.pct;
+      breakdown.push({
+        step: "brand_pct",
+        source: b.id || b.type,
+        pct: b.pct,
+        delta: dmg - before,
+        value: dmg,
+      });
     }
   }
 
-  // 3) attacker global mult
-  dmg *= attacker.modCache.dmgMult;
-
-  // 4) immunity
-  if (defender.isImmune(typeKey)) {
-    return { total: 0, type: typeKey, note: "immune" };
+  const dmgMult = Number.isFinite(attacker?.modCache?.dmgMult)
+    ? attacker.modCache.dmgMult
+    : 1;
+  if (dmgMult !== 1) {
+    const before = dmg;
+    dmg *= dmgMult;
+    breakdown.push({
+      step: "attacker_mult",
+      mult: dmgMult,
+      delta: dmg - before,
+      value: dmg,
+    });
   }
 
-  // 5) defender resist
-  const resist = clamp01(defender.resistOf(typeKey));
-  dmg *= (1 - resist);
+  if (defender.isImmune(typeKey)) {
+    breakdown.push({ step: "immune", value: 0 });
+    return { total: 0, type: typeKey, note: "immune", breakdown };
+  }
 
-  // 6) attacker affinity
+  const resist = clamp01(defender.resistOf(typeKey));
+  if (resist) {
+    const before = dmg;
+    dmg *= 1 - resist;
+    breakdown.push({
+      step: "defender_resist",
+      resist,
+      delta: dmg - before,
+      value: dmg,
+    });
+  }
+
   const affinity = clampSigned(
     attacker.affinityOf(typeKey),
     MIN_AFFINITY_CAP,
     MAX_AFFINITY_CAP,
   );
-  dmg *= (1 + affinity);
+  if (affinity) {
+    const before = dmg;
+    dmg *= 1 + affinity;
+    breakdown.push({
+      step: "attacker_affinity",
+      affinity,
+      delta: dmg - before,
+      value: dmg,
+    });
+  }
 
-  // (Optional) polarity bias hook — customize mapping later:
-  // dmg = applyPolarityBias(dmg, attacker, defender, typeKey);
-
-  // Floor to integer in this phase
+  const beforeFloor = dmg;
   dmg = Math.max(0, Math.floor(dmg));
-  return { total: dmg, type: typeKey };
+  breakdown.push({ step: "floor", delta: dmg - beforeFloor, value: dmg });
+  breakdown.push({ step: "total", value: dmg });
+
+  return { total: dmg, type: typeKey, breakdown };
 }
 
 function clamp01(x) {

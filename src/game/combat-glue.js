@@ -93,6 +93,7 @@ export function performEquippedAttack(attacker, defender, weaponItem, distTiles,
     hpBefore: before,
     hpAfter: defender.res.hp,
     note: outcome.note || "",
+    breakdown: outcome.breakdown || [],
   });
 
   const now =
