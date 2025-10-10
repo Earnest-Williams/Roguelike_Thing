@@ -54,7 +54,7 @@ export function resolveAttack(attacker, defender, ctx) {
         value: dmg,
       });
     }
-    if (Number.isFinite(b.pct) && b.pct) {
+    if (Number.isFinite(b.pct)) {
       const before = dmg;
       dmg *= 1 + b.pct;
       breakdown.push({
