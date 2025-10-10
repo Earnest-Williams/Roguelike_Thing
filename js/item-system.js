@@ -5,7 +5,7 @@ import {
   ATTACK_KIND,
   SLOT,
 } from "./constants.js";
-import { clamp, clamp01 } from "./utils.js";
+import { clamp, clamp01Normalized } from "./utils.js";
 
 function dimsVolumeL(d) {
   if (!d || typeof d !== "object") {
@@ -81,7 +81,7 @@ function normalizeThrowProfile(profile, item) {
   const accuracy = typeof profile?.accuracy === "number" ? profile.accuracy : 0;
   const consumesItem =
     profile?.consumesItem !== undefined ? !!profile.consumesItem : true;
-  const recoveryChance = clamp01(profile?.recoveryChance ?? 0);
+  const recoveryChance = clamp01Normalized(profile?.recoveryChance ?? 0);
   const notes = profile?.notes || null;
   return {
     range: { min, optimal, max },
@@ -231,7 +231,7 @@ export function buildEffectiveThrowProfile(item) {
     hasExplicitProfile &&
     base.recoveryChance !== undefined &&
     base.recoveryChance !== null
-      ? clamp01(base.recoveryChance)
+      ? clamp01Normalized(base.recoveryChance)
       : penalties.recover;
   return {
     range,
@@ -312,7 +312,7 @@ export function normalizeWeaponProfile(profile) {
     consumeWeaponOnUse:
       profile.consumeWeaponOnUse ??
       (category === WEAPON_CATEGORY.THROWN && !profile.ammo),
-    recoveryChance: clamp01(profile.recoveryChance ?? 0),
+    recoveryChance: clamp01Normalized(profile.recoveryChance ?? 0),
     notes: profile.notes || null,
   };
 }
