@@ -10,7 +10,7 @@ import {
   MIN_TOTAL_COOLDOWN_MULTIPLIER,
   SLOT,
 } from "../../constants.js";
-import { createEmptyStatusDerived } from "./status.js";
+import { rebuildStatusDerived } from "./status.js";
 
 /**
  * @typedef {import("../../item-system.js").Item} Item
@@ -69,8 +69,10 @@ import { createEmptyStatusDerived } from "./status.js";
  * @typedef {Object} StatusInstance
  * @property {string} id
  * @property {number} stacks
- * @property {number} remaining    // turns
- * @property {any}     payload
+ * @property {number} endsAtTurn
+ * @property {number} [nextTickAt]
+ * @property {string} [source]
+ * @property {number} [potency]
  */
 
 /**
@@ -105,7 +107,7 @@ export class Actor {
     this.statuses = [];
 
     /** @type {import("./status.js").StatusDerived} */
-    this.statusDerived = createEmptyStatusDerived();
+    this.statusDerived = rebuildStatusDerived(this);
 
     /** @type {ModCache} */
     this.modCache = {
@@ -172,18 +174,18 @@ export class Actor {
   }
 
   /**
-   * Returns the combined speed multiplier (modCache.speedMult * statusDerived.actionCostMult).
+   * Returns the combined speed multiplier (modCache.speedMult adjusted by statusDerived.actionSpeedPct).
    * Lower is faster (<1). Use when computing AP cost.
    */
   totalActionCostMult() {
-    return Math.max(
-      MIN_TOTAL_ACTION_COST_MULTIPLIER,
-      this.modCache.speedMult * this.statusDerived.actionCostMult,
-    );
+    const pct = this.statusDerived?.actionSpeedPct ?? 0;
+    const mult = this.modCache.speedMult * (1 + pct);
+    return Math.max(MIN_TOTAL_ACTION_COST_MULTIPLIER, mult);
   }
 
   totalCooldownMult() {
-    return Math.max(MIN_TOTAL_COOLDOWN_MULTIPLIER, this.statusDerived.cooldownMult);
+    const pct = this.statusDerived?.actionSpeedPct ?? 0;
+    return Math.max(MIN_TOTAL_COOLDOWN_MULTIPLIER, 1 + pct);
   }
 
   /**
