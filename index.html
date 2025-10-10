@@ -3777,11 +3777,6 @@
             mapState.height > 0
           ) {
             renderController.resize(mapState.width, mapState.height, CELL_SIZE);
-          } else if (canvas && mapState.width > 0 && mapState.height > 0) {
-            canvas.width = mapState.width * CELL_SIZE;
-            canvas.height = mapState.height * CELL_SIZE;
-            canvas.style.width = `${canvas.width}px`;
-            canvas.style.height = `${canvas.height}px`;
           }
         }
         function updateResponsiveLayout(forceRedraw = true) {
