@@ -329,7 +329,7 @@
         posKeyFromCoords,
         randChoice,
         clamp,
-        clamp01,
+        clamp01 as clamp01Normalized,
         colorStringToRgb,
         getNow,
         smoothstep01,
@@ -3270,7 +3270,7 @@
         // ----- CONFIG -----
         const HYBRID_CFG = CONFIG.generator.hybrid;
         // Utility
-        // clamp01 helper declared earlier handles the normalization; reuse it here.
+        // clamp01Normalized helper imported earlier handles the normalization; reuse it here.
         const manhattan = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
         // -------------------------
         // Phase A: Large rooms
@@ -3457,7 +3457,9 @@
             kept.push(r);
           }
           // Optionally thin out density
-          const targetCount = Math.round(kept.length * clamp01(cfg.keepRatio));
+          const targetCount = Math.round(
+            kept.length * clamp01Normalized(cfg.keepRatio),
+          );
           const smallRooms = shuffle(kept).slice(0, targetCount);
           // Carve
           for (const r of smallRooms) carveRoomIntoGrid(grid, r);
