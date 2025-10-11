@@ -21,6 +21,7 @@ import { EVENT, emit } from "../ui/event-log.js";
  */
 export function runTurn(actor, actionPlanner) {
   const turn = actor ? (actor.__turnCounter = (actor.__turnCounter ?? 0) + 1) : 0;
+  if (actor) actor.turn = turn;
   tickStatusesAtTurnStart(actor, turn);
   rebuildStatusDerived(actor);
   gainAP(actor);

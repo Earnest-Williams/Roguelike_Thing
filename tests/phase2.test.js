@@ -41,8 +41,12 @@ for (let t = 0; t < 3; t++) {
 assert(a.ap <= a.apCap, "AP does not exceed cap");
 assert(b.res.hp < initialDummyHP, "Dummy should take damage during the loop");
 
-const swingCooldown = a.cooldowns.swing ?? 0;
-assert(swingCooldown >= 0 && swingCooldown < 1, "Cooldown scaling should leave fractional turns remaining");
+assert(a.cooldowns instanceof Map, "Cooldowns should be tracked in a Map");
+const swingReadyAt = a.cooldowns.get("swing");
+assert(
+  swingReadyAt === undefined || swingReadyAt <= a.turn,
+  "Cooldown entries should expire once the turn threshold is reached",
+);
 
 assert(a.res.stamina === a.base.maxStamina, "Stamina regen plus adrenaline bonus should top off at the cap");
 
