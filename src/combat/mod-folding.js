@@ -1,5 +1,6 @@
 // src/combat/mod-folding.js
 // @ts-check
+import { ATTUNE } from "../config.js";
 import { rebuildStatusDerived } from "./status.js";
 
 /**
@@ -69,6 +70,31 @@ function multiply(into, mults) {
     const value = Number(mults[key]);
     if (!Number.isFinite(value)) continue;
     into[key] = (into[key] ?? 1) * value;
+  }
+}
+
+function foldAttunements(actor, cache) {
+  const pool = actor.attune?.pool;
+  if (!pool) return;
+
+  cache.offense ||= {};
+  cache.offense.affinities ||= Object.create(null);
+
+  cache.defense ||= {};
+  cache.defense.resists ||= Object.create(null);
+
+  for (const [type, xp] of Object.entries(pool)) {
+    let bonus = 0;
+    for (const [th, pct] of Object.entries(ATTUNE.thresholds)) {
+      if (xp >= Number(th)) bonus = Math.max(bonus, pct);
+    }
+    if (bonus > 0) {
+      cache.offense.affinities[type] = (cache.offense.affinities[type] || 0) + bonus;
+
+      if (xp >= 16) {
+        cache.defense.resists[type] = (cache.defense.resists[type] || 0) + 0.03;
+      }
+    }
   }
 }
 
@@ -1142,6 +1168,8 @@ export function foldModsFromEquipment(actor) {
       }
     }
   }
+
+  foldAttunements(actor, mc);
 
   // Clamp resists per plan: [-0.50, +0.80]
   for (const key of Object.keys(mc.defense.resists)) {
