@@ -26,12 +26,12 @@ export function gainAP(actor) {
  * E.g., a standard action is actor.baseActionAP (100) before temporal/status deltas.
  * @param {import("./actor.js").Actor} actor
  * @param {number} baseAP
- * @param {boolean} [isMovement=false] - Whether this is a movement action.
+ * @param {{ includeMoveDelta?: boolean }} [opts]
  */
-export function apCost(actor, baseAP, isMovement = false) {
+export function apCost(actor, baseAP, opts = {}) {
   const sd = actor?.statusDerived || {};
   const temporal = actor?.modCache?.temporal || { actionSpeedPct: 0, moveAPDelta: 0 };
-  const add = isMovement
+  const add = opts.includeMoveDelta
     ? (temporal.moveAPDelta || 0) + (sd.moveAPDelta || 0)
     : 0;
   const mult = 1 + (temporal.actionSpeedPct || 0) + (sd.actionSpeedPct || 0);

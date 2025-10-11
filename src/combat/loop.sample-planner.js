@@ -34,7 +34,7 @@ export function simplePlanner(target) {
       }
     }
 
-    const moveCost = apCost(actor, BASE_MOVE_AP_COST);
+    const moveCost = apCost(actor, BASE_MOVE_AP_COST, { includeMoveDelta: true });
     if (actor.ap >= moveCost) {
       tryMove(actor, { dx: 1, dy: 0 });
     }
