@@ -116,10 +116,7 @@ function foldAttunements(actor, cache) {
         Number.isFinite(topTierThreshold) &&
         xp >= topTierThreshold
       ) {
-        cache.defense.resists[type] =
-          (cache.defense.resists[type] || 0) + topTierResistBonus;
-        applied.defenseResists[type] =
-          (applied.defenseResists[type] || 0) + topTierResistBonus;
+        cache.defense.resists[type] = (cache.defense.resists[type] || 0) + topTierResistBonus;
       }
     }
   }
