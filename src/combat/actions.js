@@ -28,15 +28,7 @@ import {
  */
 export function tryMove(actor, dir) {
   const base = Math.max(MIN_AP_COST, BASE_MOVE_AP_COST);
-  const temporal = actor?.modCache?.temporal || {};
-  const sd = actor?.statusDerived || {};
-  const moveDelta = (Number(temporal.moveAPDelta) || 0) + (Number(sd.moveAPDelta) || 0);
-  const adjustedBaseRaw = base + moveDelta;
-  const adjustedBase = Math.max(
-    MIN_AP_COST,
-    Number.isFinite(adjustedBaseRaw) ? adjustedBaseRaw : base,
-  );
-  const cost = apCost(actor, adjustedBase);
+  const cost = apCost(actor, base);
   if (!spendAP(actor, cost)) return false;
 
   actor.x = (actor.x || 0) + dir.dx;
