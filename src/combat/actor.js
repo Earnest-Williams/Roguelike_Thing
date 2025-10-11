@@ -227,6 +227,11 @@ export class Actor {
       polarity: {},
     };
 
+    this.attune = this.attune || {
+      pool: Object.create(null),
+      lastTurnUpdated: -1,
+    };
+
     /** @type {Resources} */
     this.res = {
       hp: this.base.maxHP,
