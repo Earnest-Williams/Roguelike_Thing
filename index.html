@@ -437,6 +437,7 @@
         Door,
         DOOR_TYPE,
         DOOR_STATE,
+        DOOR_VARIANT_IDS,
         FURNITURE_EFFECT_IDS,
       } from "./src/world/furniture/index.js";
       import { generateDoorsForDungeon } from "./src/world/dungeon/door-placement.js";
@@ -4281,7 +4282,8 @@
         }
         function describeDoorVisual(door, colors) {
           const doorType = door.type || door.metadata?.type || null;
-          const variantId = door.variantId || door.metadata?.variantId || "standard";
+          const variantId =
+            door.variantId || door.metadata?.variantId || DOOR_VARIANT_IDS.STANDARD;
           const orientation = door.orientation || FurnitureOrientation.NONE;
           const hasEffect =
             typeof door.hasEffect === "function"
@@ -4296,16 +4298,17 @@
               ? door.state
               : door.metadata?.state || (isOpen ? DOOR_STATE.OPEN : DOOR_STATE.CLOSED);
           const isPortcullis =
-            doorType === DOOR_TYPE.PORTCULLIS || variantId === "portcullis";
+            doorType === DOOR_TYPE.PORTCULLIS || variantId === DOOR_VARIANT_IDS.PORTCULLIS;
           const isArchway =
-            doorType === DOOR_TYPE.ARCHWAY || variantId === "archway";
-          const isSecret = doorType === DOOR_TYPE.SECRET || variantId === "secret";
+            doorType === DOOR_TYPE.ARCHWAY || variantId === DOOR_VARIANT_IDS.ARCHWAY;
+          const isSecret =
+            doorType === DOOR_TYPE.SECRET || variantId === DOOR_VARIANT_IDS.SECRET;
           const isSliding =
-            doorType === DOOR_TYPE.SLIDING || variantId === "sliding";
+            doorType === DOOR_TYPE.SLIDING || variantId === DOOR_VARIANT_IDS.SLIDING;
           const isDouble =
-            doorType === DOOR_TYPE.DOUBLE || variantId === "double";
-          const isGrate = doorType === DOOR_TYPE.GRATE || variantId === "grate";
-          const isRuned = variantId === "runed";
+            doorType === DOOR_TYPE.DOUBLE || variantId === DOOR_VARIANT_IDS.DOUBLE;
+          const isGrate = doorType === DOOR_TYPE.GRATE || variantId === DOOR_VARIANT_IDS.GRATE;
+          const isRuned = variantId === DOOR_VARIANT_IDS.RUNED;
 
           const baseBg = colors.door || colors.floor || "#2a1a0f";
           const baseFg = colors.doorGlyph || colors.floorGlyph || "#fef3c7";

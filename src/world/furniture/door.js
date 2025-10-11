@@ -21,6 +21,18 @@ export const DOOR_STATE = Object.freeze({
   BLOCKED: "blocked",
 });
 
+export const DOOR_VARIANT_IDS = Object.freeze({
+  STANDARD: "standard",
+  REINFORCED: "reinforced",
+  DOUBLE: "double",
+  PORTCULLIS: "portcullis",
+  SLIDING: "sliding",
+  ARCHWAY: "archway",
+  SECRET: "secret",
+  GRATE: "grate",
+  RUNED: "runed",
+});
+
 const DOOR_STATES = new Set(Object.values(DOOR_STATE));
 
 function normalizeDoorState(value) {
@@ -58,7 +70,7 @@ function deriveDoorName(type, material, variantId) {
         return "Door";
     }
   })();
-  const variant = variantId && variantId !== "standard" ? variantId.replace(/_/g, " ") : "";
+  const variant = variantId && variantId !== DOOR_VARIANT_IDS.STANDARD ? variantId.replace(/_/g, " ") : "";
   const pieces = [materialName, variant, base].filter((s) => typeof s === "string" && s.trim().length > 0);
   if (pieces.length === 0) return base;
   return pieces.join(" ");
@@ -82,7 +94,7 @@ export class Door extends Furniture {
    */
   constructor({
     id = null,
-    variantId = "standard",
+    variantId = DOOR_VARIANT_IDS.STANDARD,
     type = DOOR_TYPE.HINGED,
     state = DOOR_STATE.CLOSED,
     orientation = FurnitureOrientation.EAST_WEST,

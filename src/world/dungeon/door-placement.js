@@ -1,15 +1,15 @@
 // src/world/dungeon/door-placement.js
 // @ts-check
 
-import { TILE_FLOOR } from "../../../constants.js";
-import { Door, DOOR_STATE, DOOR_TYPE } from "../furniture/door.js";
+import { TILE_FLOOR } from "../../../js/constants.js";
+import { Door, DOOR_STATE, DOOR_TYPE, DOOR_VARIANT_IDS } from "../furniture/door.js";
 import { FurnitureOrientation } from "../furniture/furniture.js";
 import { FurnitureEffect, FURNITURE_EFFECT_IDS } from "../furniture/effects.js";
 import { chooseStuffByWeight, resolveStuff, STUFF } from "../stuff.js";
 
 const DEFAULT_VARIANTS = [
   {
-    id: "standard",
+    id: DOOR_VARIANT_IDS.STANDARD,
     type: DOOR_TYPE.HINGED,
     weight: 6,
     materialWeights: [
@@ -19,7 +19,7 @@ const DEFAULT_VARIANTS = [
     ],
   },
   {
-    id: "reinforced",
+    id: DOOR_VARIANT_IDS.REINFORCED,
     type: DOOR_TYPE.HINGED,
     weight: 2,
     materialWeights: [
@@ -30,7 +30,7 @@ const DEFAULT_VARIANTS = [
     tags: ["reinforced"],
   },
   {
-    id: "double",
+    id: DOOR_VARIANT_IDS.DOUBLE,
     type: DOOR_TYPE.DOUBLE,
     weight: 0.8,
     materialWeights: [
@@ -41,7 +41,7 @@ const DEFAULT_VARIANTS = [
     tags: ["double", "wide"],
   },
   {
-    id: "portcullis",
+    id: DOOR_VARIANT_IDS.PORTCULLIS,
     type: DOOR_TYPE.PORTCULLIS,
     weight: 1,
     materialWeights: [
@@ -51,7 +51,7 @@ const DEFAULT_VARIANTS = [
     tags: ["heavy"],
   },
   {
-    id: "sliding",
+    id: DOOR_VARIANT_IDS.SLIDING,
     type: DOOR_TYPE.SLIDING,
     weight: 0.6,
     materialWeights: [
@@ -62,7 +62,7 @@ const DEFAULT_VARIANTS = [
     tags: ["sliding", "mechanical"],
   },
   {
-    id: "archway",
+    id: DOOR_VARIANT_IDS.ARCHWAY,
     type: DOOR_TYPE.ARCHWAY,
     weight: 1,
     initialState: DOOR_STATE.OPEN,
@@ -74,7 +74,7 @@ const DEFAULT_VARIANTS = [
     tags: ["archway", "permanent_open"],
   },
   {
-    id: "secret",
+    id: DOOR_VARIANT_IDS.SECRET,
     type: DOOR_TYPE.SECRET,
     weight: 0.5,
     allowRandomEffects: false,
@@ -92,7 +92,7 @@ const DEFAULT_VARIANTS = [
     ],
   },
   {
-    id: "grate",
+    id: DOOR_VARIANT_IDS.GRATE,
     type: DOOR_TYPE.GRATE,
     weight: 0.5,
     materialWeights: [
@@ -104,7 +104,7 @@ const DEFAULT_VARIANTS = [
     tags: ["barred", "sightline"],
   },
   {
-    id: "runed",
+    id: DOOR_VARIANT_IDS.RUNED,
     type: DOOR_TYPE.HINGED,
     weight: 0.4,
     materialWeights: [
@@ -145,7 +145,7 @@ function pickVariant(variants, rng) {
   for (const v of table) {
     if (v && typeof v.weight === "number" && v.weight > 0) total += v.weight;
   }
-  if (total <= 0) return table[0];
+  if (total <= 0) return table.length > 0 ? table[0] : null;
   const baseRandom = typeof rng === "function" ? rng() : Math.random();
   const roll = baseRandom * total;
   let cumulative = 0;
@@ -156,7 +156,7 @@ function pickVariant(variants, rng) {
       return variant;
     }
   }
-  return table[0];
+  return table.length > 0 ? table[0] : null;
 }
 
 function deduceOrientation(grid, x, y) {
@@ -402,6 +402,7 @@ export function generateDoorsForDungeon(
       return;
     }
     const variant = pickVariant(variants, rng);
+    if (!variant) return;
     const material = pickMaterialForVariant(variant, rng);
     const door = new Door({
       variantId: variant.id,
