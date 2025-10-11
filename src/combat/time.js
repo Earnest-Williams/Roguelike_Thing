@@ -10,13 +10,15 @@ import { BASE_AP_GAIN_PER_TURN } from "../../constants.js";
  * @param {string[]} [tags]
  */
 export function finalAPForAction(actor, baseAP, tags = []) {
-  const temporal = actor?.temporal || {};
+  const tagsArr = Array.isArray(tags) ? tags : [];
+  const temporal =
+    actor?.temporal || actor?.modCache?.temporalHooks || Object.create(null);
   const sd = actor?.statusDerived || {};
   const base = Math.max(0, Math.floor(Number(baseAP) || 0));
-  const moveDelta = tags.includes("move")
+  const moveDelta = tagsArr.includes("move")
     ? (temporal.moveAPDelta || 0) + (sd.moveAPDelta || 0)
     : 0;
-  const castDelta = tags.includes("cast")
+  const castDelta = tagsArr.includes("cast")
     ? (temporal.castTimeDelta || 0) + (sd.castTimeDelta || 0)
     : 0;
   const additive = Math.max(0, base + moveDelta + castDelta);
@@ -38,7 +40,9 @@ export function finalAPForAction(actor, baseAP, tags = []) {
  */
 export function finalCooldown(actor, baseCooldown) {
   const base = Math.max(0, Math.floor(Number(baseCooldown) || 0));
-  const temporalPct = actor?.temporal?.cooldownPct || 0;
+  const temporalSource =
+    actor?.temporal || actor?.modCache?.temporalHooks || Object.create(null);
+  const temporalPct = temporalSource.cooldownPct || 0;
   const sd = actor?.statusDerived || {};
   const scalarPct = 1 + temporalPct + (sd.cooldownPct || 0);
   const scalarMult = Number.isFinite(sd.cooldownMult) ? sd.cooldownMult : 1;
@@ -53,7 +57,9 @@ export function finalCooldown(actor, baseCooldown) {
  */
 export function initiativeWithTemporal(actor, baseInit) {
   const base = Math.floor(Number(baseInit) || 0);
-  const temporalBonus = actor?.temporal?.initBonus || 0;
+  const temporalSource =
+    actor?.temporal || actor?.modCache?.temporalHooks || Object.create(null);
+  const temporalBonus = temporalSource.initBonus || 0;
   const sd = actor?.statusDerived || {};
   return base + temporalBonus + (sd.initBonus || sd.initiativeFlat || 0);
 }

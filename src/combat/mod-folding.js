@@ -1358,8 +1358,15 @@ export function foldModsFromEquipment(actor) {
     ? mc.offense.brandAdds.slice()
     : [];
 
-  mc.temporalHooks = temporalHooks;
-  mc.resourceRules = resourceRules;
+  mc.temporalHooks = { ...temporalHooks };
+  const clonedRules = Object.create(null);
+  for (const [pool, rule] of Object.entries(resourceRules)) {
+    clonedRules[pool] = {
+      ...rule,
+      spendMultipliers: { ...(rule.spendMultipliers || {}) },
+    };
+  }
+  mc.resourceRules = clonedRules;
 
   const temporalBase = {
     actionSpeedPct: 0,

@@ -51,6 +51,10 @@ export function runTurn(actor, actionPlanner) {
   if (actor) actor.turn = turn;
   startTurn(actor);
   tickStatusesAtTurnStart(actor, turn);
+  if (actor) {
+    actor.resources ||= { pools: Object.create(null) };
+    actor.resources.pools ||= Object.create(null);
+  }
   updateResources(actor);
   regenTurn(actor);
   gainAP(actor);

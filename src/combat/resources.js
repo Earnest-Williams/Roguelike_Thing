@@ -163,11 +163,15 @@ export function canPay(actor, action) {
       (acc, tag) => acc * (state.spendMultipliers?.[tag] || 1),
       1,
     );
-    const cost = Math.ceil(Number(baseCost || 0) * mult);
-    if (Number.isFinite(state.minToUse) && (state.minToUse || 0) > state.cur) {
+    const base = Number(baseCost || 0);
+    const cost = Math.ceil(base * mult);
+    if (
+      Number.isFinite(state.minToUse) &&
+      Number(state.minToUse || 0) > Number(state.cur || 0)
+    ) {
       return false;
     }
-    if (state.cur < cost) return false;
+    if (cost > 0 && Number(state.cur || 0) < cost) return false;
   }
   return true;
 }
@@ -188,8 +192,11 @@ export function spend(actor, action) {
       (acc, tag) => acc * (state.spendMultipliers?.[tag] || 1),
       1,
     );
-    const cost = Math.ceil(Number(baseCost || 0) * mult);
-    state.cur = Math.max(0, state.cur - cost);
+    const base = Number(baseCost || 0);
+    const cost = Math.ceil(base * mult);
+    if (cost <= 0) continue;
+    const next = Math.max(0, Number(state.cur || 0) - cost);
+    state.cur = next;
   }
 }
 
@@ -203,7 +210,8 @@ export function regenTurn(actor) {
     if (!state) continue;
     const gain = Number(state.regenPerTurn || 0);
     const next = Number(state.cur || 0) + gain;
-    state.cur = Math.min(state.max ?? Number.MAX_SAFE_INTEGER, next);
+    const max = state.max ?? Number.MAX_SAFE_INTEGER;
+    state.cur = Math.min(max, Math.max(0, next));
   }
 }
 
@@ -236,7 +244,8 @@ export function eventGain(actor, evt) {
     if (evt.amount) gain += evt.amount;
     if (gain) {
       const next = Number(state.cur || 0) + gain;
-      state.cur = Math.min(state.max ?? Number.MAX_SAFE_INTEGER, next);
+      const max = state.max ?? Number.MAX_SAFE_INTEGER;
+      state.cur = Math.min(max, Math.max(0, next));
     }
   }
 }

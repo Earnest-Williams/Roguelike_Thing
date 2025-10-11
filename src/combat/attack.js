@@ -253,16 +253,16 @@ export function resolveAttack(ctx) {
   syncDefenderHp(nextHp);
 
   if (total > 0) {
-    eventGain(attacker, { kind: "hit" });
+    eventGain(attacker, { kind: "hit", amount: total });
   }
   const wasCrit = Boolean(
     ctx.crit || ctx.wasCrit || ctx.attack?.crit || ctx.result?.crit,
   );
   if (wasCrit) {
-    eventGain(attacker, { kind: "crit" });
+    eventGain(attacker, { kind: "crit", amount: total });
   }
   if (currentHp > HEALTH_FLOOR && nextHp <= HEALTH_FLOOR) {
-    eventGain(attacker, { kind: "kill" });
+    eventGain(attacker, { kind: "kill", amount: total });
   }
 
   if (total > 0 && usedTypes.size) {
