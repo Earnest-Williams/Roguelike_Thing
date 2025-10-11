@@ -169,6 +169,7 @@ export class Actor {
       offense: {
         conversions: [],
         brandAdds: [],
+        brands: [],
         affinities: Object.create(null),
         polarity: { grant: Object.create(null), onHitBias: {} },
       },

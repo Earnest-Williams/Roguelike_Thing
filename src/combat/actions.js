@@ -1,7 +1,7 @@
 // src/combat/actions.js
 // @ts-check
 import { finalAPForAction, spendAP, startCooldown, isReady } from "./time.js";
-import { resolveAttack } from "./attack.js";
+import { resolveAttack } from "./resolve.js";
 import { tryTemporalEcho, applyOnKillHaste } from "./temporal.js";
 import { performEquippedAttack, pickAttackMode } from "../game/combat-glue.js";
 import {
@@ -81,7 +81,8 @@ export function tryAttack(attacker, defender, opts = {}) {
     attacker,
     defender,
     turn: attacker?.turn ?? 0,
-    physicalBase: profile.base,
+    packets: [{ type: profile.type, amount: profile.base }],
+    statusAttempts: [],
   };
   const result = resolveAttack(ctx);
   noteAttacked(attacker);
