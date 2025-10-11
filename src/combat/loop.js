@@ -10,10 +10,10 @@ import { EVENT, emit } from "../ui/event-log.js";
  * Strategy:
  *  1) Advance turn counter & tick statuses (damage over time, expiry)
  *  2) Rebuild statusDerived (so costs/regen/cooldowns reflect current statuses)
- *  3) Gain AP
- *  4) Let controller/AI attempt actions while AP available
- *  5) Tick cooldowns
- *  6) Regen resources
+ *  3) Apply passive regeneration
+ *  4) Gain AP
+ *  5) Let controller/AI attempt actions while AP available
+ *  6) Tick cooldowns
  *  7) Return defeat flag
  *
  * @param {import("./actor.js").Actor} actor
@@ -24,12 +24,12 @@ export function runTurn(actor, actionPlanner) {
   if (actor) actor.turn = turn;
   tickStatusesAtTurnStart(actor, turn);
   rebuildStatusDerived(actor);
+  updateResources(actor);
   gainAP(actor);
 
   actionPlanner?.(actor);
 
   tickCooldowns(actor);
-  updateResources(actor);
 
   emit(EVENT.TURN, { who: actor.name, ap: actor.ap, hp: actor.res.hp });
 
