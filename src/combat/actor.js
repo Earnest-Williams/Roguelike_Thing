@@ -157,7 +157,7 @@ export class Actor {
         inflictDurMult: Object.create(null),
         resistBonus: Object.create(null),
         recvDurMult: Object.create(null),
-        buffDurMult: 0,
+        buffDurMult: 1,
         freeActionIgnore: new Set(),
       },
       polarity: {},
