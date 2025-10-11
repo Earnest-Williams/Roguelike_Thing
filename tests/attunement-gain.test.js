@@ -10,12 +10,22 @@ import {
 function fakeActorWithRule(type, patch = {}) {
   const baseRule = { onUseGain: 1, decayPerTurn: 1, maxStacks: 10, perStack: {} };
   const rule = { ...baseRule, ...patch, perStack: { ...baseRule.perStack, ...(patch.perStack || {}) } };
+  const attackLog = [];
+  const timeline = [];
   return {
     attunement: {
       rules: { [type]: rule },
       stacks: Object.create(null),
     },
-    logs: { attack: { push() {} } },
+    logs: {
+      attack: {
+        push(entry) {
+          attackLog.push(entry);
+        },
+      },
+    },
+    log: timeline,
+    _attackLog: attackLog,
   };
 }
 
@@ -25,7 +35,22 @@ function fakeActorWithRule(type, patch = {}) {
   const packets = [{ type: "fire", amount: 100 }];
   applyOutgoingScaling({ attacker: actor, packets, target: {} });
   assert.equal(packets[0].amount, 100 * (1 + 0.02 * 5));
+  assert.equal(actor._attackLog.length, 1, "should record apply event when scaling occurs");
   console.log("✓ outgoing scaling uses stacks");
+})();
+
+(function testOutgoingScalingSkipsZeroOrInvalidPackets() {
+  const actor = fakeActorWithRule("fire", { perStack: { damagePct: 0.5 }, maxStacks: 10 });
+  actor.attunement.stacks.fire = 3;
+  const packets = [
+    { type: "fire", amount: 0 },
+    { type: "fire", amount: -5 },
+    { type: "fire", amount: Number.NaN },
+  ];
+  applyOutgoingScaling({ attacker: actor, packets, target: {} });
+  assert.equal(actor._attackLog.length, 0, "should not log for packets without positive damage");
+  assert.equal(packets[0].amount, 0);
+  console.log("✓ outgoing scaling skips zero/invalid packets");
 })();
 
 (function testGainClampsToMaxStacks() {
@@ -33,7 +58,19 @@ function fakeActorWithRule(type, patch = {}) {
   noteUseGain(actor, new Set(["cold"]));
   noteUseGain(actor, new Set(["cold"]));
   assert.equal(actor.attunement.stacks.cold, 5);
+  const before = actor.log.length;
+  noteUseGain(actor, new Set(["cold"]));
+  assert.equal(actor.attunement.stacks.cold, 5);
+  assert.equal(actor.log.length, before, "should not log when already capped");
   console.log("✓ noteUseGain clamps to maxStacks");
+})();
+
+(function testGainSkipsUnsupportedTypes() {
+  const actor = fakeActorWithRule("fire", { onUseGain: 2, maxStacks: 5 });
+  noteUseGain(actor, new Set(["cold"]));
+  assert.equal(actor.attunement.stacks.cold, undefined);
+  assert.equal(actor.log.length, 0, "no log entries when type unsupported");
+  console.log("✓ noteUseGain ignores unsupported damage types");
 })();
 
 (function testDecayReducesStacks() {
