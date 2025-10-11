@@ -1,10 +1,34 @@
 // src/combat/loop.js
 // @ts-check
-import { tickStatusesAtTurnStart } from "./status.js";
+import { rebuildDerived, tickStatusesAtTurnStart } from "./status.js";
 import { gainAP, tickCooldowns } from "./time.js";
 import { updateResources, isDefeated } from "./resources.js";
 import { EVENT, emit } from "../ui/event-log.js";
 import { tickAttunements } from "./attunement.js";
+import { logTurnEvt } from "./debug-log.js";
+
+export function startTurn(actor) {
+  if (!actor) return;
+  tickAttunements(actor);
+  rebuildDerived(actor);
+  logTurnEvt(actor, {
+    phase: "start_turn",
+    actorId: actor.id,
+    attunements: actor.attunements,
+    turn: actor.turn,
+  });
+}
+
+export function endTurn(actor) {
+  if (!actor) return;
+  logTurnEvt(actor, {
+    phase: "end_turn",
+    actorId: actor.id,
+    hp: actor.hp,
+    ap: actor.ap,
+    turn: actor.turn,
+  });
+}
 
 /**
  * Runs one turn for an actor.
@@ -25,7 +49,7 @@ import { tickAttunements } from "./attunement.js";
 export function runTurn(actor, actionPlanner) {
   const turn = actor ? (actor.__turnCounter = (actor.__turnCounter ?? 0) + 1) : 0;
   if (actor) actor.turn = turn;
-  if (actor) tickAttunements(actor);
+  startTurn(actor);
   tickStatusesAtTurnStart(actor, turn);
   updateResources(actor);
   gainAP(actor);
@@ -33,6 +57,8 @@ export function runTurn(actor, actionPlanner) {
   actionPlanner?.(actor);
 
   tickCooldowns(actor);
+
+  endTurn(actor);
 
   emit(EVENT.TURN, { who: actor.name, ap: actor.ap, hp: actor.res.hp });
 
