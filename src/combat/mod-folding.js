@@ -79,6 +79,13 @@ function multiply(into, mults) {
  */
 function applyTemporalPayload(cache, payload) {
   if (!payload) return;
+  if (Array.isArray(payload)) {
+    for (const entry of payload) {
+      applyTemporalPayload(cache, entry);
+    }
+    return;
+  }
+  if (typeof payload !== "object") return;
   const temporal = cache.temporal;
   const addNumber = (field, ...aliases) => {
     for (const alias of [field, ...aliases]) {
@@ -238,6 +245,13 @@ function applyTemporalPayload(cache, payload) {
  */
 function applyResourcePayload(cache, payload) {
   if (!payload) return;
+  if (Array.isArray(payload)) {
+    for (const entry of payload) {
+      applyResourcePayload(cache, entry);
+    }
+    return;
+  }
+  if (typeof payload !== "object") return;
   const resource = cache.resource;
   const merge = (bucket, value) => {
     if (!value) return;
@@ -730,34 +744,34 @@ export function foldModsFromEquipment(actor) {
     if (Array.isArray(item.modifiers)) rawMods.push(...item.modifiers);
     for (const mod of rawMods) {
       if (!mod || typeof mod !== "object") continue;
-      const temporalPayloads = [];
       if (mod.kind === "temporal") {
-        temporalPayloads.push(mod);
-        if (mod.payload && typeof mod.payload === "object") {
-          temporalPayloads.push(mod.payload);
+        applyTemporalPayload(mc, mod);
+      }
+      if (mod.temporal) {
+        applyTemporalPayload(mc, mod.temporal);
+      }
+      if (mod.payload) {
+        applyTemporalPayload(mc, mod.payload);
+        applyResourcePayload(mc, mod.payload);
+      }
+      if (Array.isArray(mod.payloads)) {
+        for (const payload of mod.payloads) {
+          applyTemporalPayload(mc, payload?.temporal ?? payload);
+          applyResourcePayload(mc, payload?.resource ?? payload);
         }
       }
-      if (mod.temporal && typeof mod.temporal === "object") temporalPayloads.push(mod.temporal);
-      if (mod.payload?.temporal && typeof mod.payload.temporal === "object") {
-        temporalPayloads.push(mod.payload.temporal);
-      }
-      for (const payload of temporalPayloads) {
-        applyTemporalPayload(mc, payload);
+      if (mod.payload?.temporal) {
+        applyTemporalPayload(mc, mod.payload.temporal);
       }
 
-      const resourcePayloads = [];
       if (mod.kind === "resource") {
-        resourcePayloads.push(mod);
-        if (mod.payload && typeof mod.payload === "object") {
-          resourcePayloads.push(mod.payload);
-        }
+        applyResourcePayload(mc, mod);
       }
-      if (mod.resource && typeof mod.resource === "object") resourcePayloads.push(mod.resource);
-      if (mod.payload?.resource && typeof mod.payload.resource === "object") {
-        resourcePayloads.push(mod.payload.resource);
+      if (mod.resource) {
+        applyResourcePayload(mc, mod.resource);
       }
-      for (const payload of resourcePayloads) {
-        applyResourcePayload(mc, payload);
+      if (mod.payload?.resource) {
+        applyResourcePayload(mc, mod.payload.resource);
       }
     }
   }
