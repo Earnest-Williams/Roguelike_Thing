@@ -75,13 +75,19 @@ function multiply(into, mults) {
 
 function foldAttunements(actor, cache) {
   const pool = actor.attune?.pool;
-  if (!pool) return;
 
   cache.offense ||= {};
   cache.offense.affinities ||= Object.create(null);
 
   cache.defense ||= {};
   cache.defense.resists ||= Object.create(null);
+
+  const applied = {
+    offenseAffinities: Object.create(null),
+    defenseResists: Object.create(null),
+  };
+
+  if (!pool) return applied;
 
   const thresholds = ATTUNE.thresholds || {};
   const topTierResistBonus = Number(ATTUNE.topTierResistBonus) || 0;
@@ -103,6 +109,7 @@ function foldAttunements(actor, cache) {
     }
     if (bonus > 0) {
       cache.offense.affinities[type] = (cache.offense.affinities[type] || 0) + bonus;
+      applied.offenseAffinities[type] = (applied.offenseAffinities[type] || 0) + bonus;
 
       if (
         topTierResistBonus > 0 &&
@@ -113,6 +120,8 @@ function foldAttunements(actor, cache) {
       }
     }
   }
+
+  return applied;
 }
 
 /**
@@ -1186,7 +1195,8 @@ export function foldModsFromEquipment(actor) {
     }
   }
 
-  foldAttunements(actor, mc);
+  const attuneApplied = foldAttunements(actor, mc);
+  mc.__attuneContrib = attuneApplied;
 
   // Clamp resists per plan: [-0.50, +0.80]
   for (const key of Object.keys(mc.defense.resists)) {
@@ -1199,4 +1209,60 @@ export function foldModsFromEquipment(actor) {
   // Rebuild status-derived (equip can change it)
   actor.statusDerived = rebuildStatusDerived(actor);
   return mc;
+}
+
+/**
+ * Recomputes attunement-derived modifiers on an existing mod cache.
+ * Removes previous attunement contributions before reapplying based on the
+ * current attunement pool.
+ * @param {import("./actor.js").Actor} actor
+ */
+export function refreshAttunementBonuses(actor) {
+  if (!actor?.modCache) return;
+
+  const cache = actor.modCache;
+  const prev = cache.__attuneContrib;
+
+  if (prev?.offenseAffinities && cache.offense?.affinities) {
+    for (const [type, value] of Object.entries(prev.offenseAffinities)) {
+      const current = cache.offense.affinities[type] || 0;
+      const next = current - value;
+      if (Math.abs(next) < 1e-6) {
+        delete cache.offense.affinities[type];
+      } else {
+        cache.offense.affinities[type] = next;
+      }
+    }
+  }
+
+  const touchedResists = new Set();
+  if (prev?.defenseResists && cache.defense?.resists) {
+    for (const [type, value] of Object.entries(prev.defenseResists)) {
+      touchedResists.add(type);
+      const current = cache.defense.resists[type] || 0;
+      const next = current - value;
+      if (Math.abs(next) < 1e-6) {
+        delete cache.defense.resists[type];
+      } else {
+        cache.defense.resists[type] = next;
+      }
+    }
+  }
+
+  const applied = foldAttunements(actor, cache);
+  cache.__attuneContrib = applied;
+
+  if (applied?.defenseResists) {
+    for (const type of Object.keys(applied.defenseResists)) {
+      touchedResists.add(type);
+    }
+  }
+
+  if (cache.defense?.resists) {
+    for (const type of touchedResists) {
+      const value = cache.defense.resists[type];
+      if (value === undefined) continue;
+      cache.defense.resists[type] = Math.max(-0.50, Math.min(0.80, value));
+    }
+  }
 }

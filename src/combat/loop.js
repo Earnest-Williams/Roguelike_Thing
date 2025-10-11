@@ -1,10 +1,11 @@
 // src/combat/loop.js
 // @ts-check
-import { rebuildStatusDerived, tickStatusesAtTurnStart } from "./status.js";
+import { tickStatusesAtTurnStart } from "./status.js";
 import { gainAP, tickCooldowns } from "./time.js";
 import { updateResources, isDefeated } from "./resources.js";
 import { EVENT, emit } from "../ui/event-log.js";
 import { ATTUNE } from "../config.js";
+import { refreshAttunementBonuses } from "./mod-folding.js";
 
 export function decayAttunementsAtTurnStart(actor, turn) {
   if (actor.attune?.lastTurnUpdated === turn) return;
@@ -26,13 +27,15 @@ export function decayAttunementsAtTurnStart(actor, turn) {
 /**
  * Runs one turn for an actor.
  * Strategy:
- *  1) Advance turn counter & tick statuses (damage over time, expiry)
- *  2) Rebuild statusDerived (so costs/regen/cooldowns reflect current statuses)
- *  3) Apply passive regeneration
- *  4) Gain AP
- *  5) Let controller/AI attempt actions while AP available
- *  6) Tick cooldowns
- *  7) Return defeat flag
+ *  1) Advance turn counter
+ *  2) Decay attunements for the new turn
+ *  3) Tick statuses (damage over time, expiry) & rebuild status-derived aggregates
+ *  4) Rebuild the mod cache so attunement/status effects apply to this turn
+ *  5) Apply passive regeneration
+ *  6) Gain AP
+ *  7) Let controller/AI attempt actions while AP available
+ *  8) Tick cooldowns
+ *  9) Return defeat flag
  *
  * @param {import("./actor.js").Actor} actor
  * @param {(actor: import("./actor.js").Actor)=>void} [actionPlanner]
@@ -40,10 +43,10 @@ export function decayAttunementsAtTurnStart(actor, turn) {
 export function runTurn(actor, actionPlanner) {
   const turn = actor ? (actor.__turnCounter = (actor.__turnCounter ?? 0) + 1) : 0;
   if (actor) actor.turn = turn;
-  tickStatusesAtTurnStart(actor, turn);
-  rebuildStatusDerived(actor);
-  updateResources(actor);
   decayAttunementsAtTurnStart(actor, turn);
+  tickStatusesAtTurnStart(actor, turn);
+  if (actor) refreshAttunementBonuses(actor);
+  updateResources(actor);
   gainAP(actor);
 
   actionPlanner?.(actor);
