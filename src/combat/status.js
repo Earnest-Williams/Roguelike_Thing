@@ -1,30 +1,17 @@
 const REGISTRY = new Map(); // id -> StatusDef
 
 /**
- * @typedef {Object} StatusDerived
- * @property {number} moveAPDelta
- * @property {number} actionSpeedPct
- * @property {number} accuracyFlat
- * @property {number} critChancePct
- * @property {Record<string, number>} damageDealtMult
- * @property {Record<string, number>} damageTakenMult
- * @property {Record<string, number>} resistDelta
+ * Registers a new status definition.
+ * @param {Object} def - The status definition object.
+ * @param {string} def.id - Unique identifier for the status (required).
+ * @param {string} [def.stacking="independent"] - Stacking behavior: "refresh", "add_stacks", or "independent".
+ * @param {number} [def.maxStacks=Infinity] - Maximum number of stacks (used with "add_stacks" stacking).
+ * @param {number} [def.tickEvery] - Number of turns between onTick triggers (optional).
+ * @param {function} [def.onApply] - Function called when the status is applied. Receives an object: { target, source, stacks, turn }.
+ * @param {function} [def.onTick] - Function called on each tick. Receives an object: { target, stacks, potency, turn }.
+ * @param {function} [def.onExpire] - Function called when the status expires. Receives an object: { target, stacks, potency, turn }.
+ * @param {...any} [def.*] - Additional custom properties as needed.
  */
-export let StatusDerived;
-
-/**
- * @typedef {Object} StatusDef
- * @property {string} id
- * @property {"refresh"|"add_stacks"|"independent"} [stacking]
- * @property {number} [maxStacks]
- * @property {number} [tickEvery]
- * @property {(args: { target: any, source?: any, stacks: number, turn: number }) => { potency?: number } | void} [onApply]
- * @property {(args: { target: any, stacks: number, potency?: number, turn: number }) => void} [onTick]
- * @property {(args: { target: any, stacks: number, potency?: number, turn: number }) => void} [onExpire]
- * @property {(args: { target: any, stacks: number, potency?: number }) => Partial<StatusDerived> | void} [derive]
- */
-export let StatusDef;
-
 export function registerStatus(def) {
   if (!def?.id) throw new Error("Status must have an id");
   REGISTRY.set(def.id, def);
