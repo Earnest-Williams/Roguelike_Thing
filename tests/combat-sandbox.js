@@ -63,16 +63,9 @@ function coalesceKilled(summary) {
 function step(attacker, defender) {
   attacker.turn = (attacker.turn ?? 0) + 1;
   startTurn(attacker);
-  const r = resolveAttack({
-    attacker,
-    defender,
-    turn: attacker.turn,
-    physicalBase: 8,
-    attack: { type: "fire", base: 8 },
-  });
-  const defenderHp = defender.hp ?? 0;
-  const killed = coalesceKilled(r) || defenderHp <= 0;
-  if (killed) applyStatus(attacker, "haste", 1, 2);
+  const r = resolveAttack({ attacker, defender, attack: { type:"fire", base: 8 } });
+  const killed = r.killed ?? (defender.hp <= 0);
+  if (killed) applyStatus(attacker, { id:"haste", baseDuration:2, stacks:1 });
   endTurn(attacker);
   return { ...r, killed };
 }
@@ -81,8 +74,8 @@ for (let i=0; i<10 && A.hp>0 && B.hp>0; i++) {
   const r1 = step(A, B);
   if (B.hp <= 0) break;
   const r2 = step(B, A);
-  const dmgAB = coalesceDamage(r1);
-  const dmgBA = coalesceDamage(r2);
+  const dmgAB = r1.dmg ?? r1.totalDamage ?? 0;
+  const dmgBA = r2.dmg ?? r2.totalDamage ?? 0;
   console.log(`Round ${i+1}: A→B ${dmgAB} (B:${B.hp}) | B→A ${dmgBA} (A:${A.hp})`);
 }
 

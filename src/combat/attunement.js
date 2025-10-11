@@ -35,11 +35,14 @@ export function gainAttunement(actor, type, amount) {
   const gain = Number(amount);
   if (!Number.isFinite(gain) || gain <= 0) return;
 
-  const offenseBrands = actor.modCache?.offense?.brands;
-  const brands = Array.isArray(offenseBrands) && offenseBrands.length > 0
-    ? offenseBrands
-    : actor.modCache?.brands || [];
-  const mod = brands.find((b) => b?.type === type);
+  const offense = actor.modCache?.offense;
+  /** @type {any[]} */
+  const brandSources = [];
+  if (Array.isArray(offense?.brands)) brandSources.push(...offense.brands);
+  if (Array.isArray(offense?.brandAdds)) brandSources.push(...offense.brandAdds);
+  if (Array.isArray(actor.modCache?.brands)) brandSources.push(...actor.modCache.brands);
+
+  const mod = brandSources.find((b) => b?.type === type);
   if (!mod) return;
 
   const def = actor.modCache?.attunement?.[type];
