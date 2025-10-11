@@ -4,14 +4,15 @@ import { applyStatus } from "../src/combat/status.js";
 import { attachLogs } from "../src/combat/debug-log.js";
 
 function mkActor(id, hp, mods) {
+  const attuneRules = mods?.attunementRules || Object.create(null);
   return attachLogs({
     id,
     name: id,
     hp,
     res: { hp },
     statuses: [],
-    attunements: {},
-    modCache: mods,
+    attunement: { rules: { ...attuneRules }, stacks: Object.create(null) },
+    modCache: { ...mods, attunementRules: { ...attuneRules } },
     turn: 0,
   });
 }
@@ -24,13 +25,13 @@ const modsFireSword = {
   },
   defense: { resists: { cold: 0.1 }, immunities: {} },
   temporal: { onKillHaste: { duration: 2 } },
-  attunement: { fire: { maxStacks: 10, decayPerTurn: 1 } }
+  attunementRules: { fire: { maxStacks: 10, decayPerTurn: 1, onUseGain: 1, perStack: { damagePct: 0.02 } } }
 };
 
 const modsSlime = {
   offense: { brands: [], affinities: {}, conversions: [] },
   defense: { resists: { fire: 0.35 }, immunities: {} },
-  temporal: {}, attunement: {}
+  temporal: {}, attunementRules: {}
 };
 
 const A = mkActor("Hero", 60, modsFireSword);

@@ -29,8 +29,7 @@ function setupCombatants(dmgMult) {
     flat: 2,
     pct: 0.1,
   });
-  attacker.modCache.attunement ||= {};
-  attacker.modCache.attunement.physical = {
+  attacker.attunement.rules.physical = {
     maxStacks: 10,
     decayPerTurn: 1,
     onUseGain: 2,
@@ -101,7 +100,7 @@ assert.equal(
 );
 
 assert.equal(
-  boosted.attacker.attunements.physical?.stacks,
+  boosted.attacker.attunement.stacks.physical,
   2,
   "attacker should gain configured attunement stacks when using the brand",
 );

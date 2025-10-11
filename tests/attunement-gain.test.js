@@ -1,53 +1,42 @@
 // tests/attunement-gain.test.js
 import assert from "node:assert/strict";
-import { gainAttunement, tickAttunements } from "../src/combat/attunement.js";
+import { applyOutgoingScaling, noteUseGain, decayPerTurn } from "../src/combat/attunement.js";
 
-const actor = {
-  id: "tester",
-  modCache: {
-    offense: {
-      brands: [
-        { type: "fire" },
-        { type: "ice" },
-      ],
-      brandAdds: [
-        { type: "lightning" },
-      ],
-    },
+function fakeActorWithRule(type, patch = {}) {
+  const baseRule = { onUseGain: 1, decayPerTurn: 1, maxStacks: 10, perStack: {} };
+  const rule = { ...baseRule, ...patch, perStack: { ...baseRule.perStack, ...(patch.perStack || {}) } };
+  return {
     attunement: {
-      fire: { maxStacks: 5, decayPerTurn: 2, onUseGain: 2 },
-      ice: { maxStacks: 3, decayPerTurn: 1, onUseGain: 1 },
-      shadow: { maxStacks: 4, decayPerTurn: 1 },
-      lightning: { maxStacks: 2, decayPerTurn: 1, onUseGain: 1 },
+      rules: { [type]: rule },
+      stacks: Object.create(null),
     },
-    brands: [{ type: "arcane" }],
-  },
-  attunements: Object.create(null),
-};
+    logs: { attack: { push() {} } },
+  };
+}
 
-gainAttunement(actor, "fire", 3);
-assert.equal(actor.attunements.fire.stacks, 3, "fire attunement should gain stacks");
+(function testOutgoingScalingUsesStacks() {
+  const actor = fakeActorWithRule("fire", { perStack: { damagePct: 0.02 }, maxStacks: 10 });
+  actor.attunement.stacks.fire = 5;
+  const packets = [{ type: "fire", amount: 100 }];
+  applyOutgoingScaling({ attacker: actor, packets, target: {} });
+  assert.equal(packets[0].amount, 100 * (1 + 0.02 * 5));
+  console.log("✓ outgoing scaling uses stacks");
+})();
 
-gainAttunement(actor, "fire", 10);
-assert.equal(actor.attunements.fire.stacks, 5, "fire attunement respects max stacks");
+(function testGainClampsToMaxStacks() {
+  const actor = fakeActorWithRule("cold", { onUseGain: 3, maxStacks: 5 });
+  noteUseGain(actor, new Set(["cold"]));
+  noteUseGain(actor, new Set(["cold"]));
+  assert.equal(actor.attunement.stacks.cold, 5);
+  console.log("✓ noteUseGain clamps to maxStacks");
+})();
 
-// Unknown brand should be ignored
-gainAttunement(actor, "shadow", 2);
-assert.ok(!("shadow" in actor.attunements), "attunement without matching brand is ignored");
-
-// Brand sourced from brandAdds should count
-gainAttunement(actor, "lightning", 1);
-assert.equal(
-  actor.attunements.lightning.stacks,
-  1,
-  "attunement should recognize brands provided via brandAdds",
-);
-
-// Tick should decay and prune empty entries
-gainAttunement(actor, "ice", 1);
-tickAttunements(actor);
-assert.equal(actor.attunements.fire.stacks, 3, "fire decays by configured amount");
-assert.ok(!actor.attunements.ice, "ice attunement should decay to zero and be removed");
-
-tickAttunements(actor);
-assert.ok(actor.attunements.fire.stacks < 3, "further ticks continue to decay");
+(function testDecayReducesStacks() {
+  const actor = fakeActorWithRule("shock", { decayPerTurn: 2, maxStacks: 9 });
+  actor.attunement.stacks.shock = 3;
+  decayPerTurn(actor);
+  assert.equal(actor.attunement.stacks.shock, 1);
+  decayPerTurn(actor);
+  assert.ok(!actor.attunement.stacks.shock, "stacks should decay to zero");
+  console.log("✓ decayPerTurn reduces stacks and prunes empties");
+})();

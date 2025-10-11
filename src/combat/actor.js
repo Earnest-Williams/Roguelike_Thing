@@ -53,6 +53,7 @@ import { rebuildDerived } from "./status.js";
  * @property {number} dmgMult                     // global outgoing damage multiplier
  * @property {number} speedMult                   // < 1 faster, > 1 slower (AP)
  * @property {Array<Object>} brands               // normalized brand mods on the actor
+ * @property {Record<string, any>} attunementRules
  * @property {{ conversions: any[], brandAdds: any[], affinities: Record<string, number>, polarity: { onHitBias: Record<string, number> } }} offense
  * @property {{ resists: Record<string, number>, immunities: Set<string>, polarity: { defenseBias: Record<string, number> } }} defense
  * @property {{
@@ -163,6 +164,7 @@ export class Actor {
       dmgMult: BASE_DAMAGE_MULTIPLIER,
       speedMult: BASE_SPEED_MULTIPLIER,
       brands: [],
+      attunementRules: Object.create(null),
       offense: {
         conversions: [],
         brandAdds: [],
@@ -227,8 +229,11 @@ export class Actor {
       polarity: {},
     };
 
-    // Track per-type attunement stack state.
-    this.attunements = this.attunements || Object.create(null);
+    // Track per-type attunement runtime state (rules + live stacks).
+    /** @type {{ rules: Record<string, any>, stacks: Record<string, number> }} */
+    this.attunement = this.attunement || {};
+    this.attunement.rules = this.attunement.rules || Object.create(null);
+    this.attunement.stacks = this.attunement.stacks || Object.create(null);
 
     /** @type {Resources} */
     this.res = {

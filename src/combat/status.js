@@ -1,6 +1,7 @@
 // src/combat/status.js
 // @ts-check
 
+import { contributeDerived } from "./attunement.js";
 import { logStatusEvt } from "./debug-log.js";
 
 const REGISTRY = new Map();
@@ -242,6 +243,8 @@ export function rebuildDerived(actor) {
   derived.regen.hp = derived.regenFlat.hp;
   derived.regen.stamina = derived.regenFlat.stamina;
   derived.regen.mana = derived.regenFlat.mana;
+
+  contributeDerived(actor, derived);
 
   actor.statusDerived = derived;
   return derived;

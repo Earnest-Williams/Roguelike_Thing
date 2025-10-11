@@ -73,42 +73,57 @@ function multiply(into, mults) {
   }
 }
 
-function mergeAttunementDef(target, source) {
-  if (!source || typeof source !== "object") return;
-  if (source.maxStacks !== undefined || source.max !== undefined || source.maximum !== undefined || source.cap !== undefined) {
-    const maxCandidate = source.maxStacks ?? source.max ?? source.maximum ?? source.cap;
-    const max = Number(maxCandidate);
-    if (Number.isFinite(max)) target.maxStacks = max;
+function mergeAttunementRule(into, type, payload) {
+  if (!into || !type || !payload) return;
+  if (typeof payload !== "object") return;
+  const target = into[type] || (into[type] = { onUseGain: 0, decayPerTurn: 0, maxStacks: 0, perStack: {} });
+
+  const gain = Number(payload.onUseGain ?? payload.gain ?? payload.perUseGain ?? payload.useGain ?? 0) || 0;
+  if (gain) target.onUseGain += gain;
+
+  const decay = Number(payload.decayPerTurn ?? payload.decay ?? payload.decayRate ?? 0) || 0;
+  if (decay) target.decayPerTurn = Math.max(target.decayPerTurn, decay);
+
+  const max = Number(payload.maxStacks ?? payload.max ?? payload.maximum ?? payload.cap ?? 0) || 0;
+  if (max) target.maxStacks = Math.max(target.maxStacks, max);
+
+  const perStack = payload.perStack && typeof payload.perStack === "object" ? payload.perStack : null;
+  if (perStack) {
+    const add = (field, aliases) => {
+      for (const alias of aliases) {
+        if (perStack[alias] === undefined) continue;
+        const value = Number(perStack[alias]) || 0;
+        if (!value) continue;
+        target.perStack[field] = (target.perStack[field] || 0) + value;
+        break;
+      }
+    };
+    add("damagePct", ["damagePct", "dmgPct", "damage"]);
+    add("resistPct", ["resistPct", "resist", "resistancePct"]);
+    add("accuracyFlat", ["accuracyFlat", "accuracy", "accuracyBonus"]);
   }
-  if (source.decayPerTurn !== undefined || source.decay !== undefined || source.decayRate !== undefined) {
-    const decayCandidate = source.decayPerTurn ?? source.decay ?? source.decayRate;
-    const decay = Number(decayCandidate);
-    if (Number.isFinite(decay)) target.decayPerTurn = decay;
-  }
-  if (source.onUseGain !== undefined || source.gain !== undefined || source.perUseGain !== undefined || source.useGain !== undefined) {
-    const gainCandidate = source.onUseGain ?? source.gain ?? source.perUseGain ?? source.useGain;
-    const gain = Number(gainCandidate);
-    if (Number.isFinite(gain)) target.onUseGain = gain;
-  }
+
+  into[type] = target;
 }
 
-function mergeAttunement(into, payload) {
-  if (!payload) return;
+function mergeAttunementPayload(into, payload) {
+  if (!into || !payload) return;
   if (Array.isArray(payload)) {
     for (const entry of payload) {
       if (!entry) continue;
       const type = entry.type ?? entry.id ?? entry.element ?? entry.damageType;
       if (!type) continue;
-      const target = into[type] || (into[type] = {});
-      mergeAttunementDef(target, entry);
+      mergeAttunementRule(into, type, entry);
     }
     return;
   }
   if (typeof payload !== "object") return;
+  if (payload.type) {
+    mergeAttunementRule(into, payload.type, payload);
+    return;
+  }
   for (const [type, value] of Object.entries(payload)) {
-    if (!value || typeof value !== "object") continue;
-    const target = into[type] || (into[type] = {});
-    mergeAttunementDef(target, value);
+    mergeAttunementRule(into, type, value);
   }
 }
 
@@ -904,7 +919,7 @@ export function foldModsFromEquipment(actor) {
     dmgMult: 1,
     speedMult: 1,
     brands: [],
-    attunement: Object.create(null),
+    attunementRules: Object.create(null),
     offense: {
       conversions: [],
       brandAdds: [],
@@ -976,8 +991,8 @@ export function foldModsFromEquipment(actor) {
     const item = asItem(equipment[slot]);
     if (!item) continue;
 
-    mergeAttunement(mc.attunement, item.attunement);
-    mergeAttunement(mc.attunement, item.attunements);
+    mergeAttunementPayload(mc.attunementRules, item.attunement);
+    mergeAttunementPayload(mc.attunementRules, item.attunements);
 
     // Brands
     if (Array.isArray(item.brands)) {
@@ -991,6 +1006,9 @@ export function foldModsFromEquipment(actor) {
           : [];
         mc.offense.brandAdds.push({ type, flat, percent, onHitStatuses });
         mc.brands.push({ kind: "brand", type, flat, pct: percent, onHitStatuses });
+        if (brand.attunement && type) {
+          mergeAttunementRule(mc.attunementRules, type, brand.attunement);
+        }
       }
     }
 
@@ -1006,6 +1024,9 @@ export function foldModsFromEquipment(actor) {
           : [];
         mc.offense.brandAdds.push({ type, flat, percent, onHitStatuses });
         mc.brands.push({ kind: "brand", type, flat, pct: percent, onHitStatuses });
+        if (brand.attunement && type) {
+          mergeAttunementRule(mc.attunementRules, type, brand.attunement);
+        }
       }
     }
     if (Array.isArray(item.offense?.brandAdds)) {
@@ -1019,6 +1040,9 @@ export function foldModsFromEquipment(actor) {
           : [];
         mc.offense.brandAdds.push({ type, flat, percent, onHitStatuses });
         mc.brands.push({ kind: "brand", type, flat, pct: percent, onHitStatuses });
+        if (brand.attunement && type) {
+          mergeAttunementRule(mc.attunementRules, type, brand.attunement);
+        }
       }
     }
 
@@ -1053,10 +1077,10 @@ export function foldModsFromEquipment(actor) {
     }
 
     if (item.offense?.attunement) {
-      mergeAttunement(mc.attunement, item.offense.attunement);
+      mergeAttunementPayload(mc.attunementRules, item.offense.attunement);
     }
     if (item.defense?.attunement) {
-      mergeAttunement(mc.attunement, item.defense.attunement);
+      mergeAttunementPayload(mc.attunementRules, item.defense.attunement);
     }
 
     // Resists / Immunities
@@ -1183,16 +1207,16 @@ export function foldModsFromEquipment(actor) {
       }
 
       if (mod.attunement) {
-        mergeAttunement(mc.attunement, mod.attunement);
+        mergeAttunementPayload(mc.attunementRules, mod.attunement);
       }
       if (mod.payload?.attunement) {
-        mergeAttunement(mc.attunement, mod.payload.attunement);
+        mergeAttunementPayload(mc.attunementRules, mod.payload.attunement);
       }
       if (Array.isArray(mod.payloads)) {
         for (const payload of mod.payloads) {
           if (!payload) continue;
           if (payload.attunement) {
-            mergeAttunement(mc.attunement, payload.attunement);
+            mergeAttunementPayload(mc.attunementRules, payload.attunement);
           }
         }
       }
@@ -1227,6 +1251,15 @@ export function foldModsFromEquipment(actor) {
     );
   }
 
+  actor.attunement = actor.attunement || {};
+  actor.attunement.rules = mc.attunementRules;
+  actor.attunement.stacks = actor.attunement.stacks || Object.create(null);
+  for (const key of Object.keys(actor.attunement.stacks)) {
+    if (!mc.attunementRules[key]) {
+      delete actor.attunement.stacks[key];
+    }
+  }
+
   // Rebuild status-derived (equip can change it)
   actor.statusDerived = rebuildDerived(actor);
   return mc;
@@ -1241,7 +1274,7 @@ export function foldMods(items) {
   const actor = {
     equipment: {},
     statuses: [],
-    attunements: {},
+    attunement: { rules: Object.create(null), stacks: Object.create(null) },
   };
 
   if (Array.isArray(items)) {

@@ -4,20 +4,22 @@ import { resolveAttack } from "../src/combat/attack.js";
 import { attachLogs } from "../src/combat/debug-log.js";
 
 function mkActor(partial = {}) {
+  const baseModCache = partial.modCache || {
+    brands: [],
+    immunities: new Set(),
+    offense: { brands: [], brandAdds: [], affinities: {}, conversions: [] },
+    defense: { resists: {}, immunities: new Set() },
+    temporal: {},
+    attunementRules: Object.create(null)
+  };
+  baseModCache.attunementRules ||= Object.create(null);
   return attachLogs({
     id: partial.id || "A",
     name: partial.name || "A",
     hp: partial.hp ?? 100,
     statuses: [],
-    attunements: {},
-    modCache: partial.modCache || {
-      brands: [],
-      immunities: new Set(),
-      offense: { brands: [], brandAdds: [], affinities: {}, conversions: [] },
-      defense: { resists: {}, immunities: new Set() },
-      temporal: {},
-      attunement: {}
-    },
+    attunement: { rules: { ...baseModCache.attunementRules }, stacks: Object.create(null) },
+    modCache: baseModCache,
     ...partial
   });
 }
@@ -42,7 +44,7 @@ function mkActor(partial = {}) {
       offense: { brands: [], brandAdds: [], affinities: {}, conversions: [] },
       defense: { resists: { fire: 0.25 }, immunities: new Set() },
       temporal: {},
-      attunement: {}
+      attunementRules: Object.create(null)
     }
   });
   const ctx = {
