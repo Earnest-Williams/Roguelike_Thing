@@ -118,7 +118,7 @@ export function foldModsFromEquipment(actor) {
       inflictDurMult: Object.create(null),
       resistBonus: Object.create(null),
       recvDurMult: Object.create(null),
-      buffDurMult: 1,
+      buffDurMult: 0,
       freeActionIgnore: new Set(),
     },
     polarity: { onHitBias: {}, defenseBias: {} },
