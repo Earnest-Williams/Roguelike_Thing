@@ -1807,7 +1807,7 @@
           return result;
         }
 
-        function applyAttackOutcome({
+        function finalizeAttackOutcome({
           evaluation,
           attackCtx,
           baseRoll,
@@ -1839,11 +1839,11 @@
             if (typeof onTargetDefeated === "function") {
               onTargetDefeated();
             } else {
-              handleDeath(target);
+              handleDeath(attackCtx, target);
             }
           }
 
-          return evaluation;
+          return { evaluation, attackResult };
         }
 
         function performRangedAttack(attacker, target, weapon, context = {}) {
@@ -1875,9 +1875,6 @@
             evaluation.ammoUsed = profile.ammo.perShot ?? 1;
           }
           const baseRoll = rollDamage(profile.damage);
-          const diceTotal = Array.isArray(baseRoll.rolls)
-            ? baseRoll.rolls.reduce((acc, value) => acc + value, 0)
-            : 0;
           const attackCtx = {
             attacker,
             defender: target,
@@ -1900,13 +1897,25 @@
             context?.gameCtx ||
             (context?.mobManager ? { mobManager: context.mobManager } : context) ||
             null;
-          applyAttackOutcome({
+          const attackOutcome = finalizeAttackOutcome({
             evaluation,
             attackCtx,
             baseRoll,
             target,
             onTargetDefeated: () => handleDeath(deathCtx, target, deathCtx?.ui),
           });
+          const { attackResult, evaluation: updatedEvaluation } = attackOutcome;
+          evaluation = updatedEvaluation ?? evaluation;
+          if (typeof context.onAttack === "function") {
+            context.onAttack({
+              attacker,
+              target,
+              weapon,
+              evaluation,
+              baseRoll,
+              attackResult,
+            });
+          }
           if (
             profile.category === WEAPON_CATEGORY.THROWN &&
             profile.consumeWeaponOnUse
@@ -2067,9 +2076,6 @@
           if (!evaluation.ok) return evaluation;
           const profile = evaluation.profile;
           const baseRoll = rollDamage(profile.damage);
-          const diceTotal = Array.isArray(baseRoll.rolls)
-            ? baseRoll.rolls.reduce((acc, value) => acc + value, 0)
-            : 0;
           const attackCtx = {
             attacker,
             defender: target,
@@ -2088,7 +2094,7 @@
           if (Array.isArray(context.brands) && context.brands.length) {
             attackCtx.brands = context.brands;
           }
-          applyAttackOutcome({
+          evaluation = finalizeAttackOutcome({
             evaluation,
             attackCtx,
             baseRoll,
