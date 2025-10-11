@@ -55,6 +55,7 @@ function fakeActorWithRule(type, patch = {}) {
   const derived = { resistDelta: Object.create(null), accuracyFlat: 0 };
   const result = contributeDerived(actor, derived);
   assert.equal(result.resistDelta.fire, 0.03);
+  assert.equal(result.resistsPct.fire, 0.03);
   assert.equal(result.accuracyFlat, 6);
   console.log("✓ contributeDerived adds resist and accuracy bonuses");
 })();

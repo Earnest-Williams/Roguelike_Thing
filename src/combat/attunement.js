@@ -7,9 +7,11 @@
  * @param {string} type
  */
 export function getStacks(actor, type) {
-  const raw = actor?.attunement?.stacks?.[type];
-  if (!Number.isFinite(raw)) return 0;
-  return Math.max(0, Math.floor(raw));
+  if (!actor || typeof type !== "string") return 0;
+  const stacks = actor.attunement?.stacks?.[type];
+  if (!Number.isFinite(stacks)) return 0;
+  const coerced = stacks | 0;
+  return coerced > 0 ? coerced : 0;
 }
 
 /**
@@ -20,11 +22,14 @@ export function getStacks(actor, type) {
  */
 export function setStacks(actor, type, value) {
   if (!actor || typeof type !== "string") return;
-  const attune = actor.attunement || (actor.attunement = { rules: Object.create(null), stacks: Object.create(null) });
+  const attune = actor.attunement || (actor.attunement = {});
   const stacks = attune.stacks || (attune.stacks = Object.create(null));
-  const next = Number.isFinite(value) ? Math.floor(value) : 0;
-  if (next <= 0) delete stacks[type];
-  else stacks[type] = next;
+  const next = Number.isFinite(value) ? (value | 0) : 0;
+  if (next <= 0) {
+    delete stacks[type];
+  } else {
+    stacks[type] = next;
+  }
 }
 
 /**
@@ -93,6 +98,11 @@ export function decayPerTurn(actor) {
   const stacks = actor?.attunement?.stacks;
   if (!stacks) return;
   for (const [type, count] of Object.entries(stacks)) {
+    const current = count | 0;
+    if (!current) {
+      delete stacks[type];
+      continue;
+    }
     const rule = ruleFor(actor, type);
     if (!rule) {
       delete stacks[type];
@@ -100,7 +110,8 @@ export function decayPerTurn(actor) {
     }
     const decay = rule.decayPerTurn | 0;
     if (!decay) continue;
-    setStacks(actor, type, Math.max(0, count - decay));
+    const next = current - decay;
+    setStacks(actor, type, next > 0 ? next : 0);
   }
 }
 
@@ -119,12 +130,18 @@ export function contributeDerived(actor, derived) {
     if (!stackCount) continue;
     const rule = ruleFor(actor, type);
     if (!rule) continue;
-    const resistPct = rule.perStack?.resistPct || 0;
+    const perStack = rule.perStack || {};
+    const resistPct = perStack.resistPct || 0;
     if (resistPct) {
-      derived.resistDelta = derived.resistDelta || Object.create(null);
-      derived.resistDelta[type] = (derived.resistDelta[type] || 0) + resistPct * stackCount;
+      const total = resistPct * stackCount;
+      if (total) {
+        derived.resistDelta = derived.resistDelta || Object.create(null);
+        derived.resistDelta[type] = (derived.resistDelta[type] || 0) + total;
+        derived.resistsPct = derived.resistsPct || Object.create(null);
+        derived.resistsPct[type] = (derived.resistsPct[type] || 0) + total;
+      }
     }
-    const accuracyFlat = rule.perStack?.accuracyFlat || 0;
+    const accuracyFlat = perStack.accuracyFlat || 0;
     if (accuracyFlat) {
       derived.accuracyFlat = (derived.accuracyFlat || 0) + accuracyFlat * stackCount;
     }
