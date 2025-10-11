@@ -64,7 +64,7 @@ function applyConversions(actor, packets) {
       }
       const take = Math.floor(pkt.amount * c.pct);
       if (take > 0) {
-        out.push({ type: c.to, amount: take });
+        out.push({ type: c.to || c.into || pkt.type, amount: take });
         remaining -= take;
       }
     }
