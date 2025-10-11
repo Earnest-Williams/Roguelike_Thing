@@ -34,6 +34,7 @@ import { rebuildDerived } from "./status.js";
  * @property {number} hp
  * @property {number} stamina
  * @property {number} mana
+ * @property {Record<string, import("./resources.js").ResourceState>} [pools]
  */
 
 /**
@@ -235,14 +236,30 @@ export class Actor {
     this.attunement.rules = this.attunement.rules || Object.create(null);
     this.attunement.stacks = this.attunement.stacks || Object.create(null);
 
-    /** @type {Resources} */
+    /** @type {Resources & { pools?: Record<string, import("./resources.js").ResourceState> }} */
     this.res = {
       hp: this.base.maxHP,
       stamina: this.base.maxStamina,
       mana: this.base.maxMana,
+      pools: Object.create(null),
     };
-    /** @type {Resources} */
+    /** @type {Resources & { pools?: Record<string, import("./resources.js").ResourceState> }} */
     this.resources = this.res;
+
+    /**
+     * Temporal hooks merged from equipment/status.
+     * These are distinct from the legacy modCache.temporal payload so newer
+     * helpers can reason about action speed/cooldowns without disturbing
+     * existing calculations.
+     */
+    this.temporal = {
+      actionSpeedPct: 0,
+      moveAPDelta: 0,
+      cooldownPct: 0,
+      initBonus: 0,
+      castTimeDelta: 0,
+      recoveryPct: 0,
+    };
 
     /** @type {ChannelingState|null} */
     this.channeling = null;

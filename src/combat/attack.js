@@ -1,11 +1,13 @@
 // src/combat/attack.js
 // @ts-check
 import { COMBAT_RESIST_MAX, COMBAT_RESIST_MIN } from "../config.js";
+import { HEALTH_FLOOR } from "../../constants.js";
 import { applyOutgoingScaling, noteUseGain } from "./attunement.js";
 import { applyStatuses } from "./status.js";
 import { polarityDefScalar, polarityOnHitScalar } from "./polarity.js";
 import { logAttackStep } from "./debug-log.js";
 import { makeAttackContext } from "./attack-context.js";
+import { eventGain } from "./resources.js";
 
 /**
  * @typedef {Object} AttackContext
@@ -249,6 +251,13 @@ export function resolveAttack(ctx) {
   const currentHp = (defenderResources?.hp ?? 0) | 0;
   const nextHp = Math.max(0, currentHp - total);
   syncDefenderHp(nextHp);
+
+  if (total > 0) {
+    eventGain(attacker, { kind: "hit" });
+  }
+  if (currentHp > HEALTH_FLOOR && nextHp <= HEALTH_FLOOR) {
+    eventGain(attacker, { kind: "kill" });
+  }
 
   if (total > 0 && usedTypes.size) {
     noteUseGain(attacker, usedTypes);
