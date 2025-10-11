@@ -29,12 +29,30 @@ function testStatusZeroDuration() {
 }
 
 function testResolveWithPolarity() {
-  const attacker = { id: "atk", polarity: "order", statusDerived: {}, modCache: { offense: { conversions: [], brandAdds: [], affinities: {} }, defense: { resists: {}, immunities: new Set() }, brands: [], immunities: new Set() }, attunement: { rules: Object.create(null), stacks: Object.create(null) } };
-  const defender = { id: "def", polarity: "chaos", hp: 100, statusDerived: {}, modCache: { defense: { resists: { fire: 0.2 }, immunities: new Set(), flatDR: {} }, immunities: new Set() }, resources: { hp: 100 } };
+  const attacker = {
+    id: "atk",
+    polarity: { order: 1 },
+    statusDerived: {},
+    modCache: {
+      offense: { conversions: [], brandAdds: [], affinities: {} },
+      defense: { resists: {}, immunities: new Set() },
+      brands: [],
+      immunities: new Set(),
+    },
+    attunement: { rules: Object.create(null), stacks: Object.create(null) },
+  };
+  const defender = {
+    id: "def",
+    polarity: { chaos: 1 },
+    hp: 100,
+    statusDerived: {},
+    modCache: { defense: { resists: { fire: 0.2 }, immunities: new Set(), flatDR: {} }, immunities: new Set() },
+    resources: { hp: 100 },
+  };
   const ctx = { attacker, defender, prePackets: { fire: 100 } };
   const result = resolveAttack(ctx);
-  assert.equal(result.totalDamage, 88, "polarity bias then resist should yield 88 damage");
-  assert.equal(defender.hp, 12, "defender hp reduced by total damage");
+  assert.equal(result.totalDamage, 70, "polarity offense/defense scalars should resolve after resists");
+  assert.equal(defender.hp, 30, "defender hp reduced by total damage");
   console.log("✓ resolveAttack polarity/resist order");
 }
 
