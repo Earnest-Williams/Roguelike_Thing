@@ -731,7 +731,12 @@ export function foldModsFromEquipment(actor) {
     for (const mod of rawMods) {
       if (!mod || typeof mod !== "object") continue;
       const temporalPayloads = [];
-      if (mod.kind === "temporal") temporalPayloads.push(mod);
+      if (mod.kind === "temporal") {
+        temporalPayloads.push(mod);
+        if (mod.payload && typeof mod.payload === "object") {
+          temporalPayloads.push(mod.payload);
+        }
+      }
       if (mod.temporal && typeof mod.temporal === "object") temporalPayloads.push(mod.temporal);
       if (mod.payload?.temporal && typeof mod.payload.temporal === "object") {
         temporalPayloads.push(mod.payload.temporal);
@@ -741,7 +746,12 @@ export function foldModsFromEquipment(actor) {
       }
 
       const resourcePayloads = [];
-      if (mod.kind === "resource") resourcePayloads.push(mod);
+      if (mod.kind === "resource") {
+        resourcePayloads.push(mod);
+        if (mod.payload && typeof mod.payload === "object") {
+          resourcePayloads.push(mod.payload);
+        }
+      }
       if (mod.resource && typeof mod.resource === "object") resourcePayloads.push(mod.resource);
       if (mod.payload?.resource && typeof mod.payload.resource === "object") {
         resourcePayloads.push(mod.payload.resource);
