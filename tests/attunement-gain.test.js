@@ -1,6 +1,11 @@
 // tests/attunement-gain.test.js
 import assert from "node:assert/strict";
-import { applyOutgoingScaling, noteUseGain, decayPerTurn } from "../src/combat/attunement.js";
+import {
+  applyOutgoingScaling,
+  noteUseGain,
+  decayPerTurn,
+  contributeDerived,
+} from "../src/combat/attunement.js";
 
 function fakeActorWithRule(type, patch = {}) {
   const baseRule = { onUseGain: 1, decayPerTurn: 1, maxStacks: 10, perStack: {} };
@@ -39,4 +44,17 @@ function fakeActorWithRule(type, patch = {}) {
   decayPerTurn(actor);
   assert.ok(!actor.attunement.stacks.shock, "stacks should decay to zero");
   console.log("✓ decayPerTurn reduces stacks and prunes empties");
+})();
+
+(function testContributeDerivedAddsPassiveBonuses() {
+  const actor = fakeActorWithRule("fire", {
+    maxStacks: 9,
+    perStack: { resistPct: 0.01, accuracyFlat: 2 },
+  });
+  actor.attunement.stacks.fire = 3;
+  const derived = { resistDelta: Object.create(null), accuracyFlat: 0 };
+  const result = contributeDerived(actor, derived);
+  assert.equal(result.resistDelta.fire, 0.03);
+  assert.equal(result.accuracyFlat, 6);
+  console.log("✓ contributeDerived adds resist and accuracy bonuses");
 })();
