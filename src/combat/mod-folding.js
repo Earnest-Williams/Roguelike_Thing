@@ -1327,7 +1327,7 @@ export function foldModsFromEquipment(actor) {
         mergeRecord(mc.status.resistBonus, sm.resistChanceBonus || sm.resistBonus);
         mergeRecord(mc.status.recvDurMult, sm.receivedDurationMult ?? sm.recvDurMult);
         const buffDelta = Number(sm.buffDurationMult ?? sm.buffDurMult);
-        if (Number.isFinite(buffDelta) && buffDelta) {
+        if (Number.isFinite(buffDelta)) {
           const next = mc.status.buffDurMult * (1 + buffDelta);
           mc.status.buffDurMult = Math.max(0, next);
         }
