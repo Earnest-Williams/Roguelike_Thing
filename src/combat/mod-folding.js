@@ -84,42 +84,21 @@ function foldAttunements(actor, cache) {
   cache.defense.resists ||= Object.create(null);
 
   const thresholds = ATTUNE.thresholds || {};
-  let topTierThreshold = -Infinity;
-  for (const key of Object.keys(thresholds)) {
-    const numeric = Number(key);
-    if (!Number.isFinite(numeric)) continue;
-    if (numeric > topTierThreshold) {
-      topTierThreshold = numeric;
-    }
-  }
-  const topTierResistBonus = Number(ATTUNE.topTierResistBonus ?? 0);
-  const applyTopTierResist =
-    Number.isFinite(topTierThreshold) &&
-    topTierThreshold !== -Infinity &&
-    Number.isFinite(topTierResistBonus) &&
-    topTierResistBonus !== 0;
 
   for (const [type, xpRaw] of Object.entries(pool)) {
     const xp = Number(xpRaw);
     if (!Number.isFinite(xp)) continue;
 
     let bonus = 0;
-    for (const [thresholdRaw, pctRaw] of Object.entries(thresholds)) {
-      const threshold = Number(thresholdRaw);
-      if (!Number.isFinite(threshold) || xp < threshold) continue;
-      const percent = Number(pctRaw) || 0;
-      if (percent > bonus) {
-        bonus = percent;
-      }
+    for (const [th, pct] of Object.entries(thresholds)) {
+      if (xp >= Number(th)) bonus = Math.max(bonus, pct);
     }
+    if (bonus > 0) {
+      cache.offense.affinities[type] = (cache.offense.affinities[type] || 0) + bonus;
 
-    if (bonus <= 0) continue;
-
-    cache.offense.affinities[type] = (cache.offense.affinities[type] || 0) + bonus;
-
-    if (applyTopTierResist && xp >= topTierThreshold) {
-      cache.defense.resists[type] =
-        (cache.defense.resists[type] || 0) + topTierResistBonus;
+      if (xp >= 16) {
+        cache.defense.resists[type] = (cache.defense.resists[type] || 0) + 0.03;
+      }
     }
   }
 }
