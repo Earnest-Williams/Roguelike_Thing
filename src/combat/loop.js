@@ -7,12 +7,8 @@ import { EVENT, emit } from "../ui/event-log.js";
 import { ATTUNE } from "../config.js";
 
 export function decayAttunementsAtTurnStart(actor, turn) {
-  if (!actor || actor.attune?.lastTurnUpdated === turn) return;
-
-  const attune = actor.attune;
-  if (!attune) return;
-
-  const { pool } = attune;
+  if (actor.attune?.lastTurnUpdated === turn) return;
+  const pool = actor.attune?.pool;
   if (!pool) return;
 
   for (const key of Object.keys(pool)) {
@@ -24,7 +20,7 @@ export function decayAttunementsAtTurnStart(actor, turn) {
     }
   }
 
-  attune.lastTurnUpdated = turn;
+  actor.attune.lastTurnUpdated = turn;
 }
 
 /**
