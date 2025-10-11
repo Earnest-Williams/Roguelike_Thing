@@ -19,6 +19,12 @@ import {
  *  - immunities: string[]
  *  - dmgMult: number
  *  - speedMult: number
+ *  - offense bucket (conversions, brandAdds, affinities, polarity)
+ *  - defense bucket (resists, immunities, polarity)
+ *  - temporal bucket (action speed, AP deltas, cooldown knobs)
+ *  - resource bucket (max/regen adjustments, cost multipliers, onHit/onKill gains)
+ *  - status bucket (inflict/resist knobs, buff adjustments)
+ *  - polarity bucket (actor-level bias overrides)
  */
 
 /**
@@ -158,8 +164,14 @@ function foldItemIntoExtended(item, F) {
   }
 
   if (item.polarity) {
-    F.polarity.onHitBias = mergePolBias(F.polarity.onHitBias, item.polarity.onHitBias);
-    F.polarity.defenseBias = mergePolBias(F.polarity.defenseBias, item.polarity.defenseBias);
+    F.polarity.onHitBias = mergePolBias(
+      F.polarity.onHitBias,
+      item.polarity.onHitBias,
+    );
+    F.polarity.defenseBias = mergePolBias(
+      F.polarity.defenseBias,
+      item.polarity.defenseBias,
+    );
     F.offense.polarity.onHitBias = mergePolBias(
       F.offense.polarity.onHitBias,
       item.polarity.onHitBias,
@@ -239,7 +251,7 @@ export function foldModsFromEquipment(equipment) {
       buffDurMult: 0,
       freeActionIgnore: new Set(),
     },
-    polarity: { onHitBias: {}, defenseBias: {} },
+    polarity: {},
   };
 
   const seen = new Set();
