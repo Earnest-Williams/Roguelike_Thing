@@ -2,6 +2,7 @@
 // @ts-check
 import { apCost, spendAP, startCooldown, isReady } from "./time.js";
 import { resolveAttack } from "./attack.js";
+import { tryTemporalEcho, applyOnKillHaste } from "./temporal.js";
 import { performEquippedAttack, pickAttackMode } from "../game/combat-glue.js";
 import {
   BASE_MOVE_AP_COST,
@@ -58,14 +59,24 @@ export function tryAttack(attacker, defender, opts = {}) {
     base: Math.max(MIN_ATTACK_DAMAGE, opts.base ?? DEFAULT_ATTACK_BASE_DAMAGE),
     type: String(opts.type || "physical"),
   };
-  const { totalDamage } = resolveAttack({
+  const hpBefore = getActorHp(defender);
+  const ctx = {
     attacker,
     defender,
     turn: attacker?.turn ?? 0,
     physicalBase: profile.base,
-  });
+  };
+  const result = resolveAttack(ctx);
+  tryTemporalEcho(ctx, result);
 
-  defender.res.hp = Math.max(HEALTH_FLOOR, defender.res.hp);
+  if (defender?.res && typeof defender.res.hp === "number") {
+    defender.res.hp = Math.max(HEALTH_FLOOR, defender.res.hp);
+  }
+
+  const hpAfter = getActorHp(defender);
+  if (hpAfter <= HEALTH_FLOOR && hpBefore > HEALTH_FLOOR) {
+    applyOnKillHaste(attacker);
+  }
 
   const baseCd = Math.max(
     COOLDOWN_MIN_TURNS,
@@ -74,6 +85,14 @@ export function tryAttack(attacker, defender, opts = {}) {
   startCooldown(attacker, key, baseCd);
 
   return true;
+}
+
+function getActorHp(actor) {
+  if (!actor) return 0;
+  if (Number.isFinite(actor?.res?.hp)) return actor.res.hp;
+  if (Number.isFinite(actor?.resources?.hp)) return actor.resources.hp;
+  if (Number.isFinite(actor?.hp)) return actor.hp;
+  return 0;
 }
 
 function mainHandItem(actor) {
