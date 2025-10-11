@@ -826,6 +826,19 @@
       window.applyStatuses = applyStatuses;
       window.resolveAttack = resolveAttack;
 
+      function applyStatusDamage({ statusId, target, amount, type = "physical", turn = 0 }) {
+        const dmg = Math.max(0, Math.floor(amount ?? 0));
+        if (!target || dmg <= 0) return;
+        resolveAttack({
+          attacker: { id: `status:${statusId}` },
+          defender: target,
+          turn,
+          physicalBase: 0,
+          prePackets: { [type]: dmg },
+          tags: ["status", statusId, "dot"],
+        });
+      }
+
       registerStatus({
         id: "burn",
         label: "Burning",
@@ -833,11 +846,9 @@
         stacking: STACKING_RULE.ADD_STACKS,
         maxStacks: 5,
         tickEvery: 1,
-        onTick: ({ target, stacks = 1 }) => {
+        onTick: ({ target, stacks = 1, turn }) => {
           const dot = 1 + stacks;
-          if (typeof target.hp === "number") {
-            target.hp -= dot;
-          }
+          applyStatusDamage({ statusId: "burn", target, amount: dot, type: "fire", turn });
           target.__log?.statusTick?.("burn", { dot, stacks });
         },
         derive: ({ stacks = 1 }) => ({
@@ -851,11 +862,9 @@
         harmful: true,
         stacking: STACKING_RULE.INDEPENDENT,
         tickEvery: 1,
-        onTick: ({ target, potency = 1 }) => {
+        onTick: ({ target, potency = 1, turn }) => {
           const dot = Math.ceil(1.5 * potency);
-          if (typeof target.hp === "number") {
-            target.hp -= dot;
-          }
+          applyStatusDamage({ statusId: "poisoned", target, amount: dot, type: "poison", turn });
           target.__log?.statusTick?.("poisoned", { dot, potency });
         },
         onApply: () => ({ potency: 1 }),
@@ -1812,17 +1821,25 @@
           evaluation.statusApplied = attackResult.appliedStatuses;
           evaluation.attackResult = attackResult;
 
-          const damageAfterDefense = attackResult.totalDamage ?? 0;
-          if (typeof target.hp === "number") {
-            target.hp -= damageAfterDefense;
-            evaluation.targetHp = target.hp;
-            evaluation.targetDefeated = target.hp <= 0;
-            if (evaluation.targetDefeated) {
-              if (typeof onTargetDefeated === "function") {
-                onTargetDefeated();
-              } else {
-                handleDeath(target);
-              }
+          const hpView =
+            typeof target.hp === "number"
+              ? target.hp
+              : typeof target.res?.hp === "number"
+              ? target.res.hp
+              : typeof target.resources?.hp === "number"
+              ? target.resources.hp
+              : null;
+          let defeated = false;
+          if (typeof hpView === "number") {
+            evaluation.targetHp = hpView;
+            defeated = hpView <= 0;
+          }
+          evaluation.targetDefeated = defeated;
+          if (defeated) {
+            if (typeof onTargetDefeated === "function") {
+              onTargetDefeated();
+            } else {
+              handleDeath(target);
             }
           }
 
