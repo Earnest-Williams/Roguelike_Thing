@@ -1,5 +1,6 @@
 // src/combat/mod-folding.js
 // @ts-check
+import { COMBAT_RESIST_MAX, COMBAT_RESIST_MIN } from "../config.js";
 import { rebuildStatusDerived } from "./status.js";
 
 /**
@@ -1214,10 +1215,16 @@ export function foldModsFromEquipment(actor) {
 
   // Clamp resists per plan: [-0.50, +0.80]
   for (const key of Object.keys(mc.defense.resists)) {
-    mc.defense.resists[key] = Math.max(-0.50, Math.min(0.80, mc.defense.resists[key]));
+    mc.defense.resists[key] = Math.max(
+      COMBAT_RESIST_MIN,
+      Math.min(COMBAT_RESIST_MAX, mc.defense.resists[key]),
+    );
   }
   for (const key of Object.keys(mc.resists)) {
-    mc.resists[key] = Math.max(-0.50, Math.min(0.80, mc.resists[key]));
+    mc.resists[key] = Math.max(
+      COMBAT_RESIST_MIN,
+      Math.min(COMBAT_RESIST_MAX, mc.resists[key]),
+    );
   }
 
   // Rebuild status-derived (equip can change it)

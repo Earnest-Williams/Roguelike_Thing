@@ -7,6 +7,12 @@ import {
 
 export const COMBAT_ATTACK_TYPE_HINT_DURATION_MS = 250;
 
+export const COMBAT_RESIST_MIN = -0.5;
+export const COMBAT_RESIST_MAX = 0.8;
+
+export const POLARITY_SCALAR = 0.25;
+export const POLARITY_CLAMP = Object.freeze({ min: -0.5, max: 0.5 });
+
 export const EVENT_LOG_RING_MAX = 200;
 export const EVENT_LOG_LATEST_DEFAULT = 50;
 
