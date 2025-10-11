@@ -1369,8 +1369,13 @@ export function foldModsFromEquipment(actor) {
     castTimeDelta: 0,
     recoveryPct: 0,
   };
+  const prevTemporal =
+    actor.temporal && typeof actor.temporal === "object"
+      ? actor.temporal
+      : temporalBase;
   actor.temporal = {
     ...temporalBase,
+    ...prevTemporal,
     ...temporalHooks,
   };
 
@@ -1389,9 +1394,14 @@ export function foldModsFromEquipment(actor) {
     const existing = pools[pool] || {};
     const baseMax = Number.isFinite(existing.baseMax)
       ? existing.baseMax
-      : Number(existing.max ?? existing.cur ?? 0);
+      : Number.isFinite(existing.max)
+      ? existing.max
+      : Number.isFinite(existing.cur)
+      ? existing.cur
+      : 0;
     const max = Math.max(0, baseMax + (rule.maxDelta || 0));
-    const cur = Math.min(max, Number.isFinite(existing.cur) ? existing.cur : max);
+    const curSource = Number.isFinite(existing.cur) ? existing.cur : max;
+    const cur = Math.min(max, curSource);
     const spendMultipliers = { ...(existing.spendMultipliers || {}) };
     if (rule.spendMultipliers) {
       for (const [tag, mult] of Object.entries(rule.spendMultipliers)) {
@@ -1412,8 +1422,23 @@ export function foldModsFromEquipment(actor) {
       baseMax,
     };
   }
-  for (const key of Object.keys(pools)) {
-    if (!seenPools.has(key)) delete pools[key];
+  for (const [key, state] of Object.entries(pools)) {
+    if (seenPools.has(key)) continue;
+    if (Number.isFinite(state?.baseMax)) {
+      const baseMax = Math.max(0, Math.floor(Number(state.baseMax)));
+      state.max = baseMax;
+      const current = Number.isFinite(state.cur) ? Number(state.cur) : baseMax;
+      state.cur = Math.min(baseMax, Math.max(0, current));
+      state.regenPerTurn = 0;
+      state.onMoveGain = 0;
+      state.onHitGain = 0;
+      state.onCritGain = 0;
+      state.onKillGain = 0;
+      state.spendMultipliers = {};
+      state.minToUse = Number(state.minToUse || 0);
+      continue;
+    }
+    delete pools[key];
   }
 
   // Clamp resists per plan: [-0.50, +0.80]

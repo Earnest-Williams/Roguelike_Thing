@@ -246,6 +246,25 @@ export class Actor {
     /** @type {Resources & { pools?: Record<string, import("./resources.js").ResourceState> }} */
     this.resources = this.res;
 
+    // Seed primary resource pools so temporal/resource folding can build on top
+    // of per-class baselines (e.g., stamina, mana). Equipment/status deltas are
+    // applied relative to these defaults inside foldModsFromEquipment.
+    const baselinePools = this.resources.pools;
+    const seedPool = (name, baseMax) => {
+      if (!Number.isFinite(baseMax)) return;
+      const max = Math.max(0, Math.floor(Number(baseMax)));
+      baselinePools[name] = {
+        cur: max,
+        max,
+        regenPerTurn: 0,
+        spendMultipliers: {},
+        minToUse: 0,
+        baseMax: max,
+      };
+    };
+    seedPool("stamina", this.base.maxStamina);
+    seedPool("mana", this.base.maxMana);
+
     /**
      * Temporal hooks merged from equipment/status.
      * These are distinct from the legacy modCache.temporal payload so newer
