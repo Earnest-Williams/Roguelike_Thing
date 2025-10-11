@@ -1,5 +1,8 @@
 {
   "name": "roguelike-thing",
   "version": "0.0.0",
-  "type": "module"
+  "type": "module",
+  "scripts": {
+    "test-basic": "node tests/run-basic-tests.js"
+  }
 }

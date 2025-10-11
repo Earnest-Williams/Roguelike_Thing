@@ -1231,3 +1231,27 @@ export function foldModsFromEquipment(actor) {
   actor.statusDerived = rebuildDerived(actor);
   return mc;
 }
+
+/**
+ * Convenience helper for folding modifiers from an array or record of items.
+ * Primarily useful for lightweight tests that don't need a full actor.
+ * @param {Array<any>|Record<string, any>} items
+ */
+export function foldMods(items) {
+  const actor = {
+    equipment: {},
+    statuses: [],
+    attunements: {},
+  };
+
+  if (Array.isArray(items)) {
+    let idx = 0;
+    for (const item of items) {
+      actor.equipment[`slot${idx++}`] = item;
+    }
+  } else if (items && typeof items === "object") {
+    actor.equipment = { ...items };
+  }
+
+  return foldModsFromEquipment(actor);
+}
