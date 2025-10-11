@@ -1,9 +1,15 @@
 import { strict as assert } from "node:assert";
-import { foldMods } from "../src/combat/mod-folding.js";
+import { foldMods, foldModsFromEquipment } from "../src/combat/mod-folding.js";
 import { resolveAttack } from "../src/combat/attack.js";
 import { finalAPForAction, finalCooldown } from "../src/combat/time.js";
-import { canPay, spend as spendResource, regenTurn } from "../src/combat/resources.js";
+import {
+  canPay,
+  spend as spendResource,
+  regenTurn,
+  eventGain,
+} from "../src/combat/resources.js";
 import { attachLogs } from "../src/combat/debug-log.js";
+import { Actor } from "../src/combat/actor.js";
 
 function mkActor(partial = {}) {
   const baseModCache = partial.modCache || {
@@ -69,6 +75,14 @@ function mkActor(partial = {}) {
 
   const cdActor = { temporal: { cooldownPct: -0.25 } };
   assert.equal(finalCooldown(cdActor, 8), 6, "cooldown reduction stacks");
+
+  const moveActor = { temporal: { moveAPDelta: -2, castTimeDelta: -3 } };
+  const moveCost = finalAPForAction(moveActor, 10, ["move"]);
+  assert.equal(moveCost.costAP, 8, "move tag should apply move delta");
+  const castCost = finalAPForAction(moveActor, 10, ["cast"]);
+  assert.equal(castCost.costAP, 7, "cast tag should apply cast delta");
+  const neutralCost = finalAPForAction(moveActor, 10, []);
+  assert.equal(neutralCost.costAP, 10, "no tag should leave base AP intact");
   console.log("✓ temporal hooks math");
 })();
 
@@ -95,4 +109,68 @@ function mkActor(partial = {}) {
   regenTurn(actor);
   assert.equal(actor.resources.pools.mana.cur, 10, "regen caps at max");
   console.log("✓ resource hooks math");
+})();
+
+(function testResourceEventGains() {
+  const actor = {
+    resources: {
+      pools: {
+        stamina: { cur: 5, max: 10, onHitGain: 2, onKillGain: 5 },
+      },
+    },
+  };
+  eventGain(actor, { kind: "hit" });
+  assert.equal(actor.resources.pools.stamina.cur, 7, "hit gain applied");
+  eventGain(actor, { kind: "kill", amount: 3 });
+  assert.equal(actor.resources.pools.stamina.cur, 10, "kill gain clamps to max");
+  console.log("✓ resource event gains");
+})();
+
+(function testFoldTemporalAndResourceHooks() {
+  const actor = new Actor({
+    id: "hook-test",
+    baseStats: {
+      str: 10,
+      dex: 10,
+      int: 10,
+      vit: 10,
+      maxHP: 100,
+      maxStamina: 20,
+      maxMana: 10,
+      baseSpeed: 1,
+    },
+  });
+
+  actor.equipment.RightHand = {
+    id: "brand_hook",
+    brands: [
+      {
+        temporal: { actionSpeedPct: 0.1, moveAPDelta: -1 },
+        resources: {
+          stamina: {
+            maxDelta: 5,
+            regenPerTurn: 2,
+            onHitGain: 1,
+            spendMultipliers: { melee: 0.9 },
+            minToUse: 3,
+          },
+        },
+      },
+    ],
+  };
+
+  foldModsFromEquipment(actor);
+
+  assert.equal(actor.temporal.actionSpeedPct, 0.1, "temporal hook folded");
+  assert.equal(actor.temporal.moveAPDelta, -1, "move delta folded");
+
+  const stamina = actor.resources.pools.stamina;
+  assert.equal(stamina.max, 25, "resource max applies delta");
+  assert.equal(stamina.cur, 20, "resource current clamped to new max");
+  assert.equal(stamina.regenPerTurn, 2, "regen applied");
+  assert.equal(stamina.onHitGain, 1, "event gain applied");
+  assert.equal(stamina.minToUse, 3, "gate applied");
+  assert.equal(stamina.spendMultipliers.melee, 0.9, "multiplier merged");
+
+  console.log("✓ foldMods temporal/resource hooks");
 })();
