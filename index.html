@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Self-Playing Roguelike Dungeon Simulator</title>
+    <script src="https://cdn.jsdelivr.net/npm/zzfx@1.3.0/dist/zzfx.min.js"></script>
     <style>
       body {
         font-family: monospace;
@@ -425,6 +426,9 @@
       import { CanvasRenderer } from "./js/render/canvas-renderer.js";
       import { RenderController } from "./js/render/controller.js";
       import { resolveAttack } from "./src/combat/attack.js";
+      import { Sound } from "./src/ui/sound.js";
+
+      Sound.init();
 
       const CONFIG = {
         visual: {
@@ -668,6 +672,11 @@
         if (!Array.isArray(actor.statuses)) {
           actor.statuses = [];
         }
+        const hasHpResource =
+          actor?.res && typeof actor.res.hp === "number"
+            ? true
+            : false;
+        const hpBeforeTick = hasHpResource ? actor.res.hp : null;
         const expired = [];
         for (const st of actor.statuses) {
           const def = StatusRegistry.get(st.id);
@@ -715,6 +724,16 @@
           return;
         }
         rebuildStatusDerivedCache(actor);
+        if (hpBeforeTick != null) {
+          const hpAfterTick = actor?.res?.hp;
+          if (
+            typeof hpAfterTick === "number" &&
+            hpAfterTick > hpBeforeTick &&
+            (actor.kind === "player" || (gameCtx?.player && actor === gameCtx.player))
+          ) {
+            Sound.playHeal();
+          }
+        }
       }
 
       function applyStatuses(ctx, S, D, turn) {
@@ -1205,11 +1224,20 @@
               return false;
             return true;
           },
-          add(itemOrStack) {
+          add(itemOrStack, options = {}) {
+            const { silent = false } = options;
+            const sourceItem =
+              itemOrStack instanceof ItemStack
+                ? itemOrStack?.item ?? null
+                : itemOrStack ?? null;
             const incoming =
               itemOrStack instanceof ItemStack
                 ? itemOrStack
                 : new ItemStack(itemOrStack, 1);
+            const notifyPickup = () => {
+              if (silent) return;
+              Sound.playLoot(sourceItem);
+            };
             const merges = [];
             const newSlots = [];
             let mergedTotalQty = 0;
@@ -1249,7 +1277,10 @@
                   incoming.qty -= moved;
                 }
               }
-              if (incoming.qty <= 0) return true;
+              if (incoming.qty <= 0) {
+                notifyPickup();
+                return true;
+              }
             }
             // Place into free slots, respecting stack limits
             for (let i = 0; i < this.stacks.length && incoming.qty > 0; i++) {
@@ -1274,7 +1305,10 @@
                 incoming.qty -= qtyToStore;
               }
             }
-            if (incoming.qty <= 0) return true;
+            if (incoming.qty <= 0) {
+              notifyPickup();
+              return true;
+            }
             rollback();
             return false;
           },
@@ -4704,15 +4738,16 @@
               const currentPlayerX = player.x;
               const currentPlayerY = player.y;
               const currentPos = { x: currentPlayerX, y: currentPlayerY };
-              if (currentPlayerX === endPos.x && currentPlayerY === endPos.y) {
-                clearTimeout(simState.timeout);
-                simState.timeout = null;
-                simState.loopFn = null;
-                statusDiv.textContent = "Exit found!";
-                renderScene();
-                restartBtn.style.display = "block";
-                return;
-              }
+            if (currentPlayerX === endPos.x && currentPlayerY === endPos.y) {
+              clearTimeout(simState.timeout);
+              simState.timeout = null;
+              simState.loopFn = null;
+              Sound.playDoor();
+              statusDiv.textContent = "Exit found!";
+              renderScene();
+              restartBtn.style.display = "block";
+              return;
+            }
 
               const playerCanAct =
                 (player.statusDerived?.canAct ?? true) &&
@@ -4797,19 +4832,43 @@
           );
 
           // Seed inventory
-          newPlayer.inventory.add(new ItemStack(makeItem("torch"), 3));
-          newPlayer.inventory.add(new ItemStack(makeItem("arrow_wood"), 20));
-          newPlayer.inventory.add(new ItemStack(makeItem("bolt_wood"), 15));
-          newPlayer.inventory.add(new ItemStack(makeItem("sling_stone"), 40));
-          newPlayer.inventory.add(new ItemStack(makeItem("dagger")));
-          newPlayer.inventory.add(makeItem("crossbow_light"));
-          newPlayer.inventory.add(new ItemStack(makeItem("sling_leather")));
-          newPlayer.inventory.add(new ItemStack(makeItem("throwing_knife"), 4));
-          newPlayer.inventory.add(new ItemStack(makeItem("javelin"), 3));
-          newPlayer.inventory.add(new ItemStack(makeItem("boots")));
-          newPlayer.inventory.add(new ItemStack(makeItem("gloves")));
-          newPlayer.inventory.add(new ItemStack(makeItem("amulet_simple")));
-          newPlayer.inventory.add(new ItemStack(makeItem("pouch_small")));
+          newPlayer.inventory.add(new ItemStack(makeItem("torch"), 3), {
+            silent: true,
+          });
+          newPlayer.inventory.add(new ItemStack(makeItem("arrow_wood"), 20), {
+            silent: true,
+          });
+          newPlayer.inventory.add(new ItemStack(makeItem("bolt_wood"), 15), {
+            silent: true,
+          });
+          newPlayer.inventory.add(new ItemStack(makeItem("sling_stone"), 40), {
+            silent: true,
+          });
+          newPlayer.inventory.add(new ItemStack(makeItem("dagger")), {
+            silent: true,
+          });
+          newPlayer.inventory.add(makeItem("crossbow_light"), { silent: true });
+          newPlayer.inventory.add(new ItemStack(makeItem("sling_leather")), {
+            silent: true,
+          });
+          newPlayer.inventory.add(new ItemStack(makeItem("throwing_knife"), 4), {
+            silent: true,
+          });
+          newPlayer.inventory.add(new ItemStack(makeItem("javelin"), 3), {
+            silent: true,
+          });
+          newPlayer.inventory.add(new ItemStack(makeItem("boots")), {
+            silent: true,
+          });
+          newPlayer.inventory.add(new ItemStack(makeItem("gloves")), {
+            silent: true,
+          });
+          newPlayer.inventory.add(new ItemStack(makeItem("amulet_simple")), {
+            silent: true,
+          });
+          newPlayer.inventory.add(new ItemStack(makeItem("pouch_small")), {
+            silent: true,
+          });
 
           return newPlayer;
         }
@@ -5137,6 +5196,7 @@
       })();
 
       window.addEventListener("load", () => {
+        Sound.init();
         Game.bootstrap();
       });
     </script>
