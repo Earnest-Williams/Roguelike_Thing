@@ -5,6 +5,7 @@ import { gainAttunement } from "./attunement.js";
 import { applyStatuses } from "./status.js";
 import { polarityDefScalar, polarityOnHitScalar } from "./polarity.js";
 import { logAttackStep } from "./debug-log.js";
+import { makeAttackContext } from "./attack-context.js";
 
 /**
  * @typedef {Object} AttackContext
@@ -18,9 +19,50 @@ import { logAttackStep } from "./debug-log.js";
  * @property {Array<string>} [tags]
  * @property {Array<{to:string, percent?:number, pct?:number, includeBaseOnly?:boolean}>} [conversions]
  * @property {Array<{type:string, flat?:number, percent?:number, pct?:number, onHitStatuses?:any[]}>} [brands]
+ * @property {ReturnType<typeof makeAttackContext>} [breakdown]
  */
 
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+function prepareBreakdown(ctx) {
+  const existing = ctx.breakdown;
+  const attempts = Array.isArray(ctx.statusAttempts)
+    ? ctx.statusAttempts
+    : Array.isArray(ctx.attempts)
+    ? ctx.attempts
+    : Array.isArray(existing?.attempts)
+    ? existing.attempts
+    : [];
+
+  const base =
+    existing && Array.isArray(existing.steps)
+      ? existing
+      : makeAttackContext({
+          attacker: ctx.attacker,
+          defender: ctx.defender,
+          turn: ctx.turn ?? 0,
+          prePackets: ctx.prePackets || {},
+          attempts,
+        });
+
+  base.attacker = ctx.attacker;
+  base.defender = ctx.defender;
+  base.turn = ctx.turn ?? 0;
+  base.prePackets = { ...(ctx.prePackets || {}) };
+  base.postPackets = {};
+  base.steps ||= [];
+  base.steps.length = 0;
+  base.appliedStatuses = [];
+  base.totalDamage = 0;
+
+  const sharedAttempts = Array.isArray(attempts) ? attempts : [];
+  ctx.statusAttempts = sharedAttempts;
+  ctx.attempts = sharedAttempts;
+  base.attempts = sharedAttempts;
+
+  ctx.breakdown = base;
+  return base;
+}
 
 export function resolveAttack(ctx) {
   if (!ctx.attacker) {
@@ -33,6 +75,8 @@ export function resolveAttack(ctx) {
   const defender = ctx.defender;
   const attack = ctx.attack;
   const { resource: defenderResources, syncHp: syncDefenderHp } = ensureResourceHandles(defender);
+
+  const breakdown = prepareBreakdown(ctx);
 
   logAttackStep(attacker, {
     step: "begin",
@@ -85,6 +129,8 @@ export function resolveAttack(ctx) {
   // 2) Remaining physical → packets
   packets.physical = (packets.physical || 0) + basePool + bonusPool;
 
+  breakdown.steps.push({ stage: "start", packets: { ...packets } });
+
   // 3) Brands (flats + percent of remaining physical; no feedback into conversions)
   const brands = [
     ...(Array.isArray(ctx.brands) ? ctx.brands : []),
@@ -103,6 +149,8 @@ export function resolveAttack(ctx) {
       ctx.statusAttempts.push(...b.onHitStatuses);
     }
   }
+
+  breakdown.attempts = ctx.statusAttempts || breakdown.attempts;
 
   logAttackStep(attacker, {
     step: "post_conversion_brand",
@@ -138,6 +186,8 @@ export function resolveAttack(ctx) {
     packets[k] = Math.floor(packets[k] * (1 + (aff[k] || 0)));
   }
 
+  breakdown.steps.push({ stage: "offense", packets: { ...packets } });
+
   // 6) Status-derived (outgoing/incoming) and Polarity
   const atkSD = attacker.statusDerived || {};
   const defSD = defender.statusDerived || {};
@@ -164,6 +214,8 @@ export function resolveAttack(ctx) {
     packets[type] = value;
   }
 
+  breakdown.steps.push({ stage: "defense", packets: { ...packets } });
+
   const postAffinityTotal = Object.values(packets).reduce((sum, value) => sum + (value | 0), 0);
   logAttackStep(attacker, {
     step: "post_affinity_resist",
@@ -185,6 +237,8 @@ export function resolveAttack(ctx) {
     }
   }
 
+  breakdown.postPackets = { ...packets };
+
   // 8) Armour/DR (optional hook; physical-first)
   // if (defender.armor) { ... }
 
@@ -197,6 +251,8 @@ export function resolveAttack(ctx) {
   // 10) Status application
   const appliedStatuses = applyStatuses(ctx, attacker, defender, ctx.turn);
 
+  breakdown.appliedStatuses = appliedStatuses;
+
   logAttackStep(attacker, {
     step: "result",
     packets: { ...packets },
@@ -207,7 +263,9 @@ export function resolveAttack(ctx) {
     dmg: total,
   });
 
-  return { packetsAfterDefense: packets, totalDamage: total, appliedStatuses };
+  breakdown.totalDamage = total;
+
+  return { packetsAfterDefense: packets, totalDamage: total, appliedStatuses, breakdown };
 }
 
 function ensureResourceHandles(defender) {

@@ -2,6 +2,7 @@
 // @ts-check
 import { getAttackModesForItem } from "../../js/item-system.js";
 import { resolveAttack } from "../combat/attack.js";
+import { makeAttackContext } from "../combat/attack-context.js";
 import { tryTemporalEcho, applyOnKillHaste } from "../combat/temporal.js";
 import { EVENT, emit } from "../ui/event-log.js";
 import { Sound } from "../ui/sound.js";
@@ -139,17 +140,19 @@ export function performEquippedAttack(attacker, defender, weaponItem, distTiles,
     ? [mode.profile.tags]
     : [];
 
-  const ctx = {
+  const ctx = makeAttackContext({
     attacker,
     defender,
     turn: attacker?.turn ?? 0,
-    physicalBase,
-    physicalBonus: 0,
     prePackets,
-    statusAttempts,
-    tags,
-    attackKind: mode.kind,
-  };
+    attempts: statusAttempts,
+  });
+
+  ctx.physicalBase = physicalBase;
+  ctx.physicalBonus = 0;
+  ctx.statusAttempts = ctx.attempts;
+  ctx.tags = tags;
+  ctx.attackKind = mode.kind;
 
   const out = resolveAttack(ctx);
   const echoResult = tryTemporalEcho(ctx, out);
@@ -182,6 +185,7 @@ export function performEquippedAttack(attacker, defender, weaponItem, distTiles,
     packets: out.packetsAfterDefense,
     statuses: out.appliedStatuses,
     ctx,
+    breakdown: out.breakdown,
     echoResult,
   };
   emit(EVENT.COMBAT, payload);
