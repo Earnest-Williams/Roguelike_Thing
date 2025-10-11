@@ -26,22 +26,6 @@ const POLAR_OPPOSE = Object.freeze({
   void: ["order", "growth", "chaos", "decay"],
 });
 
-function dominantKey(pol) {
-  if (!pol || typeof pol !== "object") return null;
-  if (typeof pol.dominant === "string") return pol.dominant;
-  let bestKey = null;
-  let bestVal = -Infinity;
-  for (const key of Object.keys(POLAR_OPPOSE)) {
-    const value = Number(pol[key]);
-    if (!Number.isFinite(value)) continue;
-    if (value > bestVal) {
-      bestVal = value;
-      bestKey = key;
-    }
-  }
-  return bestKey;
-}
-
 export function resolveAttack(ctx) {
   if (!ctx.attacker) {
     throw new Error("resolveAttack: ctx.attacker is required");
@@ -113,29 +97,30 @@ export function resolveAttack(ctx) {
   const atkSD = attacker.statusDerived || {};
   const defSD = defender.statusDerived || {};
   const polOff = polarityOnHitScalar(
-    attacker.polarity || attacker.modCache?.polarity?.onHitBias || {},
-    defender.polarity || defender.modCache?.polarity?.defenseBias || {},
+    attacker.polarity || attacker.modCache?.polarity?.onHitBias,
+    defender.polarity || defender.modCache?.polarity?.defenseBias,
   );
   const polDef = polarityDefScalar(
-    defender.polarity || defender.modCache?.polarity?.defenseBias || {},
-    attacker.polarity || attacker.modCache?.polarity?.onHitBias || {},
+    defender.polarity || defender.modCache?.polarity?.defenseBias,
+    attacker.polarity || attacker.modCache?.polarity?.onHitBias,
   );
 
   // 6) Immunities & Resists
   const defRes = defender.modCache?.defense?.resists || {};
   const defImm = defender.modCache?.defense?.immunities || defender.modCache?.immunities || new Set();
-  for (const k of Object.keys(packets)) {
-    if (defImm?.has?.(k)) { packets[k] = 0; continue; }
-    let value = packets[k];
-    const out = (atkSD.damageDealtMult?.[k] || 0);
-    const inn = (defSD.damageTakenMult?.[k] || 0);
+  for (const type of Object.keys(packets)) {
+    if (defImm?.has?.(type)) { packets[type] = 0; continue; }
+    let value = packets[type];
+    const out = (atkSD.damageDealtMult?.[type] || 0);
+    const inn = (defSD.damageTakenMult?.[type] || 0);
     if (out) value = Math.floor(value * (1 + out));
     if (inn) value = Math.floor(value * (1 + inn));
-    if (polOff) value = Math.floor(value * (1 + polOff));
-    const resist = clamp((defRes[k] || 0) + (defSD.resistDelta?.[k] || 0), -0.50, 0.80);
+    if (polOff || polDef) {
+      value = Math.floor(value * (1 + polOff) * (1 - polDef));
+    }
+    const resist = clamp((defRes[type] || 0) + (defSD.resistDelta?.[type] || 0), -0.50, 0.80);
     if (resist) value = Math.floor(value * (1 - resist));
-    if (polDef) value = Math.floor(value * (1 - polDef));
-    packets[k] = value;
+    packets[type] = value;
   }
 
   // 7) Armour/DR (optional hook; physical-first)
@@ -189,18 +174,16 @@ function ensureResourceHandles(defender) {
 
 // Simple polarity scalars (cap ±0.5)
 export function polarityOnHitScalar(att, def) {
-  const dominant = dominantKey(att);
-  if (!dominant) return 0;
-  const oppositions = POLAR_OPPOSE[dominant];
+  if (!att) return 0;
+  const oppositions = POLAR_OPPOSE[att.dominant];
   if (!oppositions) return 0;
   let bias = 0;
   for (const o of oppositions) bias += (Number(def?.[o]) || 0);
   return clamp(bias * 0.25, -0.5, 0.5);
 }
 export function polarityDefScalar(def, att) {
-  const dominant = dominantKey(def);
-  if (!dominant) return 0;
-  const oppositions = POLAR_OPPOSE[dominant];
+  if (!def) return 0;
+  const oppositions = POLAR_OPPOSE[def.dominant];
   if (!oppositions) return 0;
   let bias = 0;
   for (const o of oppositions) bias += (Number(att?.[o]) || 0);
