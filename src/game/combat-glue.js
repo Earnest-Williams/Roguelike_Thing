@@ -115,7 +115,7 @@ export function performEquippedAttack(attacker, defender, weaponItem, distTiles,
   const damageRoll = mode?.profile?.damage
     ? rollDamage(mode.profile.damage)
     : { total: profile.base ?? 0, rolls: [], bonus: 0 };
-  const physicalBase = Math.max(0, damageRoll.total | 0);
+  const physicalBase = Math.max(0, Math.floor(damageRoll.total));
 
   const statusAttempts = Array.isArray(mode?.profile?.statusAttempts)
     ? [...mode.profile.statusAttempts]
