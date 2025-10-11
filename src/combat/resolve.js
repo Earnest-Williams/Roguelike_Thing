@@ -90,6 +90,8 @@ function applyConversions(actor, packets) {
 
 function applyBrands(actor, packets, onHitStatuses) {
   const offenseBrands = actor?.modCache?.offense?.brands || [];
+  // Exclude brands with kind === "brand" here because those are already included in offenseBrands.
+  // Only include other types of brands (e.g., temporary or special brands) in extraBrands.
   const extraBrands = Array.isArray(actor?.modCache?.brands)
     ? actor.modCache.brands.filter((b) => b && b.kind !== "brand")
     : [];
