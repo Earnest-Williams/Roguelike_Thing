@@ -83,40 +83,43 @@ function foldAttunements(actor, cache) {
   cache.defense ||= {};
   cache.defense.resists ||= Object.create(null);
 
-  const thresholds = [];
-  for (const [th, pct] of Object.entries(ATTUNE.thresholds || {})) {
-    const threshold = Number(th);
-    const percent = Number(pct) || 0;
-    if (!Number.isFinite(threshold)) continue;
-    thresholds.push({ threshold, percent });
-  }
-
-  let topThreshold = null;
-  for (const entry of thresholds) {
-    if (topThreshold === null || entry.threshold > topThreshold) {
-      topThreshold = entry.threshold;
+  const thresholds = ATTUNE.thresholds || {};
+  let topTierThreshold = -Infinity;
+  for (const key of Object.keys(thresholds)) {
+    const numeric = Number(key);
+    if (!Number.isFinite(numeric)) continue;
+    if (numeric > topTierThreshold) {
+      topTierThreshold = numeric;
     }
   }
-  const topTierResistBonus = Number(ATTUNE.topTierResistBonus);
+  const topTierResistBonus = Number(ATTUNE.topTierResistBonus ?? 0);
   const applyTopTierResist =
-    topThreshold !== null && Number.isFinite(topTierResistBonus) && topTierResistBonus !== 0;
+    Number.isFinite(topTierThreshold) &&
+    topTierThreshold !== -Infinity &&
+    Number.isFinite(topTierResistBonus) &&
+    topTierResistBonus !== 0;
 
   for (const [type, xpRaw] of Object.entries(pool)) {
     const xp = Number(xpRaw);
     if (!Number.isFinite(xp)) continue;
 
     let bonus = 0;
-    for (const { threshold, percent } of thresholds) {
-      if (xp < threshold) continue;
-      bonus = Math.max(bonus, percent);
-    }
-    if (bonus > 0) {
-      cache.offense.affinities[type] = (cache.offense.affinities[type] || 0) + bonus;
-
-      if (applyTopTierResist && topThreshold !== null && xp >= topThreshold) {
-        cache.defense.resists[type] =
-          (cache.defense.resists[type] || 0) + topTierResistBonus;
+    for (const [thresholdRaw, pctRaw] of Object.entries(thresholds)) {
+      const threshold = Number(thresholdRaw);
+      if (!Number.isFinite(threshold) || xp < threshold) continue;
+      const percent = Number(pctRaw) || 0;
+      if (percent > bonus) {
+        bonus = percent;
       }
+    }
+
+    if (bonus <= 0) continue;
+
+    cache.offense.affinities[type] = (cache.offense.affinities[type] || 0) + bonus;
+
+    if (applyTopTierResist && xp >= topTierThreshold) {
+      cache.defense.resists[type] =
+        (cache.defense.resists[type] || 0) + topTierResistBonus;
     }
   }
 }
