@@ -12,5 +12,6 @@ export const ATTUNE = {
     12: 0.10, // +10% at 12+
     16: 0.15, // +15% at 16+
   },
+  topTierResistBonus: 0.03, // +3% resist when hitting the highest tier
   leakToSiblingsPct: 0.20,   // optional: 20% of gain leaks to “adjacent” types in your design
 };
