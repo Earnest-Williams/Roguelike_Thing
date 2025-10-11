@@ -53,6 +53,12 @@ import { rebuildStatusDerived } from "./status.js";
  * @property {number} dmgMult                     // global outgoing damage multiplier
  * @property {number} speedMult                   // < 1 faster, > 1 slower (AP)
  * @property {Array<Object>} brands               // normalized brand mods on the actor
+ * @property {{ conversions: any[], brandAdds: any[], affinities: Record<string, number>, polarity: { onHitBias: Record<string, number> } }} offense
+ * @property {{ resists: Record<string, number>, immunities: Set<string>, polarity: { defenseBias: Record<string, number> } }} defense
+ * @property {{ actionSpeedPct: number, moveAPDelta: number, cooldownMult: number, cooldownPerTag: Map<string, number>, echo: any, onKillHaste: any }} temporal
+ * @property {{ maxFlat: Record<string, number>, maxPct: Record<string, number>, regenFlat: Record<string, number>, regenPct: Record<string, number>, costMult: Record<string, number>, onHitGain: any, onKillGain: any, channeling: boolean }} resource
+ * @property {{ inflictBonus: Record<string, number>, inflictDurMult: Record<string, number>, resistBonus: Record<string, number>, recvDurMult: Record<string, number>, buffDurMult: number, freeActionIgnore: Set<string> }} status
+ * @property {{ onHitBias?: Record<string, number>, defenseBias?: Record<string, number> }} polarity
  */
 
 /**
@@ -117,6 +123,44 @@ export class Actor {
       dmgMult: BASE_DAMAGE_MULTIPLIER,
       speedMult: BASE_SPEED_MULTIPLIER,
       brands: [],
+      offense: {
+        conversions: [],
+        brandAdds: [],
+        affinities: Object.create(null),
+        polarity: { onHitBias: {} },
+      },
+      defense: {
+        resists: Object.create(null),
+        immunities: new Set(),
+        polarity: { defenseBias: {} },
+      },
+      temporal: {
+        actionSpeedPct: 0,
+        moveAPDelta: 0,
+        cooldownMult: 1,
+        cooldownPerTag: new Map(),
+        echo: null,
+        onKillHaste: null,
+      },
+      resource: {
+        maxFlat: { stamina: 0, mana: 0 },
+        maxPct: { stamina: 0, mana: 0 },
+        regenFlat: { stamina: 0, mana: 0 },
+        regenPct: { stamina: 0, mana: 0 },
+        costMult: { stamina: 1, mana: 1 },
+        onHitGain: null,
+        onKillGain: null,
+        channeling: false,
+      },
+      status: {
+        inflictBonus: Object.create(null),
+        inflictDurMult: Object.create(null),
+        resistBonus: Object.create(null),
+        recvDurMult: Object.create(null),
+        buffDurMult: 0,
+        freeActionIgnore: new Set(),
+      },
+      polarity: {},
     };
 
     /** @type {Resources} */
