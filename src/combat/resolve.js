@@ -11,13 +11,9 @@ export function resolveAttack(ctx) {
   const onHitStatuses = [];
   const log = (d) => logAttackStep(attacker, d);
 
-  const conversions = [
-    ...(Array.isArray(ctx.conversions) ? ctx.conversions : []),
-  ];
-  let packets = applyConversions(attacker, packetsIn, conversions);
+  let packets = applyConversions(attacker, packetsIn);
   log({ step: "conversions", packets });
-  const brandExtras = Array.isArray(ctx.brands) ? ctx.brands : [];
-  packets = applyBrands(attacker, packets, onHitStatuses, brandExtras);
+  packets = applyBrands(attacker, packets, onHitStatuses);
   log({ step: "brands", packets });
 
   applyOutgoingScaling({ attacker, packets, target: defender });
@@ -36,20 +32,8 @@ export function resolveAttack(ctx) {
   const scalar = Number.isFinite(ctx.damageScalar) ? Math.max(0, ctx.damageScalar) : 1;
   const collapsed = collapseByType(defended, scalar);
   const totalDamage = Object.values(collapsed).reduce((a, b) => a + b, 0);
-  const hpSources = [];
-  if (defender?.res && typeof defender.res.hp === "number") {
-    hpSources.push({ obj: defender.res, key: "hp", value: defender.res.hp });
-  }
-  if (defender?.resources && typeof defender.resources.hp === "number") {
-    hpSources.push({ obj: defender.resources, key: "hp", value: defender.resources.hp });
-  }
-  if (typeof defender?.hp === "number") {
-    hpSources.push({ obj: defender, key: "hp", value: defender.hp });
-  }
-  const baseHp = hpSources.length ? hpSources[0].value : 0;
-  const nextHp = Math.max(0, baseHp - totalDamage);
-  for (const src of hpSources) {
-    src.obj[src.key] = nextHp;
+  if (defender?.res) {
+    defender.res.hp = Math.max(0, defender.res.hp - totalDamage);
   }
 
   const attempts = [...onHitStatuses, ...(ctx.statusAttempts || [])];
@@ -62,24 +46,40 @@ export function resolveAttack(ctx) {
 
 // --- helper functions ---
 
-function applyConversions(actor, packets, extra = []) {
-  const base = Array.isArray(extra) ? extra : [];
-  const convs = [
-    ...base,
-    ...(actor?.modCache?.offense?.conversions || []),
-  ];
+function applyConversions(actor, packets) {
+  const convs = actor?.modCache?.offense?.conversions || [];
   if (!convs.length) return packets;
   const out = [];
   for (const pkt of packets) {
     let remaining = pkt.amount;
     for (const c of convs) {
-      const source = c.from || c.source || c.type || pkt.type;
-      if (pkt.type !== source) continue;
-      const pct = Number(c.pct ?? c.percent ?? c.rate ?? c.fraction ?? 0);
-      if (!Number.isFinite(pct) || pct <= 0) continue;
-      const take = Math.floor(pkt.amount * pct);
+      const sourceType =
+        typeof c.from === "string"
+          ? c.from
+          : typeof c.source === "string"
+          ? c.source
+          : null;
+      if (sourceType && pkt.type !== sourceType) {
+        continue;
+      }
+      const pctRaw =
+        typeof c.pct === "number" && Number.isFinite(c.pct)
+          ? c.pct
+          : typeof c.percent === "number" && Number.isFinite(c.percent)
+          ? c.percent
+          : NaN;
+      if (!Number.isFinite(pctRaw) || pctRaw <= 0 || pctRaw > 1) {
+        continue;
+      }
+      const take = Math.floor(pkt.amount * pctRaw);
       if (take > 0) {
-        out.push({ type: c.to || c.into || pkt.type, amount: take });
+        const toType =
+          typeof c.to === "string"
+            ? c.to
+            : typeof c.into === "string"
+            ? c.into
+            : pkt.type;
+        out.push({ type: toType, amount: take });
         remaining -= take;
       }
     }
@@ -88,30 +88,33 @@ function applyConversions(actor, packets, extra = []) {
   return out;
 }
 
-function applyBrands(actor, packets, onHitStatuses, extra = []) {
-  const base = Array.isArray(extra) ? extra : [];
-  const brands = [
-    ...base,
-    ...(actor?.modCache?.offense?.brands || []),
-    ...(actor?.modCache?.offense?.brandAdds || []),
-    ...(actor?.modCache?.brands || []),
-  ];
-  if (!brands.length) return packets;
+function applyBrands(actor, packets, onHitStatuses) {
+  const offenseBrands = actor?.modCache?.offense?.brands || [];
+  // Exclude brands with kind === "brand" here because those are already included in offenseBrands.
+  // Only include other types of brands (e.g., temporary or special brands) in extraBrands.
+  const extraBrands = Array.isArray(actor?.modCache?.brands)
+    ? actor.modCache.brands.filter((b) => b && b.kind !== "brand")
+    : [];
+  const brands = [...offenseBrands, ...extraBrands];
   return packets.map((pkt) => {
     let amt = pkt.amount;
     for (const b of brands) {
-      const matchType = b.type || b.element || b.damageType;
-      if (!matchType || matchType === pkt.type) {
-        const flat = Number(b.flat ?? b.amount ?? 0);
-        if (Number.isFinite(flat) && flat !== 0) amt += flat;
-        const pct = Number(b.pct ?? b.percent ?? 0);
-        if (Number.isFinite(pct) && pct !== 0) {
-          amt = Math.floor(amt * (1 + pct));
-        }
-      }
-      if (Array.isArray(b.onHitStatuses)) {
-        onHitStatuses.push(...b.onHitStatuses);
-      }
+      if (!b) continue;
+      const matchType = typeof b.type === "string" ? b.type : null;
+      if (matchType && matchType !== pkt.type) continue;
+
+      const flatBonus = Number(b.flat ?? b.amount ?? 0) || 0;
+      if (flatBonus) amt += flatBonus;
+
+      const pctBonus =
+        typeof b.pct === "number" && Number.isFinite(b.pct)
+          ? b.pct
+          : typeof b.percent === "number" && Number.isFinite(b.percent)
+          ? b.percent
+          : 0;
+      if (pctBonus) amt = Math.floor(amt * (1 + pctBonus));
+
+      if (Array.isArray(b.onHitStatuses)) onHitStatuses.push(...b.onHitStatuses);
     }
     return { ...pkt, amount: amt };
   });
