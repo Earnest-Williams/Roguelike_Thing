@@ -912,6 +912,16 @@ function applyResourcePayload(cache, payload) {
  * @param {import("./actor.js").Actor} actor
  */
 export function foldModsFromEquipment(actor) {
+  const temporalHooks = {
+    actionSpeedPct: 0,
+    moveAPDelta: 0,
+    cooldownPct: 0,
+    initBonus: 0,
+    castTimeDelta: 0,
+    recoveryPct: 0,
+  };
+  const resourceRules = Object.create(null);
+
   const mc = actor.modCache = {
     resists: Object.create(null),
     affinities: Object.create(null),
@@ -1009,6 +1019,43 @@ export function foldModsFromEquipment(actor) {
         if (brand.attunement && type) {
           mergeAttunementRule(mc.attunementRules, type, brand.attunement);
         }
+        if (brand.temporal) {
+          const t = brand.temporal;
+          temporalHooks.actionSpeedPct += t.actionSpeedPct || 0;
+          temporalHooks.moveAPDelta += t.moveAPDelta || 0;
+          temporalHooks.cooldownPct += t.cooldownPct || 0;
+          temporalHooks.initBonus += t.initBonus || 0;
+          temporalHooks.castTimeDelta += t.castTimeDelta || 0;
+          temporalHooks.recoveryPct += t.recoveryPct || 0;
+        }
+        if (brand.resources) {
+          for (const [pool, payload] of Object.entries(brand.resources)) {
+            const current = resourceRules[pool] || {
+              maxDelta: 0,
+              regenPerTurn: 0,
+              onMoveGain: 0,
+              onHitGain: 0,
+              onCritGain: 0,
+              onKillGain: 0,
+              spendMultipliers: {},
+              minToUse: 0,
+            };
+            current.maxDelta += payload.maxDelta || 0;
+            current.regenPerTurn += payload.regenPerTurn || 0;
+            current.onMoveGain += payload.onMoveGain || 0;
+            current.onHitGain += payload.onHitGain || 0;
+            current.onCritGain += payload.onCritGain || 0;
+            current.onKillGain += payload.onKillGain || 0;
+            current.minToUse = Math.max(current.minToUse, payload.minToUse || 0);
+            if (payload.spendMultipliers) {
+              for (const [tag, mult] of Object.entries(payload.spendMultipliers)) {
+                const prev = current.spendMultipliers[tag] || 1;
+                current.spendMultipliers[tag] = prev * (mult || 1);
+              }
+            }
+            resourceRules[pool] = current;
+          }
+        }
       }
     }
 
@@ -1027,6 +1074,43 @@ export function foldModsFromEquipment(actor) {
         if (brand.attunement && type) {
           mergeAttunementRule(mc.attunementRules, type, brand.attunement);
         }
+        if (brand.temporal) {
+          const t = brand.temporal;
+          temporalHooks.actionSpeedPct += t.actionSpeedPct || 0;
+          temporalHooks.moveAPDelta += t.moveAPDelta || 0;
+          temporalHooks.cooldownPct += t.cooldownPct || 0;
+          temporalHooks.initBonus += t.initBonus || 0;
+          temporalHooks.castTimeDelta += t.castTimeDelta || 0;
+          temporalHooks.recoveryPct += t.recoveryPct || 0;
+        }
+        if (brand.resources) {
+          for (const [pool, payload] of Object.entries(brand.resources)) {
+            const current = resourceRules[pool] || {
+              maxDelta: 0,
+              regenPerTurn: 0,
+              onMoveGain: 0,
+              onHitGain: 0,
+              onCritGain: 0,
+              onKillGain: 0,
+              spendMultipliers: {},
+              minToUse: 0,
+            };
+            current.maxDelta += payload.maxDelta || 0;
+            current.regenPerTurn += payload.regenPerTurn || 0;
+            current.onMoveGain += payload.onMoveGain || 0;
+            current.onHitGain += payload.onHitGain || 0;
+            current.onCritGain += payload.onCritGain || 0;
+            current.onKillGain += payload.onKillGain || 0;
+            current.minToUse = Math.max(current.minToUse, payload.minToUse || 0);
+            if (payload.spendMultipliers) {
+              for (const [tag, mult] of Object.entries(payload.spendMultipliers)) {
+                const prev = current.spendMultipliers[tag] || 1;
+                current.spendMultipliers[tag] = prev * (mult || 1);
+              }
+            }
+            resourceRules[pool] = current;
+          }
+        }
       }
     }
     if (Array.isArray(item.offense?.brandAdds)) {
@@ -1042,6 +1126,43 @@ export function foldModsFromEquipment(actor) {
         mc.brands.push({ kind: "brand", type, flat, pct: percent, onHitStatuses });
         if (brand.attunement && type) {
           mergeAttunementRule(mc.attunementRules, type, brand.attunement);
+        }
+        if (brand.temporal) {
+          const t = brand.temporal;
+          temporalHooks.actionSpeedPct += t.actionSpeedPct || 0;
+          temporalHooks.moveAPDelta += t.moveAPDelta || 0;
+          temporalHooks.cooldownPct += t.cooldownPct || 0;
+          temporalHooks.initBonus += t.initBonus || 0;
+          temporalHooks.castTimeDelta += t.castTimeDelta || 0;
+          temporalHooks.recoveryPct += t.recoveryPct || 0;
+        }
+        if (brand.resources) {
+          for (const [pool, payload] of Object.entries(brand.resources)) {
+            const current = resourceRules[pool] || {
+              maxDelta: 0,
+              regenPerTurn: 0,
+              onMoveGain: 0,
+              onHitGain: 0,
+              onCritGain: 0,
+              onKillGain: 0,
+              spendMultipliers: {},
+              minToUse: 0,
+            };
+            current.maxDelta += payload.maxDelta || 0;
+            current.regenPerTurn += payload.regenPerTurn || 0;
+            current.onMoveGain += payload.onMoveGain || 0;
+            current.onHitGain += payload.onHitGain || 0;
+            current.onCritGain += payload.onCritGain || 0;
+            current.onKillGain += payload.onKillGain || 0;
+            current.minToUse = Math.max(current.minToUse, payload.minToUse || 0);
+            if (payload.spendMultipliers) {
+              for (const [tag, mult] of Object.entries(payload.spendMultipliers)) {
+                const prev = current.spendMultipliers[tag] || 1;
+                current.spendMultipliers[tag] = prev * (mult || 1);
+              }
+            }
+            resourceRules[pool] = current;
+          }
         }
       }
     }
@@ -1236,6 +1357,64 @@ export function foldModsFromEquipment(actor) {
   mc.offense.brands = Array.isArray(mc.offense.brandAdds)
     ? mc.offense.brandAdds.slice()
     : [];
+
+  mc.temporalHooks = temporalHooks;
+  mc.resourceRules = resourceRules;
+
+  const temporalBase = {
+    actionSpeedPct: 0,
+    moveAPDelta: 0,
+    cooldownPct: 0,
+    initBonus: 0,
+    castTimeDelta: 0,
+    recoveryPct: 0,
+  };
+  actor.temporal = {
+    ...temporalBase,
+    ...temporalHooks,
+  };
+
+  const resourceRoot =
+    actor.resources && typeof actor.resources === "object"
+      ? actor.resources
+      : (actor.resources = { pools: Object.create(null) });
+  const pools = resourceRoot.pools || Object.create(null);
+  resourceRoot.pools = pools;
+  if (actor.res && actor.res !== actor.resources && typeof actor.res === "object") {
+    actor.res.pools = pools;
+  }
+  const seenPools = new Set();
+  for (const [pool, rule] of Object.entries(resourceRules)) {
+    seenPools.add(pool);
+    const existing = pools[pool] || {};
+    const baseMax = Number.isFinite(existing.baseMax)
+      ? existing.baseMax
+      : Number(existing.max ?? existing.cur ?? 0);
+    const max = Math.max(0, baseMax + (rule.maxDelta || 0));
+    const cur = Math.min(max, Number.isFinite(existing.cur) ? existing.cur : max);
+    const spendMultipliers = { ...(existing.spendMultipliers || {}) };
+    if (rule.spendMultipliers) {
+      for (const [tag, mult] of Object.entries(rule.spendMultipliers)) {
+        const prev = spendMultipliers[tag] || 1;
+        spendMultipliers[tag] = prev * (mult || 1);
+      }
+    }
+    pools[pool] = {
+      cur,
+      max,
+      regenPerTurn: rule.regenPerTurn || 0,
+      onMoveGain: rule.onMoveGain || 0,
+      onHitGain: rule.onHitGain || 0,
+      onCritGain: rule.onCritGain || 0,
+      onKillGain: rule.onKillGain || 0,
+      spendMultipliers,
+      minToUse: rule.minToUse || 0,
+      baseMax,
+    };
+  }
+  for (const key of Object.keys(pools)) {
+    if (!seenPools.has(key)) delete pools[key];
+  }
 
   // Clamp resists per plan: [-0.50, +0.80]
   for (const key of Object.keys(mc.defense.resists)) {

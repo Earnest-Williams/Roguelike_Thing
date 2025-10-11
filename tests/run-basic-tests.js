@@ -1,6 +1,8 @@
 import { strict as assert } from "node:assert";
 import { foldMods } from "../src/combat/mod-folding.js";
 import { resolveAttack } from "../src/combat/attack.js";
+import { finalAPForAction, finalCooldown } from "../src/combat/time.js";
+import { canPay, spend as spendResource, regenTurn } from "../src/combat/resources.js";
 import { attachLogs } from "../src/combat/debug-log.js";
 
 function mkActor(partial = {}) {
@@ -58,4 +60,39 @@ function mkActor(partial = {}) {
   assert.equal(result.breakdown.steps.length >= 3, true, "breakdown should record phases");
   assert.equal(result.totalDamage, 15);
   console.log("✓ resolveAttack order/resist");
+})();
+
+(function testTemporalHooks() {
+  const actor = { temporal: { actionSpeedPct: 0.5 } };
+  const { costAP } = finalAPForAction(actor, 10, []);
+  assert.equal(costAP, 5, "action speed should reduce AP cost");
+
+  const cdActor = { temporal: { cooldownPct: -0.25 } };
+  assert.equal(finalCooldown(cdActor, 8), 6, "cooldown reduction stacks");
+  console.log("✓ temporal hooks math");
+})();
+
+(function testResourceHooks() {
+  const actor = {
+    resources: {
+      pools: {
+        stamina: {
+          cur: 10,
+          max: 10,
+          regenPerTurn: 0,
+          spendMultipliers: { melee: 0.5 },
+          minToUse: 5,
+        },
+      },
+    },
+  };
+  const swing = { resourceCost: { stamina: 8 }, tags: ["melee"] };
+  assert.equal(canPay(actor, swing), true, "should pass min gate and multiplier");
+  spendResource(actor, swing);
+  assert.equal(actor.resources.pools.stamina.cur, 6, "spend should apply multiplier");
+
+  actor.resources.pools.mana = { cur: 9, max: 10, regenPerTurn: 5 };
+  regenTurn(actor);
+  assert.equal(actor.resources.pools.mana.cur, 10, "regen caps at max");
+  console.log("✓ resource hooks math");
 })();

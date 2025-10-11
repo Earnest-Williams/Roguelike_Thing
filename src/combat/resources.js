@@ -8,6 +8,24 @@ import {
 } from "../../constants.js";
 
 /**
+ * @typedef {Object} ResourceState
+ * @property {number} cur
+ * @property {number} max
+ * @property {number} regenPerTurn
+ * @property {number} [onMoveGain]
+ * @property {number} [onHitGain]
+ * @property {number} [onCritGain]
+ * @property {number} [onKillGain]
+ * @property {Record<string, number>} [spendMultipliers]
+ * @property {number} [minToUse]
+ * @property {number} [baseMax]
+ */
+
+/**
+ * @typedef {{ kind: "move"|"hit"|"crit"|"kill", amount?: number }} ResourceEvent
+ */
+
+/**
  * Applies per-turn regeneration and clamps values.
  * Call after statuses tick (or before, by your chosen order—see loop below).
  * @param {import("./actor.js").Actor} actor
@@ -114,6 +132,9 @@ function ensureResourcePool(actor) {
   );
   source.mana = pickFirstFinite(source.mana, actor.res?.mana, actor.resources?.mana, baseStats.maxMana, actor.baseStats?.maxMana);
 
+  if (!source.pools || typeof source.pools !== "object") {
+    source.pools = Object.create(null);
+  }
   actor.resources = source;
   actor.res = source;
   return source;
@@ -125,3 +146,98 @@ function pickFirstFinite(...values) {
   }
   return 0;
 }
+
+/**
+ * Returns true when the actor can afford an action's resource cost.
+ * @param {import("./actor.js").Actor} actor
+ * @param {{ resourceCost?: Record<string, number>, tags?: string[] }} action
+ */
+export function canPay(actor, action) {
+  const pools = actor?.resources?.pools || {};
+  const need = action?.resourceCost || {};
+  const tags = Array.isArray(action?.tags) ? action.tags : [];
+  for (const [pool, baseCost] of Object.entries(need)) {
+    const state = pools[pool];
+    if (!state) return false;
+    const mult = tags.reduce(
+      (acc, tag) => acc * (state.spendMultipliers?.[tag] || 1),
+      1,
+    );
+    const cost = Math.ceil(Number(baseCost || 0) * mult);
+    if (Number.isFinite(state.minToUse) && (state.minToUse || 0) > state.cur) {
+      return false;
+    }
+    if (state.cur < cost) return false;
+  }
+  return true;
+}
+
+/**
+ * Applies the action's resource cost to the actor.
+ * @param {import("./actor.js").Actor} actor
+ * @param {{ resourceCost?: Record<string, number>, tags?: string[] }} action
+ */
+export function spend(actor, action) {
+  const pools = actor?.resources?.pools || {};
+  const need = action?.resourceCost || {};
+  const tags = Array.isArray(action?.tags) ? action.tags : [];
+  for (const [pool, baseCost] of Object.entries(need)) {
+    const state = pools[pool];
+    if (!state) continue;
+    const mult = tags.reduce(
+      (acc, tag) => acc * (state.spendMultipliers?.[tag] || 1),
+      1,
+    );
+    const cost = Math.ceil(Number(baseCost || 0) * mult);
+    state.cur = Math.max(0, state.cur - cost);
+  }
+}
+
+/**
+ * Applies per-turn resource regeneration, clamping to max.
+ * @param {import("./actor.js").Actor} actor
+ */
+export function regenTurn(actor) {
+  if (!actor?.resources?.pools) return;
+  for (const state of Object.values(actor.resources.pools)) {
+    if (!state) continue;
+    const gain = Number(state.regenPerTurn || 0);
+    const next = Number(state.cur || 0) + gain;
+    state.cur = Math.min(state.max ?? Number.MAX_SAFE_INTEGER, next);
+  }
+}
+
+/**
+ * Applies event-based resource gains (on move/hit/crit/kill).
+ * @param {import("./actor.js").Actor} actor
+ * @param {ResourceEvent} evt
+ */
+export function eventGain(actor, evt) {
+  if (!actor?.resources?.pools || !evt) return;
+  for (const state of Object.values(actor.resources.pools)) {
+    if (!state) continue;
+    let gain = 0;
+    switch (evt.kind) {
+      case "move":
+        gain += state.onMoveGain || 0;
+        break;
+      case "hit":
+        gain += state.onHitGain || 0;
+        break;
+      case "crit":
+        gain += state.onCritGain || 0;
+        break;
+      case "kill":
+        gain += state.onKillGain || 0;
+        break;
+      default:
+        break;
+    }
+    if (evt.amount) gain += evt.amount;
+    if (gain) {
+      const next = Number(state.cur || 0) + gain;
+      state.cur = Math.min(state.max ?? Number.MAX_SAFE_INTEGER, next);
+    }
+  }
+}
+

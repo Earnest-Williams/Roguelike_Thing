@@ -1,8 +1,8 @@
 // src/combat/loop.js
 // @ts-check
 import { rebuildDerived, tickStatusesAtTurnStart } from "./status.js";
-import { gainAP, tickCooldowns } from "./time.js";
-import { updateResources, isDefeated } from "./resources.js";
+import { gainAP, tickCooldowns, initiativeWithTemporal } from "./time.js";
+import { updateResources, isDefeated, regenTurn } from "./resources.js";
 import { EVENT, emit } from "../ui/event-log.js";
 import { decayPerTurn } from "./attunement.js";
 import { logTurnEvt } from "./debug-log.js";
@@ -52,6 +52,7 @@ export function runTurn(actor, actionPlanner) {
   startTurn(actor);
   tickStatusesAtTurnStart(actor, turn);
   updateResources(actor);
+  regenTurn(actor);
   gainAP(actor);
 
   actionPlanner?.(actor);
@@ -63,4 +64,15 @@ export function runTurn(actor, actionPlanner) {
   emit(EVENT.TURN, { who: actor.name, ap: actor.ap, hp: actor.res.hp });
 
   return isDefeated(actor);
+}
+
+export function onNewRound(actors, rng = Math.random) {
+  if (!Array.isArray(actors)) return;
+  for (const actor of actors) {
+    if (!actor) continue;
+    const baseInit = Number(actor.baseInitiative || actor.init || 0);
+    const roll = typeof rng === "function" ? rng() : Math.random();
+    const die = Math.floor(roll * 20) + 1;
+    actor.initRoll = initiativeWithTemporal(actor, baseInit) + die;
+  }
 }

@@ -4,6 +4,61 @@
 import { BASE_AP_GAIN_PER_TURN } from "../../constants.js";
 
 /**
+ * Computes the final AP cost (and potential refund) for an action.
+ * @param {import("./actor.js").Actor} actor
+ * @param {number} baseAP
+ * @param {string[]} [tags]
+ */
+export function finalAPForAction(actor, baseAP, tags = []) {
+  const temporal = actor?.temporal || {};
+  const sd = actor?.statusDerived || {};
+  const base = Math.max(0, Math.floor(Number(baseAP) || 0));
+  const moveDelta = tags.includes("move")
+    ? (temporal.moveAPDelta || 0) + (sd.moveAPDelta || 0)
+    : 0;
+  const castDelta = tags.includes("cast")
+    ? (temporal.castTimeDelta || 0) + (sd.castTimeDelta || 0)
+    : 0;
+  const additive = Math.max(0, base + moveDelta + castDelta);
+  const speedScalar = 1 - ((temporal.actionSpeedPct || 0) + (sd.actionSpeedPct || 0));
+  const appliedScalar = Math.max(0.2, speedScalar);
+  const scaled = Math.max(0, Math.ceil(additive * appliedScalar));
+  const refundPct = Math.max(0, (temporal.recoveryPct || 0) + (sd.recoveryPct || 0));
+  const refund = Math.max(0, Math.floor(scaled * refundPct));
+  return {
+    costAP: Math.max(0, scaled - refund),
+    refundAP: refund,
+  };
+}
+
+/**
+ * Computes a cooldown in turns after temporal modifiers.
+ * @param {import("./actor.js").Actor} actor
+ * @param {number} baseCooldown
+ */
+export function finalCooldown(actor, baseCooldown) {
+  const base = Math.max(0, Math.floor(Number(baseCooldown) || 0));
+  const temporalPct = actor?.temporal?.cooldownPct || 0;
+  const sd = actor?.statusDerived || {};
+  const scalarPct = 1 + temporalPct + (sd.cooldownPct || 0);
+  const scalarMult = Number.isFinite(sd.cooldownMult) ? sd.cooldownMult : 1;
+  const scalar = Math.max(0, scalarPct) * Math.max(0, scalarMult);
+  return Math.max(0, Math.ceil(base * scalar));
+}
+
+/**
+ * Initiative bonus from temporal payloads.
+ * @param {import("./actor.js").Actor} actor
+ * @param {number} baseInit
+ */
+export function initiativeWithTemporal(actor, baseInit) {
+  const base = Math.floor(Number(baseInit) || 0);
+  const temporalBonus = actor?.temporal?.initBonus || 0;
+  const sd = actor?.statusDerived || {};
+  return base + temporalBonus + (sd.initBonus || sd.initiativeFlat || 0);
+}
+
+/**
  * AP accrual per turn, scaled by (1 / totalActionCostMult).
  * Faster actors (lower mult) earn more usable AP effectively.
  * @param {import("./actor.js").Actor} actor
@@ -29,15 +84,10 @@ export function gainAP(actor) {
  * @param {{ includeMoveDelta?: boolean }} [opts]
  */
 export function apCost(actor, baseAP, opts = {}) {
-  const sd = actor?.statusDerived || {};
-  const temporal = actor?.modCache?.temporal || { actionSpeedPct: 0, moveAPDelta: 0 };
-  const add = opts.includeMoveDelta
-    ? (temporal.moveAPDelta || 0) + (sd.moveAPDelta || 0)
-    : 0;
-  const mult = 1 + (temporal.actionSpeedPct || 0) + (sd.actionSpeedPct || 0);
-  const base = Number(baseAP) || 0;
-  const raw = (base + add) * mult;
-  return Math.max(1, Math.floor(Number.isFinite(raw) ? raw : base));
+  const tags = [];
+  if (opts.includeMoveDelta) tags.push("move");
+  if (opts.includeCastDelta) tags.push("cast");
+  return finalAPForAction(actor, baseAP, tags).costAP;
 }
 
 /**
@@ -72,10 +122,7 @@ export function tickCooldowns(actor) {
  */
 export function startCooldown(actor, key, baseTurns) {
   if (!actor || !key) return;
-  const temporal = actor.modCache?.temporal || { cooldownMult: 1 };
-  const sd = actor.statusDerived || {};
-  const raw = Number(baseTurns) * (temporal.cooldownMult || 1) * (sd.cooldownMult || 1);
-  const turns = Math.max(0, Math.round(Number.isFinite(raw) ? raw : Number(baseTurns) || 0));
+  const turns = finalCooldown(actor, baseTurns);
   actor.cooldowns ||= new Map();
   const currentTurn = actor.turn || 0;
   actor.cooldowns.set(key, currentTurn + turns);
