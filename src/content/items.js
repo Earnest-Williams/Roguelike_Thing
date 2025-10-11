@@ -34,7 +34,22 @@ export const BASE_ITEMS = {
       range: { min: 0, optimal: 1, max: 1 },
       damage: { diceCount: 1, diceSides: 8, bonus: 1 },
     },
-    brands: [{ id: "fire_edge", kind: "brand", type: "fire", flat: 3, pct: 0.10 }],
+    brands: [{
+      id: "fire_edge",
+      kind: "brand",
+      type: "fire",
+      flat: 3,
+      pct: 0.10,
+      attunement: {
+        onUseGain: 1,
+        decayPerTurn: 1,
+        maxStacks: 10,
+        perStack: {
+          damagePct: 0.02,
+          resistPct: 0.005,
+        },
+      },
+    }],
     affinities: { fire: 0.05 },
     resists: { fire: 0.05 },
   },
