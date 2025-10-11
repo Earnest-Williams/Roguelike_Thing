@@ -49,9 +49,9 @@ export function createActorFromTemplate(tid) {
   // merge innate payloads (affinities/resists/brands) by pretending they are “items” in a virtual slot
   if (t.innate) {
     const pseudo = { id: `${t.id}#innate`, ...t.innate };
-    equipment["Innate"] = pseudo;
+    a.equipment["Innate"] = pseudo;
   }
-  a.setFoldedMods(foldModsFromEquipment(equipment));
+  foldModsFromEquipment(a);
   return a;
 }
 

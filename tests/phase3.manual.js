@@ -18,7 +18,7 @@ const a = new Actor({
   },
   equipment: { RightHand: makeItem("long_sword") },
 });
-a.setFoldedMods(foldModsFromEquipment(a.equipment));
+foldModsFromEquipment(a);
 
 a.res.hp = 20;
 
@@ -35,7 +35,7 @@ const b = new Actor({
     baseSpeed: 1,
   },
 });
-b.setFoldedMods(foldModsFromEquipment(b.equipment));
+foldModsFromEquipment(b);
 
 const weapon = a.equipment.RightHand?.item || a.equipment.RightHand;
 const res = performEquippedAttack(a, b, weapon, 1);

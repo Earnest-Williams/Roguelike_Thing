@@ -19,7 +19,7 @@ const attacker = new Actor({
   },
   equipment: { RightHand: makeItem("long_sword") },
 });
-attacker.setFoldedMods(foldModsFromEquipment(attacker.equipment));
+foldModsFromEquipment(attacker);
 attacker.modCache.brands.push({
   kind: "brand",
   id: "phys_flat",
@@ -42,7 +42,7 @@ const defender = new Actor({
     baseSpeed: 1,
   },
 });
-defender.setFoldedMods(foldModsFromEquipment(defender.equipment));
+foldModsFromEquipment(defender);
 defender.modCache.resists.physical = 0.1;
 
 const startHp = defender.res.hp;
