@@ -1,6 +1,7 @@
 // src/combat/attack.js
 // @ts-check
 import { gainAttunementsFromPackets } from "./attunement.js";
+import { refreshAttunementBonuses } from "./mod-folding.js";
 import { applyStatuses } from "./status.js";
 
 /**
@@ -125,11 +126,24 @@ export function resolveAttack(ctx) {
   const nextHp = Math.max(0, currentHp - total);
   syncDefenderHp(nextHp);
   gainAttunementsFromPackets(attacker, packets);
+  if (attacker && hasPositivePackets(packets)) {
+    refreshAttunementBonuses(attacker);
+  }
 
   // 9) Status application
   const appliedStatuses = applyStatuses(ctx, attacker, defender, ctx.turn);
 
   return { packetsAfterDefense: packets, totalDamage: total, appliedStatuses };
+}
+
+function hasPositivePackets(packets) {
+  if (!packets) return false;
+  for (const value of Object.values(packets)) {
+    if (Number.isFinite(value) && value > 0) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function ensureResourceHandles(defender) {
