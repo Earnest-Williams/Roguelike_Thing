@@ -175,5 +175,5 @@ export function performEquippedAttack(attacker, defender, weaponItem, distTiles,
       : Date.now();
   emit("attack_type_hint", { type: profile.type || "physical", until: now + 250 });
 
-  return { ok: true, outcome: out, profile, mode, damageRoll, attackContext: ctx, ...out };
+  return { ...out, ok: true, outcome: out, profile, mode, damageRoll, attackContext: ctx };
 }
