@@ -78,7 +78,7 @@ function applyBrands(actor, packets, onHitStatuses) {
   return packets.map((pkt) => {
     let amt = pkt.amount;
     for (const b of brands) {
-      if (b.type === pkt.type) {
+      if (!b.type || b.type === pkt.type) {
         if (b.flat) amt += b.flat;
         if (b.pct) amt = Math.floor(amt * (1 + b.pct));
       }
