@@ -4,7 +4,7 @@ import { COMBAT_RESIST_MAX, COMBAT_RESIST_MIN } from "../config.js";
 import { HEALTH_FLOOR } from "../../constants.js";
 import { applyOutgoingScaling, noteUseGain } from "./attunement.js";
 import { applyStatuses } from "./status.js";
-import { polarityDefScalar, polarityOnHitScalar } from "./polarity.js";
+import { polarityDefenseMult, polarityOffenseMult } from "./polarity.js";
 import { logAttackStep } from "./debug-log.js";
 import { makeAttackContext } from "./attack-context.js";
 import { eventGain } from "./resources.js";
@@ -277,8 +277,8 @@ export function resolveAttack(ctx) {
   // 6) Status-derived (outgoing/incoming) and Polarity
   const atkSD = attacker.statusDerived || {};
   const defSD = defender.statusDerived || {};
-  const polOff = polarityOnHitScalar(attacker, defender);
-  const polDef = polarityDefScalar(defender, attacker);
+  const polOffMult = polarityOffenseMult(attacker, defender);
+  const polDefMult = polarityDefenseMult(defender, attacker);
 
   const packetList = Object.entries(packets).map(([type, amount]) => ({
     type,
@@ -292,8 +292,8 @@ export function resolveAttack(ctx) {
     const inn = defSD.damageTakenMult?.[type] || 0;
     if (out) value *= 1 + out;
     if (inn) value *= 1 + inn;
-    value *= Math.max(0, 1 + polOff);
-    value *= Math.max(0, 1 - polDef);
+    value *= Math.max(0, polOffMult);
+    value *= Math.max(0, polDefMult);
     packet.amount = applyPolarityBias(attacker, defender, { type, amount: value });
   }
 

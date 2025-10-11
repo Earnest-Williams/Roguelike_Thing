@@ -2,6 +2,7 @@
 // @ts-check
 import { COMBAT_RESIST_MAX, COMBAT_RESIST_MIN } from "../config.js";
 import { rebuildDerived } from "./status.js";
+import { normalizePolarity } from "./polarity.js";
 
 const SLOT_RULES = {
   offhand: ["parryPct"],
@@ -939,13 +940,13 @@ export function foldModsFromEquipment(actor) {
       conversions: [],
       brandAdds: [],
       affinities: Object.create(null),
-      polarity: { onHitBias: {} },
+      polarity: { grant: Object.create(null), onHitBias: {} },
     },
     defense: {
       resists: Object.create(null),
       immunities: new Set(),
       flatDR: Object.create(null),
-      polarity: { defenseBias: {} },
+      polarity: { grant: Object.create(null), defenseBias: {} },
     },
     temporal: {
       actionSpeedPct: 0,
@@ -996,11 +997,18 @@ export function foldModsFromEquipment(actor) {
       recvDurMult: Object.create(null),
       buffDurMult: 1,
       freeActionIgnore: new Set(),
+      freeActionCooldown: 0,
+      freeActionPurge: false,
     },
-    polarity: { onHitBias: {}, defenseBias: {} },
+    polarity: {
+      grant: Object.create(null),
+      onHitBias: {},
+      defenseBias: {},
+    },
   };
 
-  actor.polarity = {};
+  actor.polarityRaw = Object.create(null);
+  actor.polarity = actor.polarity || Object.create(null);
 
   const equipment = actor.equipment || {};
   const sortedSlots = Object.keys(equipment).sort((a, b) =>
@@ -1294,8 +1302,10 @@ export function foldModsFromEquipment(actor) {
 
     // Polarity grant/bias
     if (item.polarity?.grant) {
-      for (const key of Object.keys(item.polarity.grant)) {
-        actor.polarity[key] = (actor.polarity[key] || 0) + (Number(item.polarity.grant[key]) || 0);
+      for (const [key, value] of Object.entries(item.polarity.grant)) {
+        const amount = Number(value) || 0;
+        if (!amount) continue;
+        mc.polarity.grant[key] = (mc.polarity.grant[key] || 0) + amount;
       }
     }
     if (item.polarity?.onHitBias) {
@@ -1309,19 +1319,34 @@ export function foldModsFromEquipment(actor) {
 
     // Status interaction
     if (item.statusMods) {
-      const sm = item.statusMods;
-      mergeRecord(mc.status.inflictBonus, sm.inflictBonus || sm.inflictChanceBonus);
-      mergeRecord(mc.status.inflictDurMult, sm.inflictDurMult || sm.inflictDurationMult);
-      mergeRecord(mc.status.resistBonus, sm.resistBonus || sm.resistChanceBonus);
-      mergeRecord(mc.status.recvDurMult, sm.recvDurMult ?? sm.receivedDurationMult);
-      const buffMult = Number(sm.buffDurMult ?? sm.buffDurationMult);
-      if (Number.isFinite(buffMult)) {
-        mc.status.buffDurMult *= buffMult;
-      }
-      const freeIgnores = sm.freeActionIgnore || sm.freeAction?.ignore;
-      if (Array.isArray(freeIgnores)) {
-        for (const id of freeIgnores) {
-          if (id) mc.status.freeActionIgnore.add(String(id));
+      const entries = Array.isArray(item.statusMods) ? item.statusMods : [item.statusMods];
+      for (const sm of entries) {
+        if (!sm) continue;
+        mergeRecord(mc.status.inflictBonus, sm.inflictChanceBonus || sm.inflictBonus);
+        mergeRecord(mc.status.inflictDurMult, sm.inflictDurationMult || sm.inflictDurMult);
+        mergeRecord(mc.status.resistBonus, sm.resistChanceBonus || sm.resistBonus);
+        mergeRecord(mc.status.recvDurMult, sm.receivedDurationMult ?? sm.recvDurMult);
+        const buffDelta = Number(sm.buffDurationMult ?? sm.buffDurMult);
+        if (Number.isFinite(buffDelta)) {
+          const next = mc.status.buffDurMult * (1 + buffDelta);
+          mc.status.buffDurMult = Math.max(0, next);
+        }
+        const freeAction = sm.freeAction || {};
+        const freeIgnores = sm.freeActionIgnore || freeAction.ignore;
+        if (Array.isArray(freeIgnores)) {
+          for (const id of freeIgnores) {
+            if (!id) continue;
+            mc.status.freeActionIgnore.add(String(id));
+          }
+        }
+        if (Number.isFinite(freeAction.cooldown)) {
+          mc.status.freeActionCooldown = Math.max(
+            mc.status.freeActionCooldown,
+            Number(freeAction.cooldown),
+          );
+        }
+        if (freeAction.purgeOnUse) {
+          mc.status.freeActionPurge = true;
         }
       }
     }
@@ -1388,6 +1413,12 @@ export function foldModsFromEquipment(actor) {
       }
     }
   }
+
+  actor.polarityRaw = { ...mc.polarity.grant };
+  actor.polarity = normalizePolarity(mc.polarity.grant);
+  actor.polarityVector = actor.polarity;
+  mc.offense.polarity.grant = { ...mc.polarity.grant };
+  mc.defense.polarity.grant = { ...mc.polarity.grant };
 
   mc.offense.brands = Array.isArray(mc.offense.brandAdds)
     ? mc.offense.brandAdds.slice()
