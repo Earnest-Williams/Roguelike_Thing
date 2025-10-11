@@ -37,6 +37,30 @@ const modsSlime = {
 const A = mkActor("Hero", 60, modsFireSword);
 const B = mkActor("Slime", 50, modsSlime);
 
+function coalesceDamage(summary) {
+  if (!summary) return 0;
+  return (
+    summary.totalDamage ??
+    summary.roundDamage ??
+    summary.damage ??
+    summary.dmg ??
+    0
+  );
+}
+
+function coalesceKilled(summary) {
+  if (!summary) return false;
+  return Boolean(
+    summary.killed ??
+    summary.defenderKilled ??
+    summary.defenderDead ??
+    summary.targetKilled ??
+    summary.outcome?.killed ??
+    summary.outcome?.defenderKilled ??
+    summary.outcome?.defenderDead
+  );
+}
+
 function step(attacker, defender) {
   attacker.turn = (attacker.turn ?? 0) + 1;
   startTurn(attacker);
@@ -48,7 +72,7 @@ function step(attacker, defender) {
     attack: { type: "fire", base: 8 },
   });
   const defenderHp = defender.res?.hp ?? defender.resources?.hp ?? defender.hp ?? 0;
-  const killed = (r.killed ?? false) || defenderHp <= 0;
+  const killed = coalesceKilled(r) || defenderHp <= 0;
   if (killed) applyStatus(attacker, "haste", 1, 2);
   endTurn(attacker);
   return { ...r, killed };
@@ -58,8 +82,8 @@ for (let i=0; i<10 && A.hp>0 && B.hp>0; i++) {
   const r1 = step(A, B);
   if (B.hp <= 0) break;
   const r2 = step(B, A);
-  const dmgAB = r1.totalDamage ?? r1.dmg ?? 0;
-  const dmgBA = r2.totalDamage ?? r2.dmg ?? 0;
+  const dmgAB = coalesceDamage(r1);
+  const dmgBA = coalesceDamage(r2);
   console.log(`Round ${i+1}: A→B ${dmgAB} (B:${B.hp}) | B→A ${dmgBA} (A:${A.hp})`);
 }
 
