@@ -27,7 +27,7 @@ registerStatus({
   label: "Slowed",
   harmful: true,
   stacking: "refresh",
-  derive: ({ stacks }) => ({ actionSpeedPct: +0.10 * stacks, moveAPDelta: +0.1 * stacks }),
+  derive: ({ stacks }) => ({ actionSpeedPct: 0.10 * stacks, moveAPDelta: 0.1 * stacks }),
 });
 
 // stunned: refresh, hard disable via actionSpeedPct >= 1.0 (your engine can gate actions)
