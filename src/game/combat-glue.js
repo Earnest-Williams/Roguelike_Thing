@@ -3,7 +3,7 @@
 import { getAttackModesForItem } from "../../js/item-system.js";
 import { resolveAttack } from "../combat/attack.js";
 import { EVENT, emit } from "../ui/event-log.js";
-import "../combat/status.registry.js";
+import "../combat/status-registry.js";
 
 /**
  * Roll average damage from dice profile at Phase 3 (deterministic feel).
