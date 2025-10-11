@@ -32,7 +32,9 @@ export function resolveAttack(ctx) {
   const scalar = Number.isFinite(ctx.damageScalar) ? Math.max(0, ctx.damageScalar) : 1;
   const collapsed = collapseByType(defended, scalar);
   const totalDamage = Object.values(collapsed).reduce((a, b) => a + b, 0);
-  defender.res.hp = Math.max(0, defender.res.hp - totalDamage);
+  if (defender?.res) {
+    defender.res.hp = Math.max(0, defender.res.hp - totalDamage);
+  }
 
   const attempts = [...onHitStatuses, ...(ctx.statusAttempts || [])];
   const appliedStatuses = attempts.length
