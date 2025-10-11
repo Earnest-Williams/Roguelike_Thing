@@ -8,18 +8,7 @@ import { polarityDefenseMult, polarityOffenseMult } from "./polarity.js";
 import { logAttackStep } from "./debug-log.js";
 import { makeAttackContext } from "./attack-context.js";
 import { eventGain } from "./resources.js";
-import { POLAR_BIAS } from "./constants.js";
 import { logEvent } from "./debug.js";
-
-function applyPolarityBias(attacker, defender, packet) {
-  if (!packet || !Number.isFinite(packet.amount)) return packet?.amount ?? 0;
-  const aPol = attacker?.polarity?.type || attacker?.polarity;
-  const dPol = defender?.polarity?.type || defender?.polarity;
-  const aKey = typeof aPol === "string" ? aPol : attacker?.polarity?.current;
-  const dKey = typeof dPol === "string" ? dPol : defender?.polarity?.current;
-  const bias = (POLAR_BIAS[aKey]?.[dKey]) || 0;
-  return packet.amount * (1 + bias);
-}
 
 function gatherResist(source, type) {
   if (!source) return 0;
@@ -62,7 +51,7 @@ function hasImmunity(defender, type) {
   return false;
 }
 
-function applyDefenses(defender, packet, derived) {
+function applyDefenses(defender, packet, derived, polarityMult = 1) {
   if (!packet) return 0;
   const type = packet.type;
   let amount = Number(packet.amount) || 0;
@@ -82,6 +71,7 @@ function applyDefenses(defender, packet, derived) {
   }
   resistPct = clamp(resistPct, COMBAT_RESIST_MIN, COMBAT_RESIST_MAX);
   amount *= Math.max(0, 1 - resistPct);
+  amount *= Math.max(0, polarityMult);
 
   const flats = [
     defender?.flatDR,
@@ -272,13 +262,18 @@ export function resolveAttack(ctx) {
     packets[k] = Math.floor(packets[k] * (1 + (aff[k] || 0)));
   }
 
+  const polOffMult = polarityOffenseMult(attacker?.polarity, defender?.polarity);
+  if (polOffMult !== 1) {
+    for (const type of Object.keys(packets)) {
+      packets[type] = Math.max(0, Math.floor(packets[type] * polOffMult));
+    }
+  }
+
   breakdown.steps.push({ stage: "offense", packets: { ...packets } });
 
-  // 6) Status-derived (outgoing/incoming) and Polarity
+  // 6) Status-derived (outgoing/incoming)
   const atkSD = attacker.statusDerived || {};
   const defSD = defender.statusDerived || {};
-  const polOffMult = polarityOffenseMult(attacker, defender);
-  const polDefMult = polarityDefenseMult(defender, attacker);
 
   const packetList = Object.entries(packets).map(([type, amount]) => ({
     type,
@@ -292,15 +287,14 @@ export function resolveAttack(ctx) {
     const inn = defSD.damageTakenMult?.[type] || 0;
     if (out) value *= 1 + out;
     if (inn) value *= 1 + inn;
-    value *= Math.max(0, polOffMult);
-    value *= Math.max(0, polDefMult);
-    packet.amount = applyPolarityBias(attacker, defender, { type, amount: value });
+    packet.amount = Math.max(0, value);
   }
 
   const usedTypes = new Set();
   const defensePackets = Object.create(null);
+  const defPolMult = polarityDefenseMult(defender?.polarity, attacker?.polarity);
   for (const packet of packetList) {
-    const reduced = applyDefenses(defender, packet, defSD);
+    const reduced = applyDefenses(defender, packet, defSD, defPolMult);
     if (reduced > 0) {
       defensePackets[packet.type] = (defensePackets[packet.type] || 0) + reduced;
       usedTypes.add(packet.type);

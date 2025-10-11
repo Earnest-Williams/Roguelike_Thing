@@ -1419,6 +1419,7 @@ export function foldModsFromEquipment(actor) {
   actor.polarityVector = actor.polarity;
   mc.offense.polarity.grant = { ...mc.polarity.grant };
   mc.defense.polarity.grant = { ...mc.polarity.grant };
+  mc.statusInteraction = mc.status;
 
   mc.offense.brands = Array.isArray(mc.offense.brandAdds)
     ? mc.offense.brandAdds.slice()
