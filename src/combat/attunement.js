@@ -97,7 +97,7 @@ export function decayPerTurn(actor) {
     }
     const decay = rule.decayPerTurn | 0;
     if (!decay) continue;
-    setStacks(actor, type, Math.max(0, (count | 0) - decay));
+    setStacks(actor, type, Math.max(0, count - decay));
   }
 }
 
