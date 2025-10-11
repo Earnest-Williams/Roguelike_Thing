@@ -405,13 +405,17 @@
         posKeyFromCoords,
         randChoice,
         clamp,
-        clamp01Normalized,
         colorStringToRgb,
         getNow,
         smoothstep01,
         chebyshevDistance,
         hasLineOfSight,
       } from "./js/utils.js";
+
+      const clampUnitInterval = (value) => {
+        if (!Number.isFinite(value)) return 0;
+        return clamp(value, 0, 1);
+      };
 
       import {
         Item,
@@ -773,7 +777,7 @@
             S.modCache.status ?? createDefaultStatusModCache();
           p += getModNumber(attackerMods.inflictBonus, a.id);
           p -= getModNumber(defenderStatusMods.resistBonus, a.id);
-          p = clamp01Normalized(p);
+          p = clampUnitInterval(p);
           if (p <= 0) continue;
 
           if (
@@ -2316,7 +2320,7 @@
         }
 
         function computeTileOverlayAlpha(x, y, lightCtx) {
-          const baseA = clamp01Normalized(LIGHT_CONFIG.baseOverlayAlpha);
+          const baseA = clampUnitInterval(LIGHT_CONFIG.baseOverlayAlpha);
           const variance = Math.max(0, LIGHT_CONFIG.flickerVariance || 0);
           if (!lightCtx || variance <= 0) {
             return baseA;
@@ -2376,7 +2380,7 @@
             props.color,
             LIGHT_CONFIG.fallbackColor,
           );
-          const baseA = clamp01Normalized(LIGHT_CONFIG.baseOverlayAlpha);
+          const baseA = clampUnitInterval(LIGHT_CONFIG.baseOverlayAlpha);
           return {
             style: `rgba(${rgb.r},${rgb.g},${rgb.b},${baseA.toFixed(3)})`,
             rgb,
@@ -3272,7 +3276,7 @@
         // ----- CONFIG -----
         const HYBRID_CFG = CONFIG.generator.hybrid;
         // Utility
-        // clamp01Normalized helper imported from utils handles the normalization; reuse it here.
+        // clampUnitInterval helper ensures probability/ratio values stay in [0, 1].
         const manhattan = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
         // -------------------------
         // Phase A: Large rooms
@@ -3460,7 +3464,7 @@
           }
           // Optionally thin out density
           const targetCount = Math.round(
-            kept.length * clamp01Normalized(cfg.keepRatio),
+            kept.length * clampUnitInterval(cfg.keepRatio),
           );
           const smallRooms = shuffle(kept).slice(0, targetCount);
           // Carve
