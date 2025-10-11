@@ -19,8 +19,14 @@ import { applyStatuses } from "./status.js";
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 
 export function resolveAttack(ctx) {
-  const attacker = ctx.attacker || {};
-  const defender = ctx.defender || {};
+  if (!ctx.attacker) {
+    throw new Error("resolveAttack: ctx.attacker is required");
+  }
+  if (!ctx.defender) {
+    throw new Error("resolveAttack: ctx.defender is required");
+  }
+  const attacker = ctx.attacker;
+  const defender = ctx.defender;
   const { resource: defenderResources, syncHp: syncDefenderHp } = ensureResourceHandles(defender);
 
   let basePool = Math.max(0, Math.floor(ctx.physicalBase || 0));
