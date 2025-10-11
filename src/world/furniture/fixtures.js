@@ -41,7 +41,10 @@ export class Fixture extends Furniture {
     const rawMetadata =
       metadata && typeof metadata === "object" ? { ...metadata } : {};
     const normalizedFootprint = normalizeFootprint(footprint || rawMetadata.footprint);
-    const baseTags = new Set(["fixture", ...Array.isArray(tags) ? tags : []]);
+    const baseTags = new Set([
+      "fixture",
+      ...(Array.isArray(tags) ? tags : []),
+    ]);
     const mergedMetadata = {
       ...rawMetadata,
       footprint: normalizedFootprint,
@@ -75,7 +78,11 @@ export class Table extends Fixture {
       seating,
       surface: "flat",
     };
-    const baseTags = new Set(["table", "surface", ...Array.isArray(tags) ? tags : []]);
+    const baseTags = new Set([
+      "table",
+      "surface",
+      ...(Array.isArray(tags) ? tags : []),
+    ]);
     super({
       id,
       kind: FurnitureKind.TABLE,
@@ -103,7 +110,11 @@ export class Chair extends Fixture {
       seatingCapacity: 1,
       hasBack: Boolean(hasBack),
     };
-    const baseTags = new Set(["seat", "furniture", ...Array.isArray(tags) ? tags : []]);
+    const baseTags = new Set([
+      "seat",
+      "furniture",
+      ...(Array.isArray(tags) ? tags : []),
+    ]);
     super({
       id,
       kind: FurnitureKind.SEAT,
@@ -134,7 +145,7 @@ export class StorageChest extends Fixture {
     const baseTags = new Set([
       "storage",
       "container",
-      ...Array.isArray(tags) ? tags : [],
+      ...(Array.isArray(tags) ? tags : []),
     ]);
     super({
       id,
@@ -165,7 +176,11 @@ export class Lamp extends Fixture {
       fuelType,
       emitsLight: true,
     };
-    const baseTags = new Set(["light", "lamp", ...Array.isArray(tags) ? tags : []]);
+    const baseTags = new Set([
+      "light",
+      "lamp",
+      ...(Array.isArray(tags) ? tags : []),
+    ]);
     super({
       id,
       kind: FurnitureKind.LIGHT,
@@ -193,7 +208,11 @@ export class Rug extends Fixture {
       pattern,
       comfort: metadata?.comfort ?? 1,
     };
-    const baseTags = new Set(["decor", "soft", ...Array.isArray(tags) ? tags : []]);
+    const baseTags = new Set([
+      "decor",
+      "soft",
+      ...(Array.isArray(tags) ? tags : []),
+    ]);
     super({
       id,
       kind: FurnitureKind.DECOR,

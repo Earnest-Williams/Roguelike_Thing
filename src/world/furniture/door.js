@@ -111,7 +111,9 @@ export class Door extends Furniture {
       name: name || deriveDoorName(type, resolvedMaterial, variantId),
       orientation,
       material: resolvedMaterial,
-      tags: Array.from(new Set(["door", variantId, type, ...tags])),
+      tags: Array.from(
+        new Set(["door", variantId, type, ...(Array.isArray(tags) ? tags : [])]),
+      ),
       metadata: { ...metadata, variantId, type, state: normalizedState },
     });
     this.type = type;
