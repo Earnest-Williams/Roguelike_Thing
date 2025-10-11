@@ -5,6 +5,7 @@ import {
   BASE_AP_GAIN_PER_TURN,
   COOLDOWN_MIN_TURNS,
   MIN_AP_COST,
+  MIN_TOTAL_ACTION_COST_MULTIPLIER,
 } from "../../constants.js";
 
 /**
@@ -27,10 +28,23 @@ export function gainAP(actor) {
  */
 export function apCost(actor, baseCostAP) {
   const base = Number(baseCostAP) || 0;
-  const mult = typeof actor?.totalActionCostMult === "function" ? actor.totalActionCostMult() : 1;
+
+  /** @type {number} */
+  let mult;
+  if (typeof actor?.totalActionCostMult === "function") {
+    mult = actor.totalActionCostMult();
+  } else {
+    const speedMult = Number(actor?.modCache?.speedMult);
+    const temporalPct = Number(actor?.modCache?.temporal?.actionSpeedPct) || 0;
+    const derivedPct = Number(actor?.statusDerived?.actionSpeedPct) || 0;
+    const pct = 1 + temporalPct + derivedPct;
+    mult = (Number.isFinite(speedMult) && speedMult > 0 ? speedMult : 1) * pct;
+    mult = Math.max(MIN_TOTAL_ACTION_COST_MULTIPLIER, mult);
+  }
+
   const raw = base * mult;
   const cost = Number.isFinite(raw) ? raw : base;
-  return Math.max(MIN_AP_COST, Math.floor(cost));
+  return Math.max(MIN_AP_COST, Math.round(cost));
 }
 
 /**
