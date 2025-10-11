@@ -75,7 +75,7 @@ export function noteUseGain(attacker, usedTypes) {
     const current = getStacks(attacker, type);
     const rawMax = rule.maxStacks;
     const cap = Number.isFinite(rawMax) && rawMax > 0 ? rawMax : Number.POSITIVE_INFINITY;
-    const next = Math.min(cap, (current + gain) | 0);
+    const next = Math.min(cap, current + gain);
     setStacks(attacker, type, next);
     attacker.logs?.attack?.push?.({ kind: "attune_gain", type, stacks: next });
     attacker.log?.push?.({ kind: "attune_gain", type, stacks: next });
