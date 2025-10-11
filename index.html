@@ -348,7 +348,7 @@
       } from "./js/item-system.js";
       import { CanvasRenderer } from "./js/render/canvas-renderer.js";
       import { RenderController } from "./js/render/controller.js";
-      import { resolveAttackFromContext } from "./src/combat/attack.js";
+      import { resolveAttack } from "./src/combat/attack.js";
 
       const CONFIG = {
         visual: {
@@ -824,7 +824,7 @@
       window.StatusRegistry = StatusRegistry;
       window.getStatus = getStatus;
       window.applyStatuses = applyStatuses;
-      window.resolveAttack = resolveAttackFromContext;
+      window.resolveAttack = resolveAttack;
 
       registerStatus({
         id: "burn",
@@ -1805,11 +1805,9 @@
           target,
           onTargetDefeated,
         }) {
-          const attackResult = resolveAttackFromContext(attackCtx);
+          const attackResult = resolveAttack(attackCtx);
           evaluation.roll = baseRoll;
           evaluation.damageApplied = attackResult.totalDamage;
-          evaluation.packetsBeforeDefense =
-            attackResult.packetsBeforeDefense;
           evaluation.packetsAfterDefense = attackResult.packetsAfterDefense;
           evaluation.statusApplied = attackResult.appliedStatuses;
           evaluation.attackResult = attackResult;
@@ -1864,16 +1862,11 @@
             ? baseRoll.rolls.reduce((acc, value) => acc + value, 0)
             : 0;
           const attackCtx = {
-            S: attacker,
-            D: target,
             attacker,
             defender: target,
             turn: context.turn ?? 0,
-            basePhysical: {
-              diceTotal,
-              flatFromWeapon: baseRoll.bonus ?? 0,
-              flatFromStats: 0,
-            },
+            physicalBase: Math.max(0, Math.floor(baseRoll.total ?? 0)),
+            physicalBonus: 0,
             attackKind: "ranged",
             source: { item: weapon, weaponProfile: profile },
           };
@@ -2061,16 +2054,11 @@
             ? baseRoll.rolls.reduce((acc, value) => acc + value, 0)
             : 0;
           const attackCtx = {
-            S: attacker,
-            D: target,
             attacker,
             defender: target,
             turn: context.turn ?? 0,
-            basePhysical: {
-              diceTotal,
-              flatFromWeapon: baseRoll.bonus ?? 0,
-              flatFromStats: 0,
-            },
+            physicalBase: Math.max(0, Math.floor(baseRoll.total ?? 0)),
+            physicalBonus: 0,
             attackKind: "throw",
             source: { item, throwProfile: profile },
           };

@@ -50,22 +50,17 @@ const weapon = attacker.equipment.RightHand;
 const result = performEquippedAttack(attacker, defender, weapon, 1);
 
 assert.equal(result.ok, true, "attack should resolve");
-assert.ok(result.outcome?.breakdown?.length, "breakdown should exist");
+assert.ok(result.outcome?.packetsAfterDefense, "packets should exist");
 
-const steps = result.outcome.breakdown.map((s) => s.step);
-for (const key of [
-  "base",
-  "brand_flat",
-  "brand_pct",
-  "attacker_mult",
-  "defender_resist",
-  "floor",
-  "total",
-]) {
-  assert.ok(steps.includes(key), `expected step ${key} in breakdown`);
-}
-
-const totalStep = result.outcome.breakdown[result.outcome.breakdown.length - 1];
-assert.equal(totalStep.step, "total");
-assert.equal(totalStep.value, result.outcome.total);
-assert.equal(defender.res.hp, startHp - result.outcome.total, "hp reduced by total");
+const dealt = result.outcome.totalDamage;
+assert.ok(dealt > 0, "damage should be positive");
+const sumPackets = Object.values(result.outcome.packetsAfterDefense).reduce(
+  (acc, v) => acc + v,
+  0,
+);
+assert.equal(sumPackets, dealt, "packets sum should equal total damage");
+assert.equal(
+  defender.res.hp,
+  startHp - dealt,
+  "hp reduced by total damage",
+);

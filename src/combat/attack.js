@@ -1,159 +1,134 @@
 // src/combat/attack.js
+// @ts-check
 import { applyStatuses } from "./status.js";
 
-function gather(value) {
-  if (Array.isArray(value)) return value;
-  if (value && typeof value === "object") return [value];
-  return [];
-}
+/**
+ * @typedef {Object} AttackContext
+ * @property {any} attacker
+ * @property {any} defender
+ * @property {number} turn
+ * @property {number} physicalBase
+ * @property {number} [physicalBonus]
+ * @property {Record<string, number>} [prePackets]
+ * @property {Array<{id:string, baseChance:number, baseDuration:number, stacks?:number}>} [statusAttempts]
+ * @property {Array<string>} [tags]
+ */
 
-function doResolveAttack(rawCtx = {}) {
-  const ctx = rawCtx || {};
-  const S = ctx.attacker ?? ctx.S ?? null;
-  const D = ctx.defender ?? ctx.D ?? null;
-  const turn = Number.isFinite(ctx.turn) ? ctx.turn : 0;
-  const basePhysical = ctx.basePhysical ?? 0;
-  const bonusPhysical = ctx.bonusPhysical ?? 0;
-  const conversions = [
-    ...gather(ctx.conversions),
-    ...gather(S?.modCache?.offense?.conversions),
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+export function resolveAttack(ctx) {
+  const { attacker, defender } = ctx;
+  if (defender && !defender.resources) {
+    if (defender.res) defender.resources = defender.res;
+    else defender.resources = { hp: defender.hp ?? 0 };
+  }
+  let basePool = Math.max(0, Math.floor(ctx.physicalBase || 0));
+  let bonusPool = Math.max(0, Math.floor(ctx.physicalBonus || 0));
+  /** @type {Record<string, number>} */
+  const packets = { ...(ctx.prePackets || {}) };
+
+  // 1) Conversions (includeBaseOnly, then global)
+  const conv = [
+    ...(Array.isArray(ctx.conversions) ? ctx.conversions : []),
+    ...(attacker.modCache?.offense?.conversions || []),
   ];
+  const convBase = basePool;
+  for (const c of conv) {
+    const src = (c.includeBaseOnly ? convBase : (basePool + bonusPool));
+    const amt = Math.floor(src * (c.percent || c.pct || 0));
+    if (amt > 0 && c.to) {
+      if (!packets[c.to]) packets[c.to] = 0;
+      packets[c.to] += amt;
+      if (c.includeBaseOnly) {
+        basePool -= amt;
+      } else {
+        const sum = basePool + bonusPool || 1;
+        const fb = Math.round(amt * (basePool / sum));
+        basePool -= fb;
+        bonusPool -= (amt - fb);
+      }
+    }
+  }
+
+  // 2) Remaining physical → packets
+  packets.physical = (packets.physical || 0) + basePool + bonusPool;
+
+  // 3) Brands (flats + percent of remaining physical; no feedback into conversions)
   const brands = [
-    ...gather(ctx.brands),
-    ...gather(S?.modCache?.offense?.brandAdds),
+    ...(Array.isArray(ctx.brands) ? ctx.brands : []),
+    ...(attacker.modCache?.offense?.brandAdds || attacker.modCache?.brands || []),
   ];
-  const statusAttempts = Array.isArray(ctx.statusAttempts)
-    ? ctx.statusAttempts
-    : [];
-
-  const packets = Object.create(null);
-  const addPacket = (type, amount) => {
-    if (!type) return;
-    const v = Math.floor(amount ?? 0);
-    if (v > 0 && Number.isFinite(v)) packets[type] = (packets[type] || 0) + v;
-  };
-
-  let basePool = 0;
-  let bonusPool = Math.max(0, Math.floor(bonusPhysical ?? 0));
-  if (typeof basePhysical === "number") {
-    basePool = Math.max(0, Math.floor(basePhysical));
-  } else if (basePhysical && typeof basePhysical === "object") {
-    for (const [k, raw] of Object.entries(basePhysical)) {
-      const n = Math.floor(Number(raw ?? 0));
-      if (!Number.isFinite(n) || n <= 0) continue;
-      if (k === "flatFromStats") bonusPool += n;
-      else basePool += n;
-    }
-  }
-
-  for (const conv of conversions) {
-    if (!conv) continue;
-    const pct = Number(conv.pct ?? conv.percent ?? 0);
-    if (!Number.isFinite(pct) || pct <= 0) continue;
-    const toType = conv.to || conv.type;
-    if (!toType) continue;
-
-    let pool = basePool;
-    if (!conv.includeBaseOnly) pool += bonusPool;
-    if (pool <= 0) continue;
-
-    let delta = Math.floor(pool * pct);
-    if (!Number.isFinite(delta) || delta <= 0) continue;
-
-    const baseShare = Math.min(delta, basePool);
-    basePool -= baseShare;
-    const bonusShare = delta - baseShare;
-    if (!conv.includeBaseOnly && bonusShare > 0) {
-      bonusPool = Math.max(0, bonusPool - bonusShare);
-    }
-    addPacket(toType, delta);
-  }
-
-  const remainingPhysical = basePool + bonusPool;
-  if (remainingPhysical > 0) addPacket("physical", remainingPhysical);
-
+  const remainingPhys = packets.physical || 0;
   for (const b of brands) {
-    if (!b) continue;
-    const flat = Math.floor(Number(b.flat ?? 0));
-    if (flat > 0) addPacket(b.type || b.damageType || "physical", flat);
-  }
-
-  const mulTyped = (packetMap, getMult) => {
-    for (const t in packetMap) {
-      const m = getMult(t);
-      if (m) packetMap[t] = Math.max(0, Math.floor(packetMap[t] * (1 + m)));
-    }
-  };
-  mulTyped(packets, (t) => S?.modCache?.offense?.affinities?.[t] || 0);
-
-  const onHitBias =
-    S?.modCache?.polarity?.onHitBias?.baseMult ??
-    S?.modCache?.offense?.polarity?.onHitBias?.baseMult ??
-    0;
-  if (onHitBias) {
-    for (const t in packets) packets[t] = Math.floor(packets[t] * (1 + onHitBias));
-  }
-  mulTyped(packets, (t) => S?.statusDerived?.damageDealtMult?.[t] || 0);
-  mulTyped(packets, (t) => D?.statusDerived?.damageTakenMult?.[t] || 0);
-
-  const after = Object.create(null);
-  for (const t in packets) {
-    if (D?.modCache?.defense?.immunities?.has?.(t)) continue;
-    const baseRes =
-      (D?.modCache?.defense?.resists?.[t] || 0) +
-      (D?.statusDerived?.resistDelta?.[t] || 0);
-    const clamped = Math.max(-1, Math.min(0.95, baseRes));
-    after[t] = Math.max(0, Math.floor(packets[t] * (1 - clamped)));
-  }
-
-  const totalDamage = Object.values(after).reduce((a, v) => a + v, 0);
-
-  if (D) {
-    if (Number.isFinite(D.hp)) {
-      D.hp = Math.max(0, Math.floor(D.hp - totalDamage));
-    }
-    if (D.res && Number.isFinite(D.res.hp)) {
-      D.res.hp = Math.max(0, Math.floor(D.res.hp - totalDamage));
+    if (!b?.type) continue;
+    const flat = Math.floor(b.flat || 0);
+    const pct = Math.max(0, b.percent || b.pct || 0);
+    if (!packets[b.type]) packets[b.type] = 0;
+    const add = flat + Math.floor(remainingPhys * pct);
+    if (add > 0) packets[b.type] += add;
+    if (b.onHitStatuses) {
+      ctx.statusAttempts ||= [];
+      ctx.statusAttempts.push(...b.onHitStatuses);
     }
   }
 
-  let applied = [];
-  if (statusAttempts.length) {
-    applied = applyStatuses({ statusAttempts }, S, D, turn) || [];
+  // 4) Affinities (attacker)
+  const aff = attacker.modCache?.offense?.affinities || {};
+  for (const k of Object.keys(packets)) {
+    packets[k] = Math.floor(packets[k] * (1 + (aff[k] || 0)));
   }
 
-  return {
-    packetsBeforeDefense: packets,
-    packetsAfterDefense: after,
-    totalDamage,
-    appliedStatuses: applied,
-  };
+  // 5) Polarity (offense/defense scalars)
+  const polOn = polarityOnHitScalar(attacker.polarity || attacker.modCache?.polarity?.onHitBias || {}, defender.polarity || defender.modCache?.polarity?.defenseBias || {});
+  for (const k of Object.keys(packets)) packets[k] = Math.floor(packets[k] * (1 + polOn));
+
+  // 6) Status-derived (outgoing/incoming)
+  const atkSD = attacker.statusDerived || {};
+  const defSD = defender.statusDerived || {};
+  for (const k of Object.keys(packets)) {
+    const out = (atkSD.damageDealtMult?.[k] || 0);
+    const inn = (defSD.damageTakenMult?.[k] || 0);
+    packets[k] = Math.floor(packets[k] * (1 + out));
+    packets[k] = Math.floor(packets[k] * (1 + inn));
+  }
+
+  // 7) Immunities & Resists & Polarity defense
+  const defRes = defender.modCache?.defense?.resists || {};
+  const defImm = defender.modCache?.defense?.immunities || defender.modCache?.immunities || new Set();
+  const polDef = polarityDefScalar(defender.polarity || defender.modCache?.polarity?.defenseBias || {}, attacker.polarity || attacker.modCache?.polarity?.onHitBias || {});
+  for (const k of Object.keys(packets)) {
+    if (defImm?.has?.(k)) { packets[k] = 0; continue; }
+    const resist = clamp((defRes[k] || 0) + (defSD.resistDelta?.[k] || 0), -0.50, 0.80);
+    packets[k] = Math.floor(packets[k] * (1 - resist));
+    packets[k] = Math.floor(packets[k] * (1 - polDef));
+  }
+
+  // 8) Armour/DR (optional hook; physical-first)
+  // if (defender.armor) { ... }
+
+  // 9) Sum & apply
+  const total = Object.values(packets).reduce((a, b) => a + (b|0), 0);
+  if (defender.resources) {
+    defender.resources.hp = Math.max(0, (defender.resources.hp|0) - total);
+    if (defender.res && defender.res !== defender.resources) defender.res.hp = defender.resources.hp;
+  }
+
+  // 10) Status application
+  const appliedStatuses = applyStatuses(ctx, attacker, defender, ctx.turn);
+
+  return { packetsAfterDefense: packets, totalDamage: total, appliedStatuses };
 }
 
-export function resolveAttackFromContext(ctx) {
-  return doResolveAttack(ctx);
+// Simple polarity scalars (cap ±0.5)
+export function polarityOnHitScalar(att, def) {
+  const ks = ["order","growth","chaos","decay","void"];
+  let sum = 0;
+  for (const k of ks) sum += (att[k] || 0) * (-(def[k] || 0));
+  return clamp(sum, -0.5, 0.5);
 }
-
-export function resolveAttackLegacy(attacker, defender, ctx = {}) {
-  const profile = ctx.profile || {};
-
-  const baseResult = doResolveAttack({
-    attacker,
-    defender,
-    basePhysical: profile.base ?? 0,
-    bonusPhysical: ctx.bonusPhysical ?? 0,
-    conversions: ctx.conversions ?? [],
-    brands: ctx.brands ?? [],
-    statusAttempts: ctx.statusAttempts ?? [],
-    turn: ctx.turn ?? 0,
-  });
-
-  return {
-    ...baseResult,
-    total: baseResult.totalDamage,
-    type: String(profile.type || "physical").toLowerCase(),
-    breakdown: [],
-  };
+export function polarityDefScalar(def, att) {
+  const ks = ["order","growth","chaos","decay","void"];
+  let sum = 0;
+  for (const k of ks) sum += (def[k] || 0) * (-(att[k] || 0));
+  return clamp(sum, -0.5, 0.5);
 }
-
-export const resolveAttack = resolveAttackFromContext;

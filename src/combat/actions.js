@@ -1,7 +1,7 @@
 // src/combat/actions.js
 // @ts-check
 import { apCost, spendAP, startCooldown, isReady } from "./time.js";
-import { resolveAttackLegacy } from "./attack.js";
+import { resolveAttack } from "./attack.js";
 import { performEquippedAttack, pickAttackMode } from "../game/combat-glue.js";
 import {
   BASE_MOVE_AP_COST,
@@ -59,9 +59,14 @@ export function tryAttack(attacker, defender, opts = {}) {
     base: Math.max(MIN_ATTACK_DAMAGE, opts.base ?? DEFAULT_ATTACK_BASE_DAMAGE),
     type: String(opts.type || "physical"),
   };
-  const result = resolveAttackLegacy(attacker, defender, { profile });
+  const { totalDamage } = resolveAttack({
+    attacker,
+    defender,
+    turn: attacker?.turn ?? 0,
+    physicalBase: profile.base,
+  });
 
-  defender.res.hp = Math.max(HEALTH_FLOOR, defender.res.hp - result.total);
+  defender.res.hp = Math.max(HEALTH_FLOOR, defender.res.hp);
 
   const baseCd = Math.max(
     COOLDOWN_MIN_TURNS,

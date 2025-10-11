@@ -1,7 +1,7 @@
 // src/game/combat-glue.js
 // @ts-check
 import { getAttackModesForItem } from "../../js/item-system.js";
-import { resolveAttackLegacy } from "../combat/attack.js";
+import { resolveAttack } from "../combat/attack.js";
 import { EVENT, emit } from "../ui/event-log.js";
 import "../combat/status.registry.js";
 
@@ -82,29 +82,32 @@ export function performEquippedAttack(attacker, defender, weaponItem, distTiles,
   if (!mode) return { ok: false, reason: "no_mode" };
 
   const profile = buildAttackProfileFromMode(attacker, mode);
-  const outcome = resolveAttackLegacy(attacker, defender, { profile });
-
-  // apply damage
   const before = defender.res.hp;
-  defender.res.hp = Math.max(0, defender.res.hp - outcome.total);
+  const outcome = resolveAttack({
+    attacker,
+    defender,
+    turn: attacker?.turn ?? 0,
+    physicalBase: profile.base,
+  });
+  defender.res.hp = Math.max(0, defender.res.hp);
 
   emit(EVENT.COMBAT, {
     who: attacker.name ?? attacker.id,
     vs: defender.name ?? defender.id,
     mode: mode.kind,
     profile,
-    damage: outcome.total,
+    damage: outcome.totalDamage,
     hpBefore: before,
     hpAfter: defender.res.hp,
-    note: outcome.note || "",
-    breakdown: outcome.breakdown || [],
+    packets: outcome.packetsAfterDefense,
+    statuses: outcome.appliedStatuses,
   });
 
   const now =
     typeof performance !== "undefined" && typeof performance.now === "function"
       ? performance.now()
       : Date.now();
-  emit("attack_type_hint", { type: outcome.type, until: now + 250 });
+  emit("attack_type_hint", { type: profile.type || "physical", until: now + 250 });
 
   return { ok: true, outcome, profile, mode };
 }

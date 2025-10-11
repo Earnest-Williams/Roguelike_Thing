@@ -169,6 +169,8 @@ export class Actor {
       stamina: this.base.maxStamina,
       mana: this.base.maxMana,
     };
+    /** @type {Resources} */
+    this.resources = this.res;
 
     /** @type {ChannelingState|null} */
     this.channeling = null;
