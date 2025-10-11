@@ -2,6 +2,7 @@
 // @ts-check
 
 import { FurnitureEffect } from "./effects.js";
+import { resolveStuff } from "../stuff.js";
 
 let NEXT_FURNITURE_ID = 1;
 
@@ -32,7 +33,7 @@ export class Furniture {
    * @param {FurnitureKind[keyof FurnitureKind] | string} params.kind
    * @param {string} params.name
    * @param {FurnitureOrientation[keyof FurnitureOrientation] | string} [params.orientation]
-   * @param {import("../stuff.js").Stuff | null} [params.material]
+   * @param {import("../stuff.js").Stuff | string | null} [params.material]
    * @param {string[]} [params.tags]
    * @param {Record<string, any>} [params.metadata]
    */
@@ -48,11 +49,12 @@ export class Furniture {
     if (!kind) {
       throw new Error("Furniture requires a kind");
     }
+    const resolvedMaterial = resolveStuff(material);
     this.id = id || `furn-${NEXT_FURNITURE_ID++}`;
     this.kind = kind;
     this.name = typeof name === "string" && name.length > 0 ? name : "Furniture";
     this.orientation = orientation || FurnitureOrientation.NONE;
-    this.material = material ?? null;
+    this.material = resolvedMaterial ?? null;
     this.tags = new Set(Array.isArray(tags) ? tags : []);
     this.metadata = metadata && typeof metadata === "object" ? { ...metadata } : {};
     /** @type {Map<string, FurnitureEffect>} */
