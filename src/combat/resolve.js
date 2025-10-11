@@ -53,20 +53,33 @@ function applyConversions(actor, packets) {
   for (const pkt of packets) {
     let remaining = pkt.amount;
     for (const c of convs) {
-      // Validate c.from and c.pct
-      if (
-        typeof c.from !== "string" ||
-        pkt.type !== c.from ||
-        typeof c.pct !== "number" ||
-        !Number.isFinite(c.pct) ||
-        c.pct <= 0 ||
-        c.pct > 1
-      ) {
+      const sourceType =
+        typeof c.from === "string"
+          ? c.from
+          : typeof c.source === "string"
+          ? c.source
+          : null;
+      if (sourceType && pkt.type !== sourceType) {
         continue;
       }
-      const take = Math.floor(pkt.amount * c.pct);
+      const pctRaw =
+        typeof c.pct === "number" && Number.isFinite(c.pct)
+          ? c.pct
+          : typeof c.percent === "number" && Number.isFinite(c.percent)
+          ? c.percent
+          : NaN;
+      if (!Number.isFinite(pctRaw) || pctRaw <= 0 || pctRaw > 1) {
+        continue;
+      }
+      const take = Math.floor(pkt.amount * pctRaw);
       if (take > 0) {
-        out.push({ type: c.to || c.into || pkt.type, amount: take });
+        const toType =
+          typeof c.to === "string"
+            ? c.to
+            : typeof c.into === "string"
+            ? c.into
+            : pkt.type;
+        out.push({ type: toType, amount: take });
         remaining -= take;
       }
     }
@@ -76,14 +89,29 @@ function applyConversions(actor, packets) {
 }
 
 function applyBrands(actor, packets, onHitStatuses) {
-  const brands = actor?.modCache?.offense?.brands || [];
+  const offenseBrands = actor?.modCache?.offense?.brands || [];
+  const extraBrands = Array.isArray(actor?.modCache?.brands)
+    ? actor.modCache.brands.filter((b) => b && b.kind !== "brand")
+    : [];
+  const brands = [...offenseBrands, ...extraBrands];
   return packets.map((pkt) => {
     let amt = pkt.amount;
     for (const b of brands) {
-      if (!b.type || b.type === pkt.type) {
-        if (b.flat) amt += b.flat;
-        if (b.pct) amt = Math.floor(amt * (1 + b.pct));
-      }
+      if (!b) continue;
+      const matchType = typeof b.type === "string" ? b.type : null;
+      if (matchType && matchType !== pkt.type) continue;
+
+      const flatBonus = Number(b.flat ?? b.amount ?? 0) || 0;
+      if (flatBonus) amt += flatBonus;
+
+      const pctBonus =
+        typeof b.pct === "number" && Number.isFinite(b.pct)
+          ? b.pct
+          : typeof b.percent === "number" && Number.isFinite(b.percent)
+          ? b.percent
+          : 0;
+      if (pctBonus) amt = Math.floor(amt * (1 + pctBonus));
+
       if (Array.isArray(b.onHitStatuses)) onHitStatuses.push(...b.onHitStatuses);
     }
     return { ...pkt, amount: amt };
