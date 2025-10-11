@@ -87,6 +87,14 @@ function applyTemporalPayload(cache, payload) {
   }
   if (typeof payload !== "object") return;
   const temporal = cache.temporal;
+  const pickNumber = (...candidates) => {
+    for (const candidate of candidates) {
+      if (candidate === undefined || candidate === null) continue;
+      const value = Number(candidate);
+      if (Number.isFinite(value)) return value;
+    }
+    return null;
+  };
   const addNumber = (field, ...aliases) => {
     for (const alias of [field, ...aliases]) {
       if (payload[alias] === undefined) continue;
@@ -103,6 +111,74 @@ function applyTemporalPayload(cache, payload) {
       if (!Number.isFinite(value)) continue;
       temporal[field] = (temporal[field] ?? 1) * value;
       return;
+    }
+  };
+  const applyTriplet = (source, { delta, pct, mult }) => {
+    if (source === undefined || source === null) return;
+    if (typeof source === "number") {
+      if (delta) temporal[delta] = (temporal[delta] || 0) + source;
+      return;
+    }
+    if (typeof source !== "object") return;
+    if (delta) {
+      const value = pickNumber(
+        source.delta,
+        source.flat,
+        source.add,
+        source.value,
+        source.amount,
+      );
+      if (value !== null) {
+        temporal[delta] = (temporal[delta] || 0) + value;
+      }
+    }
+    if (pct) {
+      const value = pickNumber(source.pct, source.percent, source.rate);
+      if (value !== null) {
+        temporal[pct] = (temporal[pct] || 0) + value;
+      }
+    }
+    if (mult) {
+      const value = pickNumber(source.mult, source.multiplier, source.scale);
+      if (value !== null) {
+        temporal[mult] = (temporal[mult] ?? 1) * value;
+      }
+    }
+  };
+  const applyCooldownPerTag = (value) => {
+    if (!value) return;
+    if (value instanceof Map) {
+      for (const [tag, mult] of value.entries()) {
+        if (!tag) continue;
+        const prev = temporal.cooldownPerTag.get(tag) || 1;
+        temporal.cooldownPerTag.set(tag, prev * (Number(mult) || 1));
+      }
+      return;
+    }
+    if (Array.isArray(value)) {
+      for (const entry of value) {
+        if (!entry) continue;
+        const tag = entry.tag ?? entry.type ?? entry.id;
+        if (!tag) continue;
+        const prev = temporal.cooldownPerTag.get(tag) || 1;
+        const mult = pickNumber(
+          entry.mult,
+          entry.value,
+          entry.amount,
+          entry.pct,
+          entry.percent,
+          entry.multiplier,
+        );
+        temporal.cooldownPerTag.set(tag, prev * (mult ?? 1));
+      }
+      return;
+    }
+    if (typeof value === "object") {
+      for (const tag of Object.keys(value)) {
+        const prev = temporal.cooldownPerTag.get(tag) || 1;
+        const mult = pickNumber(value[tag]);
+        temporal.cooldownPerTag.set(tag, prev * (mult ?? 1));
+      }
     }
   };
 
@@ -126,6 +202,11 @@ function applyTemporalPayload(cache, payload) {
     "moveSpeedPercent",
   );
   multNumber("moveAPMult", "moveAPMult", "moveApMult", "moveApMultiplier", "moveSpeedMult");
+  applyTriplet(payload.moveAP ?? payload.moveAp ?? payload.move, {
+    delta: "moveAPDelta",
+    pct: "moveAPPct",
+    mult: "moveAPMult",
+  });
   addNumber(
     "baseActionAPDelta",
     "baseActionAPDelta",
@@ -150,6 +231,11 @@ function applyTemporalPayload(cache, payload) {
     "baseActionApMultiplier",
     "baseActionSpeedMult",
   );
+  applyTriplet(payload.baseActionAP ?? payload.baseActionAp ?? payload.baseAction, {
+    delta: "baseActionAPDelta",
+    pct: "baseActionAPPct",
+    mult: "baseActionAPMult",
+  });
   addNumber(
     "apGainFlat",
     "apGainFlat",
@@ -169,9 +255,19 @@ function applyTemporalPayload(cache, payload) {
     "apRegenPerTurnPct",
   );
   multNumber("apGainMult", "apGainMult", "apGainMultiplier", "apRegenMult", "apRegenMultiplier");
+  applyTriplet(payload.apGain ?? payload.apRegen, {
+    delta: "apGainFlat",
+    pct: "apGainPct",
+    mult: "apGainMult",
+  });
   addNumber("apCapFlat", "apCapFlat", "apCapDelta", "apCapAdd", "apMaxFlat", "apMaxDelta");
   addNumber("apCapPct", "apCapPct", "apCapPercent", "apMaxPct", "apMaxPercent");
   multNumber("apCapMult", "apCapMult", "apCapMultiplier", "apMaxMultiplier");
+  applyTriplet(payload.apCap ?? payload.apMax, {
+    delta: "apCapFlat",
+    pct: "apCapPct",
+    mult: "apCapMult",
+  });
   addNumber(
     "initiativeFlat",
     "initiativeFlat",
@@ -194,6 +290,26 @@ function applyTemporalPayload(cache, payload) {
     "initiativeMultiplier",
     "initMultiplier",
   );
+  applyTriplet(payload.initiative, {
+    delta: "initiativeFlat",
+    pct: "initiativePct",
+    mult: "initiativeMult",
+  });
+  const actionSpeed = payload.actionSpeed ?? payload.speed;
+  if (actionSpeed && typeof actionSpeed === "object") {
+    const pct = pickNumber(actionSpeed.pct, actionSpeed.percent, actionSpeed.rate);
+    if (pct !== null) {
+      temporal.actionSpeedPct = (temporal.actionSpeedPct || 0) + pct;
+    }
+    const mult = pickNumber(actionSpeed.mult, actionSpeed.multiplier, actionSpeed.scale);
+    if (mult !== null) {
+      temporal.actionSpeedPct = (temporal.actionSpeedPct || 0) + (mult - 1);
+    }
+    const flat = pickNumber(actionSpeed.flat, actionSpeed.add, actionSpeed.value, actionSpeed.amount);
+    if (flat !== null) {
+      temporal.actionSpeedPct = (temporal.actionSpeedPct || 0) + flat;
+    }
+  }
   const cooldownMult = Number(
     payload.cooldownMult ??
     payload.cooldownMultiplier ??
@@ -208,27 +324,24 @@ function applyTemporalPayload(cache, payload) {
     payload.cooldownMultByTag ??
     payload.cooldownMultiplierByTag ??
     payload.cooldownByTag;
-  if (cooldownPerTag instanceof Map) {
-    for (const [tag, mult] of cooldownPerTag.entries()) {
-      if (!tag) continue;
-      const prev = temporal.cooldownPerTag.get(tag) || 1;
-      temporal.cooldownPerTag.set(tag, prev * (Number(mult) || 1));
+  applyCooldownPerTag(cooldownPerTag);
+  if (payload.cooldown && typeof payload.cooldown === "object") {
+    const nestedMult = pickNumber(
+      payload.cooldown.mult,
+      payload.cooldown.multiplier,
+      payload.cooldown.value,
+      payload.cooldown.amount,
+    );
+    if (nestedMult !== null) {
+      temporal.cooldownMult *= nestedMult;
     }
-  } else if (Array.isArray(cooldownPerTag)) {
-    for (const entry of cooldownPerTag) {
-      if (!entry) continue;
-      const tag = entry.tag ?? entry.type ?? entry.id;
-      if (!tag) continue;
-      const prev = temporal.cooldownPerTag.get(tag) || 1;
-      const value = Number(entry.mult ?? entry.value ?? entry.amount ?? entry.pct ?? entry.percent ?? entry.multiplier ?? 0) || 1;
-      temporal.cooldownPerTag.set(tag, prev * value);
-    }
-  } else if (cooldownPerTag && typeof cooldownPerTag === "object") {
-    for (const tag of Object.keys(cooldownPerTag)) {
-      const prev = temporal.cooldownPerTag.get(tag) || 1;
-      const value = Number(cooldownPerTag[tag]) || 1;
-      temporal.cooldownPerTag.set(tag, prev * value);
-    }
+    applyCooldownPerTag(
+      payload.cooldown.perTag ??
+        payload.cooldown.byTag ??
+        payload.cooldown.tags ??
+        payload.cooldown.perType ??
+        payload.cooldown.byType,
+    );
   }
   if (payload.echo !== undefined && payload.echo !== null) {
     temporal.echo = payload.echo;
@@ -253,6 +366,14 @@ function applyResourcePayload(cache, payload) {
   }
   if (typeof payload !== "object") return;
   const resource = cache.resource;
+  const pickNumber = (...candidates) => {
+    for (const candidate of candidates) {
+      if (candidate === undefined || candidate === null) continue;
+      const value = Number(candidate);
+      if (Number.isFinite(value)) return value;
+    }
+    return null;
+  };
   const merge = (bucket, value) => {
     if (!value) return;
     mergeRecord(bucket, value);
@@ -263,6 +384,175 @@ function applyResourcePayload(cache, payload) {
       const value = Number(payload[alias]);
       if (!Number.isFinite(value)) continue;
       bucket[key] = (bucket[key] || 0) + value;
+    }
+  };
+  const applyResourceValue = (bucket, key, value, mode = "add") => {
+    if (!bucket || key === undefined || key === null) return;
+    const name = String(key);
+    if (mode === "mult") {
+      const mult = Number(value);
+      if (!Number.isFinite(mult)) return;
+      bucket[name] = (bucket[name] ?? 1) * mult;
+      return;
+    }
+    const amount = Number(value);
+    if (!Number.isFinite(amount)) return;
+    bucket[name] = (bucket[name] || 0) + amount;
+  };
+  const handleResourceEntry = (key, value, buckets) => {
+    if (key === undefined || key === null) return;
+    const name = String(key);
+    if (typeof value === "number") {
+      if (buckets.flat) {
+        applyResourceValue(buckets.flat, name, value);
+        return;
+      }
+      if (buckets.mult) {
+        applyResourceValue(buckets.mult, name, value, "mult");
+        return;
+      }
+      if (buckets.pct) {
+        applyResourceValue(buckets.pct, name, value);
+        return;
+      }
+      return;
+    }
+    if (!value) return;
+    if (value instanceof Map) {
+      for (const [subKey, subValue] of value.entries()) {
+        handleResourceEntry(subKey, subValue, buckets);
+      }
+      return;
+    }
+    if (Array.isArray(value)) {
+      for (const entry of value) {
+        if (!entry) continue;
+        const res = entry.resource ?? entry.type ?? entry.id ?? name;
+        handleResourceEntry(res, entry, buckets);
+      }
+      return;
+    }
+    if (typeof value === "object") {
+      if (buckets.flat) {
+        const flat = pickNumber(
+          value.flat,
+          value.amount,
+          value.value,
+          value.delta,
+          value.add,
+        );
+        if (flat !== null) applyResourceValue(buckets.flat, name, flat);
+      }
+      if (buckets.pct) {
+        const pct = pickNumber(value.pct, value.percent, value.rate);
+        if (pct !== null) applyResourceValue(buckets.pct, name, pct);
+      }
+      if (buckets.mult) {
+        const mult = pickNumber(value.mult, value.multiplier, value.scale);
+        if (mult !== null) applyResourceValue(buckets.mult, name, mult, "mult");
+      }
+      const nested =
+        value.byResource ??
+        value.perResource ??
+        value.resources ??
+        value.values;
+      if (nested) {
+        applyResourceGroup(nested, buckets);
+      }
+      return;
+    }
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return;
+    if (buckets.flat) applyResourceValue(buckets.flat, name, numeric);
+  };
+  const applyResourceGroup = (group, buckets) => {
+    if (!group) return;
+    if (group instanceof Map) {
+      for (const [key, value] of group.entries()) {
+        handleResourceEntry(key, value, buckets);
+      }
+      return;
+    }
+    if (Array.isArray(group)) {
+      for (const entry of group) {
+        if (!entry) continue;
+        const res = entry.resource ?? entry.type ?? entry.id;
+        if (res !== undefined && res !== null) {
+          handleResourceEntry(res, entry, buckets);
+          continue;
+        }
+        if (typeof entry === "object") {
+          for (const key of Object.keys(entry)) {
+            handleResourceEntry(key, entry[key], buckets);
+          }
+        }
+      }
+      return;
+    }
+    if (typeof group !== "object") {
+      return;
+    }
+    const recurse = [
+      group.byResource,
+      group.perResource,
+      group.resources,
+      group.values,
+    ];
+    for (const candidate of recurse) {
+      if (candidate) applyResourceGroup(candidate, buckets);
+    }
+    const flatGroups = [group.flat, group.add, group.delta, group.amount, group.value];
+    if (buckets.flat) {
+      for (const flat of flatGroups) {
+        if (flat) applyResourceGroup(flat, { flat: buckets.flat });
+      }
+    }
+    if (buckets.pct) {
+      const pctGroups = [group.pct, group.percent, group.rate];
+      for (const pct of pctGroups) {
+        if (pct) applyResourceGroup(pct, { pct: buckets.pct });
+      }
+    }
+    if (buckets.mult) {
+      const multGroups = [group.mult, group.multiplier, group.scale];
+      for (const mult of multGroups) {
+        if (!mult) continue;
+        if (typeof mult === "number") {
+          for (const key of Object.keys(buckets.mult)) {
+            applyResourceValue(buckets.mult, key, mult, "mult");
+          }
+        } else {
+          applyResourceGroup(mult, { mult: buckets.mult });
+        }
+      }
+    }
+    const skipKeys = new Set([
+      "flat",
+      "pct",
+      "percent",
+      "rate",
+      "mult",
+      "multiplier",
+      "scale",
+      "add",
+      "delta",
+      "amount",
+      "value",
+      "byResource",
+      "perResource",
+      "resources",
+      "values",
+      "perTag",
+      "byTag",
+      "tags",
+      "onHit",
+      "onKill",
+      "onSpend",
+      "onSpendRefund",
+    ]);
+    for (const key of Object.keys(group)) {
+      if (skipKeys.has(key)) continue;
+      handleResourceEntry(key, group[key], buckets);
     }
   };
 
@@ -283,6 +573,10 @@ function applyResourcePayload(cache, payload) {
   addResource(resource.maxPct, "hp", "maxHpPct", "maxHPPct", "hpMaxPct", "maxHpPercent");
   addResource(resource.maxPct, "stamina", "maxStaminaPct", "staminaMaxPct", "maxStaminaPercent");
   addResource(resource.maxPct, "mana", "maxManaPct", "manaMaxPct", "maxManaPercent");
+  applyResourceGroup(payload.max, {
+    flat: resource.maxFlat,
+    pct: resource.maxPct,
+  });
 
   merge(resource.regenFlat, payload.regenFlat);
   addResource(
@@ -314,6 +608,10 @@ function applyResourcePayload(cache, payload) {
   addResource(resource.regenPct, "hp", "hpRegenPct", "hpRegenPercent");
   addResource(resource.regenPct, "stamina", "staminaRegenPct", "staminaRegenPercent");
   addResource(resource.regenPct, "mana", "manaRegenPct", "manaRegenPercent");
+  applyResourceGroup(payload.regen ?? payload.regenPerTurn, {
+    flat: resource.regenFlat,
+    pct: resource.regenPct,
+  });
 
   merge(resource.startFlat, payload.startFlat);
   addResource(
@@ -349,6 +647,10 @@ function applyResourcePayload(cache, payload) {
     "startStaminaPercent",
   );
   addResource(resource.startPct, "mana", "startManaPct", "startManaPercent");
+  applyResourceGroup(payload.start, {
+    flat: resource.startFlat,
+    pct: resource.startPct,
+  });
 
   merge(resource.gainFlat, payload.gainFlat ?? payload.onGainFlat);
   addResource(
@@ -381,6 +683,25 @@ function applyResourcePayload(cache, payload) {
   addResource(resource.gainPct, "hp", "hpGainPct", "hpGainPercent", "hpOnHitGainPct");
   addResource(resource.gainPct, "stamina", "staminaGainPct", "staminaGainPercent");
   addResource(resource.gainPct, "mana", "manaGainPct", "manaGainPercent");
+  applyResourceGroup(payload.gain ?? payload.onGain, {
+    flat: resource.gainFlat,
+    pct: resource.gainPct,
+  });
+  const gainEvents = payload.gain ?? payload.onGain;
+  if (gainEvents && typeof gainEvents === "object") {
+    if (!resource.onHitGain && gainEvents.onHit) {
+      resource.onHitGain = gainEvents.onHit;
+    }
+    if (!resource.onKillGain && gainEvents.onKill) {
+      resource.onKillGain = gainEvents.onKill;
+    }
+    if (!resource.onSpendGain && (gainEvents.onSpend ?? gainEvents.onCast)) {
+      resource.onSpendGain = gainEvents.onSpend ?? gainEvents.onCast;
+    }
+    if (!resource.onSpendRefund && gainEvents.onSpendRefund) {
+      resource.onSpendRefund = gainEvents.onSpendRefund;
+    }
+  }
 
   merge(resource.leechFlat, payload.leechFlat);
   addResource(resource.leechFlat, "hp", "hpLeechFlat", "hpLeech");
@@ -391,6 +712,10 @@ function applyResourcePayload(cache, payload) {
   addResource(resource.leechPct, "hp", "hpLeechPct", "hpLeechPercent");
   addResource(resource.leechPct, "stamina", "staminaLeechPct", "staminaLeechPercent");
   addResource(resource.leechPct, "mana", "manaLeechPct", "manaLeechPercent");
+  applyResourceGroup(payload.leech, {
+    flat: resource.leechFlat,
+    pct: resource.leechPct,
+  });
 
   merge(resource.costFlat, payload.costFlat ?? payload.costAdd);
   addResource(resource.costFlat, "hp", "hpCostFlat", "hpCost", "hpCostAdd");
@@ -410,6 +735,10 @@ function applyResourcePayload(cache, payload) {
   if (Number.isFinite(hpCostMult)) {
     resource.costMult.hp = (resource.costMult.hp ?? 1) * hpCostMult;
   }
+  applyResourceGroup(payload.cost, {
+    flat: resource.costFlat,
+    mult: resource.costMult,
+  });
   const applyCostPerTag = (tag, value) => {
     if (!tag) return;
     const key = String(tag);
@@ -435,6 +764,12 @@ function applyResourcePayload(cache, payload) {
     payload.costMultByTag ??
     payload.costMultiplierByTag ??
     payload.costByTag;
+  const nestedCostPerTag =
+    payload.cost?.perTag ??
+    payload.cost?.byTag ??
+    payload.cost?.tags ??
+    payload.cost?.perType ??
+    payload.cost?.byType;
   if (costPerTag instanceof Map) {
     for (const [tag, value] of costPerTag.entries()) {
       applyCostPerTag(tag, value);
@@ -465,6 +800,38 @@ function applyResourcePayload(cache, payload) {
   } else if (costPerTag && typeof costPerTag === "object") {
     for (const tag of Object.keys(costPerTag)) {
       applyCostPerTag(tag, costPerTag[tag]);
+    }
+  }
+  if (nestedCostPerTag instanceof Map) {
+    for (const [tag, value] of nestedCostPerTag.entries()) {
+      applyCostPerTag(tag, value);
+    }
+  } else if (Array.isArray(nestedCostPerTag)) {
+    for (const entry of nestedCostPerTag) {
+      if (!entry) continue;
+      const tag = entry.tag ?? entry.type ?? entry.id;
+      if (!tag) continue;
+      const value =
+        entry.mult ??
+        entry.value ??
+        entry.amount ??
+        entry.pct ??
+        entry.percent ??
+        entry.multiplier ??
+        entry.byResource ??
+        entry.resources ??
+        null;
+      if (value !== null && value !== undefined) {
+        applyCostPerTag(tag, value);
+        continue;
+      }
+      if (entry.cost && typeof entry.cost === "object") {
+        applyCostPerTag(tag, entry.cost);
+      }
+    }
+  } else if (nestedCostPerTag && typeof nestedCostPerTag === "object") {
+    for (const tag of Object.keys(nestedCostPerTag)) {
+      applyCostPerTag(tag, nestedCostPerTag[tag]);
     }
   }
   if (payload.onHitGain && !resource.onHitGain) {
