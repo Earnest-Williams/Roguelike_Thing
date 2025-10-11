@@ -115,7 +115,7 @@ export function resolveAttack(ctx) {
 
   // 9) Sum & apply
   const total = Object.values(packets).reduce((a, b) => a + (b|0), 0);
-  const currentHp = (defenderResources?.hp ?? defender.resources?.hp ?? defender.res?.hp ?? defender.hp ?? 0) | 0;
+  const currentHp = (defenderResources?.hp ?? 0) | 0;
   const nextHp = Math.max(0, currentHp - total);
   syncDefenderHp(nextHp);
 
