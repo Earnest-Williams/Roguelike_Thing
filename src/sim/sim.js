@@ -31,14 +31,26 @@ export function simulate({ a="brigand", b="dummy", N=50, seed=1234 }) {
     const planA = (actor) => { if (!tryAttackEquipped(actor, B, 1)) {/* could move */} };
     const planB = (actor) => { if (!tryAttackEquipped(actor, A, 1)) {/* idle */} };
 
+    let partialTurn = 0;
     while (A.res.hp>0 && B.res.hp>0 && turns<200) {
-      runTurn(A, planA);
-      runTurn(B, planB);
+      const aDefeated = runTurn(A, planA);
+      if (aDefeated || B.res.hp <= 0) {
+        partialTurn = 0.5;
+        break;
+      }
+
+      const bDefeated = runTurn(B, planB);
+      if (bDefeated || A.res.hp <= 0) {
+        turns++;
+        break;
+      }
+
       turns++;
     }
+    const totalTurns = Math.max(turns + partialTurn, 0.5);
     if (A.res.hp>0) winsA++; else winsB++;
     dmg += (A.base.maxHP - A.res.hp) + (B.base.maxHP - B.res.hp);
-    turnsSum += turns; dmgSum += dmg/turns;
+    turnsSum += totalTurns; dmgSum += dmg/totalTurns;
   }
   return {
     winsA, winsB,
