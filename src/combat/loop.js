@@ -14,7 +14,6 @@ export function startTurn(actor) {
   if (!actor.turnFlags || typeof actor.turnFlags !== "object") {
     actor.turnFlags = { moved: false, attacked: false, channeled: false };
   }
-  actor.turnFlags.channeled = false;
   decayPerTurn(actor);
   tickStatuses(actor, actor.turn || 0);
   rebuildDerived(actor);
@@ -72,6 +71,9 @@ export function runTurn(actor, actionPlanner) {
   }
   updateResources(actor);
   regenTurn(actor);
+  if (actor?.turnFlags && typeof actor.turnFlags === "object") {
+    actor.turnFlags.channeled = false;
+  }
   gainAP(actor);
 
   actionPlanner?.(actor);
