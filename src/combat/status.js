@@ -1,30 +1,5 @@
 const REGISTRY = new Map(); // id -> StatusDef
 
-/**
- * @typedef {Object} StatusDerived
- * @property {number} moveAPDelta
- * @property {number} actionSpeedPct
- * @property {number} accuracyFlat
- * @property {number} critChancePct
- * @property {Record<string, number>} damageDealtMult
- * @property {Record<string, number>} damageTakenMult
- * @property {Record<string, number>} resistDelta
- */
-export let StatusDerived;
-
-/**
- * @typedef {Object} StatusDef
- * @property {string} id
- * @property {"refresh"|"add_stacks"|"independent"} [stacking]
- * @property {number} [maxStacks]
- * @property {number} [tickEvery]
- * @property {(args: { target: any, source?: any, stacks: number, turn: number }) => { potency?: number } | void} [onApply]
- * @property {(args: { target: any, stacks: number, potency?: number, turn: number }) => void} [onTick]
- * @property {(args: { target: any, stacks: number, potency?: number, turn: number }) => void} [onExpire]
- * @property {(args: { target: any, stacks: number, potency?: number }) => Partial<StatusDerived> | void} [derive]
- */
-export let StatusDef;
-
 export function registerStatus(def) {
   if (!def?.id) throw new Error("Status must have an id");
   REGISTRY.set(def.id, def);
