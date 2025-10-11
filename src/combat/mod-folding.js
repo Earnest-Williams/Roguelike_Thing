@@ -158,11 +158,11 @@ function foldItemIntoExtended(item, F) {
   }
 
   if (item.polarity) {
-    F.polarity.onHitBias = mergePolBias(F.polarity.onHitBias, item.polarity.onHitBonus);
+    F.polarity.onHitBias = mergePolBias(F.polarity.onHitBias, item.polarity.onHitBias);
     F.polarity.defenseBias = mergePolBias(F.polarity.defenseBias, item.polarity.defenseBias);
     F.offense.polarity.onHitBias = mergePolBias(
       F.offense.polarity.onHitBias,
-      item.polarity.onHitBonus,
+      item.polarity.onHitBias,
     );
     F.defense.polarity.defenseBias = mergePolBias(
       F.defense.polarity.defenseBias,
