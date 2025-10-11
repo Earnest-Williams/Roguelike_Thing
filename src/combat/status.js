@@ -80,6 +80,7 @@ export const defineStatus = registerStatus;
 const DEFAULT_STATUSES = {
   haste: {
     id: "haste",
+    harmful: false,
     stacking: "refresh",
     tickEvery: 1,
     duration: 6,
@@ -90,6 +91,7 @@ const DEFAULT_STATUSES = {
   },
   burning: {
     id: "burning",
+    harmful: true,
     stacking: "add",
     tickEvery: 1,
     duration: 4,
@@ -386,7 +388,12 @@ export function applyOneStatusAttempt({ attacker, defender, attempt, turn, rng }
   const recvMult = Number(dInt.recvDurMult?.[attempt.id] || 0);
   duration *= 1 + inflictMult;
   duration *= 1 + recvMult;
-  if (attacker && attacker === defender) {
+  const buffHint =
+    attempt?.isBuff ??
+    (attempt?.isHarmful === false ? true : undefined) ??
+    (def && def.harmful === false);
+  const isBuff = Boolean(buffHint);
+  if (isBuff) {
     const buffMult = Number(aInt.buffDurMult ?? 1) || 1;
     duration *= buffMult;
   }

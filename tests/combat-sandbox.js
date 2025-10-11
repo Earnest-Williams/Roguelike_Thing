@@ -1,5 +1,5 @@
 import { startTurn, endTurn } from "../src/combat/loop.js";
-import { resolveAttack } from "../src/combat/attack.js";
+import { resolveAttack } from "../src/combat/resolve.js";
 import { applyStatus } from "../src/combat/status.js";
 import { attachLogs } from "../src/combat/debug-log.js";
 
@@ -64,20 +64,32 @@ function coalesceKilled(summary) {
 function step(attacker, defender) {
   attacker.turn = (attacker.turn ?? 0) + 1;
   startTurn(attacker);
-  const r = resolveAttack({ attacker, defender, attack: { type:"fire", base: 8 } });
-  const killed = r.killed ?? (defender.hp <= 0);
-  if (killed) applyStatus(attacker, { id:"haste", baseDuration:2, stacks:1 });
+  const ctx = {
+    attacker,
+    defender,
+    turn: attacker.turn,
+    packets: [{ type: "fire", amount: 8 }],
+  };
+  const r = resolveAttack(ctx);
+  const targetHp =
+    (defender.res && typeof defender.res.hp === "number")
+      ? defender.res.hp
+      : typeof defender.hp === "number"
+      ? defender.hp
+      : 0;
+  const killed = r.killed ?? targetHp <= 0;
+  if (killed) applyStatus(attacker, { id: "haste", baseDuration: 2, stacks: 1 });
   endTurn(attacker);
   return { ...r, killed };
 }
 
-for (let i=0; i<10 && A.hp>0 && B.hp>0; i++) {
+for (let i = 0; i < 10 && A.res.hp > 0 && B.res.hp > 0; i++) {
   const r1 = step(A, B);
-  if (B.hp <= 0) break;
+  if (B.res.hp <= 0) break;
   const r2 = step(B, A);
   const dmgAB = r1.dmg ?? r1.totalDamage ?? 0;
   const dmgBA = r2.dmg ?? r2.totalDamage ?? 0;
-  console.log(`Round ${i+1}: A→B ${dmgAB} (B:${B.hp}) | B→A ${dmgBA} (A:${A.hp})`);
+  console.log(`Round ${i + 1}: A→B ${dmgAB} (B:${B.res.hp}) | B→A ${dmgBA} (A:${A.res.hp})`);
 }
 
-console.log("Final:", { A: A.hp, B: B.hp });
+console.log("Final:", { A: A.res.hp, B: B.res.hp });

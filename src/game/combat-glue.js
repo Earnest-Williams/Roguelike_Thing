@@ -1,8 +1,7 @@
 // src/game/combat-glue.js
 // @ts-check
 import { getAttackModesForItem } from "../../js/item-system.js";
-import { resolveAttack } from "../combat/attack.js";
-import { makeAttackContext } from "../combat/attack-context.js";
+import { resolveAttack } from "../combat/resolve.js";
 import { tryTemporalEcho, applyOnKillHaste } from "../combat/temporal.js";
 import { EVENT, emit } from "../ui/event-log.js";
 import { Sound } from "../ui/sound.js";
@@ -128,31 +127,42 @@ export function performEquippedAttack(attacker, defender, weaponItem, distTiles,
   const damageRoll = mode?.profile?.damage
     ? rollDamage(mode.profile.damage)
     : { total: profile.base ?? 0, rolls: [], bonus: 0 };
-  const physicalBase = Math.max(0, Math.floor(damageRoll.total));
+  const baseAmount = Math.max(0, Math.floor(damageRoll.total));
 
   const statusAttempts = Array.isArray(mode?.profile?.statusAttempts)
-    ? [...mode.profile.statusAttempts]
-    : [];
-  const prePackets = { ...(mode?.profile?.prePackets || {}) };
-  const tags = Array.isArray(mode?.profile?.tags)
-    ? [...mode.profile.tags]
-    : mode?.profile?.tags
-    ? [mode.profile.tags]
+    ? mode.profile.statusAttempts.map((attempt) => ({ ...attempt }))
     : [];
 
-  const ctx = makeAttackContext({
+  const packets = [];
+  const prePackets = mode?.profile?.prePackets;
+  if (prePackets && typeof prePackets === "object") {
+    if (Array.isArray(prePackets)) {
+      for (const entry of prePackets) {
+        if (!entry) continue;
+        const type = entry.type || entry.id;
+        const amount = Number(entry.amount ?? entry.value ?? 0);
+        if (type && Number.isFinite(amount) && amount > 0) {
+          packets.push({ type: String(type), amount: Math.floor(amount) });
+        }
+      }
+    } else {
+      for (const [type, amount] of Object.entries(prePackets)) {
+        const val = Number(amount);
+        if (!type || !Number.isFinite(val) || val <= 0) continue;
+        packets.push({ type: String(type), amount: Math.floor(val) });
+      }
+    }
+  }
+
+  packets.push({ type: profile.type, amount: baseAmount });
+
+  const ctx = {
     attacker,
     defender,
     turn: attacker?.turn ?? 0,
-    prePackets,
-    attempts: statusAttempts,
-  });
-
-  ctx.physicalBase = physicalBase;
-  ctx.physicalBonus = 0;
-  ctx.statusAttempts = ctx.attempts;
-  ctx.tags = tags;
-  ctx.attackKind = mode.kind;
+    packets,
+    statusAttempts,
+  };
 
   const out = resolveAttack(ctx);
   const echoResult = tryTemporalEcho(ctx, out);
@@ -185,7 +195,7 @@ export function performEquippedAttack(attacker, defender, weaponItem, distTiles,
     packets: out.packetsAfterDefense,
     statuses: out.appliedStatuses,
     ctx,
-    breakdown: out.breakdown,
+    breakdown: null,
     echoResult,
   };
   emit(EVENT.COMBAT, payload);
@@ -216,3 +226,4 @@ export function performEquippedAttack(attacker, defender, weaponItem, distTiles,
     echoResult,
   };
 }
+

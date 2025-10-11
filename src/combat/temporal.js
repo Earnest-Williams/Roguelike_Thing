@@ -1,7 +1,7 @@
 // src/combat/temporal.js
 // @ts-check
 
-import { resolveAttack } from "./attack.js";
+import { resolveAttack } from "./resolve.js";
 import { applyStatuses } from "./status.js";
 
 /**
@@ -9,7 +9,7 @@ import { applyStatuses } from "./status.js";
  * Performs another resolveAttack using the same context but with a damage
  * scalar applied so the follow-up hit inherits all downstream hooks.
  *
- * @param {import("./attack.js").AttackContext & { echoing?: boolean, damageScalar?: number }} ctx
+ * @param {{ attacker: any, defender: any, packets: Array<{ type: string, amount: number }>, statusAttempts?: any[], damageScalar?: number, turn?: number, echoing?: boolean }} ctx
  * @param {ReturnType<typeof resolveAttack>} result
  */
 export function tryTemporalEcho(ctx, _result) {
@@ -38,6 +38,7 @@ export function tryTemporalEcho(ctx, _result) {
 
   const echoCtx = {
     ...ctx,
+    packets: Array.isArray(ctx.packets) ? ctx.packets.map((p) => ({ ...p })) : [],
     echoing: true,
     damageScalar,
     statusAttempts: Array.isArray(ctx.statusAttempts)

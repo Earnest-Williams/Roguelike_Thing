@@ -79,6 +79,20 @@ function multiply(into, mults) {
   }
 }
 
+function mergeResourceTagMultipliers(mc, pool, resource) {
+  if (!resource || !resource.spendMultipliers) return;
+  if (!(mc.resource.costPerTag instanceof Map)) {
+    mc.resource.costPerTag = new Map();
+  }
+  const perTag = mc.resource.costPerTag.get(pool) || {};
+  for (const [tag, mult] of Object.entries(resource.spendMultipliers)) {
+    const value = Number(mult);
+    if (!Number.isFinite(value)) continue;
+    perTag[tag] = (perTag[tag] || 1) * value;
+  }
+  mc.resource.costPerTag.set(pool, perTag);
+}
+
 function mergeAttunementRule(into, type, payload) {
   if (!into || !type || !payload) return;
   if (typeof payload !== "object") return;
@@ -427,6 +441,9 @@ function applyResourcePayload(cache, payload) {
   }
   if (typeof payload !== "object") return;
   const resource = cache.resource;
+  if (!(resource.costPerTag instanceof Map)) {
+    resource.costPerTag = new Map();
+  }
   const pickNumber = (...candidates) => {
     for (const candidate of candidates) {
       if (candidate === undefined || candidate === null) continue;
@@ -800,25 +817,44 @@ function applyResourcePayload(cache, payload) {
     flat: resource.costFlat,
     mult: resource.costMult,
   });
+  const ensureCostPool = (pool) => {
+    if (!pool) return null;
+    const key = String(pool);
+    const existing = resource.costPerTag.get(key) || {};
+    resource.costPerTag.set(key, existing);
+    return existing;
+  };
   const applyCostPerTag = (tag, value) => {
     if (!tag) return;
-    const key = String(tag);
-    const prev = resource.costPerTag.get(key) || { hp: 1, stamina: 1, mana: 1 };
     if (typeof value === "number") {
       const mult = Number(value);
-      if (Number.isFinite(mult)) {
-        for (const res of ["hp", "stamina", "mana"]) {
-          prev[res] = (prev[res] ?? 1) * mult;
-        }
+      if (!Number.isFinite(mult)) return;
+      for (const pool of ["hp", "stamina", "mana"]) {
+        const perTag = ensureCostPool(pool);
+        if (!perTag) continue;
+        perTag[tag] = (perTag[tag] || 1) * mult;
       }
-    } else if (value && typeof value === "object") {
-      for (const res of Object.keys(value)) {
-        const mult = Number(value[res]);
+      return;
+    }
+    if (value instanceof Map) {
+      for (const [pool, multValue] of value.entries()) {
+        const mult = Number(multValue);
         if (!Number.isFinite(mult)) continue;
-        prev[res] = (prev[res] ?? 1) * mult;
+        const perTag = ensureCostPool(pool);
+        if (!perTag) continue;
+        perTag[tag] = (perTag[tag] || 1) * mult;
+      }
+      return;
+    }
+    if (value && typeof value === "object") {
+      for (const [pool, multValue] of Object.entries(value)) {
+        const mult = Number(multValue);
+        if (!Number.isFinite(mult)) continue;
+        const perTag = ensureCostPool(pool);
+        if (!perTag) continue;
+        perTag[tag] = (perTag[tag] || 1) * mult;
       }
     }
-    resource.costPerTag.set(key, prev);
   };
   const costPerTag =
     payload.costPerTag ??
@@ -953,6 +989,7 @@ export function foldModsFromEquipment(actor) {
       moveAPDelta: 0,
       moveAPPct: 0,
       moveAPMult: 1,
+      cooldownPct: 0,
       baseActionAPDelta: 0,
       baseActionAPPct: 0,
       baseActionAPMult: 1,
@@ -1078,6 +1115,7 @@ export function foldModsFromEquipment(actor) {
               }
             }
             resourceRules[pool] = current;
+            mergeResourceTagMultipliers(mc, pool, current);
           }
         }
       }
@@ -1133,6 +1171,7 @@ export function foldModsFromEquipment(actor) {
               }
             }
             resourceRules[pool] = current;
+            mergeResourceTagMultipliers(mc, pool, current);
           }
         }
       }
@@ -1186,6 +1225,7 @@ export function foldModsFromEquipment(actor) {
               }
             }
             resourceRules[pool] = current;
+            mergeResourceTagMultipliers(mc, pool, current);
           }
         }
       }
@@ -1426,6 +1466,7 @@ export function foldModsFromEquipment(actor) {
     : [];
 
   mc.temporalHooks = { ...temporalHooks };
+  mc.temporal.cooldownPct = (mc.temporal.cooldownPct || 0) + (temporalHooks.cooldownPct || 0);
   const clonedRules = Object.create(null);
   for (const [pool, rule] of Object.entries(resourceRules)) {
     clonedRules[pool] = {

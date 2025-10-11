@@ -25,6 +25,15 @@ Every element of combat, status, and progression is data-driven and testable —
 - Folded “mod cache” built on equip/unequip ensures clean runtime data.
 - Extensible definitions for new types of bonuses, penalties, and interactions.
 
+### Combat Pipeline
+1. Conversions  
+2. Brands  
+3. Attunement scaling  
+4. Affinities  
+5. Polarity (offense)  
+6. Resistances and Polarity (defense)  
+7. Summation and Status application
+
 ### 🧠 Actor System
 - Actors maintain immutable base stats, mutable current stats, and derived modifiers.
 - Real-time recalculation of status-based changes at each turn.

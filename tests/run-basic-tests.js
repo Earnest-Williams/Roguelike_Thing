@@ -1,6 +1,10 @@
+import "./resolve-order.test.js";
+import "./status-buffduration.test.js";
+import "./temporal-cooldown-tags.test.js";
+
 import { strict as assert } from "node:assert";
 import { foldModsFromEquipment, foldMods } from "../src/combat/mod-folding.js";
-import { resolveAttack } from "../src/combat/attack.js";
+import { resolveAttack } from "../src/combat/resolve.js";
 import { finalAPForAction, finalCooldown, beginCooldown, tickCooldowns, isOnCooldown } from "../src/combat/time.js";
 import { addStatus, tickStatuses, rebuildDerived } from "../src/combat/status.js";
 import { setSeed, roll } from "../src/combat/rng.js";
@@ -31,28 +35,35 @@ function testStatusZeroDuration() {
 function testResolveWithPolarity() {
   const attacker = {
     id: "atk",
-    polarity: { order: 1 },
     statusDerived: {},
     modCache: {
-      offense: { conversions: [], brandAdds: [], affinities: {} },
+      offense: { conversions: [], brandAdds: [], affinities: {}, brands: [] },
       defense: { resists: {}, immunities: new Set() },
-      brands: [],
       immunities: new Set(),
+      affinities: {},
+      polarity: { onHitBias: { all: 0.2 }, defenseBias: {} },
     },
     attunement: { rules: Object.create(null), stacks: Object.create(null) },
   };
   const defender = {
     id: "def",
-    polarity: { chaos: 1 },
-    hp: 100,
     statusDerived: {},
-    modCache: { defense: { resists: { fire: 0.2 }, immunities: new Set(), flatDR: {} }, immunities: new Set() },
-    resources: { hp: 100 },
+    modCache: {
+      defense: { resists: { fire: 0.2 }, immunities: new Set(), flatDR: {}, polarity: { defenseBias: { all: 0.1 } } },
+      immunities: new Set(),
+      resists: { fire: 0.2 },
+      polarity: { defenseBias: { all: 0.1 } },
+    },
+    res: { hp: 200 },
   };
-  const ctx = { attacker, defender, prePackets: { fire: 100 } };
+  const ctx = {
+    attacker,
+    defender,
+    packets: [{ type: "fire", amount: 100 }],
+  };
   const result = resolveAttack(ctx);
-  assert.equal(result.totalDamage, 70, "polarity offense/defense scalars should resolve after resists");
-  assert.equal(defender.hp, 30, "defender hp reduced by total damage");
+  assert.equal(result.totalDamage, 105, "polarity biases and resists should combine deterministically");
+  assert.equal(defender.res.hp, 95, "defender hp reduced by resolved damage");
   console.log("✓ resolveAttack polarity/resist order");
 }
 

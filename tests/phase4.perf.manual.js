@@ -1,6 +1,6 @@
 // tests/phase4.perf.manual.js
 import { performance } from "perf_hooks";
-import { resolveAttack } from "../src/combat/attack.js";
+import { resolveAttack } from "../src/combat/resolve.js";
 import { Actor } from "../src/combat/actor.js";
 
 const a = new Actor({ id:"A", baseStats:{str:10,dex:10,int:10,vit:10,maxHP:20,maxStamina:10,maxMana:5,baseSpeed:1} });
@@ -18,7 +18,7 @@ for (let i=0;i<N;i++) {
       attacker: a,
       defender: b,
       turn: 0,
-      physicalBase: 10,
+      packets: [{ type: "physical", amount: 10 }],
     }).totalDamage;
 }
 const t1 = performance.now();

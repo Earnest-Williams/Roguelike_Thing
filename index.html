@@ -429,6 +429,7 @@
       } from "./js/item-system.js";
       import { CanvasRenderer } from "./js/render/canvas-renderer.js";
       import { RenderController } from "./js/render/controller.js";
+      import { mountDevPanel } from "./js/render/presenters.js";
       import { resolveAttack } from "./src/combat/attack.js";
       import { Sound } from "./src/ui/sound.js";
       import {
@@ -1129,6 +1130,8 @@
         };
 
         const uiHooks = { simState, statusDiv, restartBtn };
+
+        let devPanelMounted = false;
 
         const mapState = {
           width: 0,
@@ -5186,6 +5189,11 @@
             );
           }
           mobManager.add(newPlayer);
+
+          if (!devPanelMounted && typeof document !== "undefined") {
+            mountDevPanel(document.body, newPlayer);
+            devPanelMounted = true;
+          }
 
           // Wearables
           newPlayer.equipment.equipTo(SLOT.Head, makeItem("leather_cap"));

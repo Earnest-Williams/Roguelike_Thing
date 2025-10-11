@@ -309,3 +309,22 @@ function normalizeColor(input) {
   }
   return null;
 }
+
+export function mountDevPanel(root, actor) {
+  const panel = document.createElement("div");
+  panel.className = "dev-panel";
+  panel.style.cssText = "position:absolute;right:8px;top:8px;width:420px;background:#111a;border:1px solid #444;padding:8px;font:12px monospace;color:#ddd;";
+  const area = document.createElement("pre");
+  area.style.cssText = "max-height:320px;overflow:auto;white-space:pre-wrap;";
+  panel.appendChild(area);
+  root.appendChild(panel);
+
+  setInterval(() => {
+    const data = {
+      turn: actor?.logs?.turn?.toArray?.() || [],
+      attack: actor?.logs?.attack?.toArray?.() || [],
+      status: actor?.logs?.status?.toArray?.() || [],
+    };
+    area.textContent = JSON.stringify(data, null, 2);
+  }, 250);
+}
