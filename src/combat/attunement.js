@@ -20,10 +20,7 @@
  */
 export function getStacks(actor, type) {
   if (!actor || typeof type !== "string") return 0;
-  const stacks = actor.attunement?.stacks?.[type];
-  if (!Number.isFinite(stacks)) return 0;
-  const coerced = stacks | 0;
-  return coerced > 0 ? coerced : 0;
+  return actor.attunement?.stacks?.[type] | 0;
 }
 
 /**
@@ -39,9 +36,9 @@ export function setStacks(actor, type, value) {
   const next = Number.isFinite(value) ? (value | 0) : 0;
   if (next <= 0) {
     delete stacks[type];
-  } else {
-    stacks[type] = next;
+    return;
   }
+  stacks[type] = next;
 }
 
 /**
@@ -58,29 +55,30 @@ export function ruleFor(actor, type) {
  * @param {{ packets: Array<{type: string, amount: number}>, attacker: any, target: any }} ctx
  */
 export function applyOutgoingScaling(ctx) {
-  const { attacker, packets } = ctx || {};
-  if (!attacker?.attunement?.rules || !Array.isArray(packets)) return;
+  const packets = Array.isArray(ctx?.packets) ? ctx.packets : null;
+  const attacker = ctx?.attacker;
+  if (!packets || !attacker?.attunement?.rules) return;
 
   const applied = [];
   for (const packet of packets) {
     if (!packet || typeof packet.type !== "string") continue;
-    const amount = Number(packet.amount);
-    if (!Number.isFinite(amount) || amount <= 0) continue;
+    const baseAmount = Number(packet.amount);
+    if (!Number.isFinite(baseAmount) || baseAmount <= 0) continue;
     const rule = ruleFor(attacker, packet.type);
     if (!rule) continue;
     const stacks = getStacks(attacker, packet.type);
     if (!stacks) continue;
     const dmgPct = rule.perStack?.damagePct || 0;
     if (!dmgPct) continue;
-    const scaled = Math.max(0, amount * (1 + dmgPct * stacks));
-    if (scaled === amount) continue;
+    const scaled = Math.max(0, baseAmount * (1 + dmgPct * stacks));
+    if (scaled === baseAmount) continue;
     packet.amount = scaled;
     applied.push({ type: packet.type, stacks, amount: scaled });
   }
 
   if (applied.length) {
-    attacker.logs?.attack?.push?.({ kind: "attune_apply", packets: applied });
     attacker.log?.push?.({ kind: "attune_apply", packets: applied });
+    attacker.logs?.attack?.push?.({ kind: "attune_apply", packets: applied });
   }
 }
 
@@ -97,13 +95,13 @@ export function noteUseGain(attacker, usedTypes) {
     const gain = rule.onUseGain | 0;
     if (!gain) continue;
     const current = getStacks(attacker, type);
-    const rawMax = rule.maxStacks;
-    const cap = Number.isFinite(rawMax) && rawMax > 0 ? rawMax : Number.POSITIVE_INFINITY;
+    const maxStacks = rule.maxStacks | 0;
+    const cap = maxStacks > 0 ? maxStacks : Number.POSITIVE_INFINITY;
     const next = Math.min(cap, current + gain);
     if (next === current) continue;
     setStacks(attacker, type, next);
-    attacker.logs?.attack?.push?.({ kind: "attune_gain", type, stacks: next });
     attacker.log?.push?.({ kind: "attune_gain", type, stacks: next });
+    attacker.logs?.attack?.push?.({ kind: "attune_gain", type, stacks: next });
   }
 }
 
@@ -114,8 +112,8 @@ export function noteUseGain(attacker, usedTypes) {
 export function decayPerTurn(actor) {
   const stacks = actor?.attunement?.stacks;
   if (!stacks) return;
-  for (const [type, count] of Object.entries(stacks)) {
-    const current = count | 0;
+  for (const [type, value] of Object.entries(stacks)) {
+    const current = value | 0;
     if (!current) {
       delete stacks[type];
       continue;
@@ -127,8 +125,8 @@ export function decayPerTurn(actor) {
     }
     const decay = rule.decayPerTurn | 0;
     if (!decay) continue;
-    const next = current - decay;
-    setStacks(actor, type, next > 0 ? next : 0);
+    const next = Math.max(0, current - decay);
+    setStacks(actor, type, next);
   }
 }
 
@@ -152,10 +150,10 @@ export function contributeDerived(actor, derived) {
     if (resistPct) {
       const total = resistPct * stackCount;
       if (total) {
-        derived.resistDelta = derived.resistDelta || Object.create(null);
-        derived.resistDelta[type] = (derived.resistDelta[type] || 0) + total;
         derived.resistsPct = derived.resistsPct || Object.create(null);
         derived.resistsPct[type] = (derived.resistsPct[type] || 0) + total;
+        derived.resistDelta = derived.resistDelta || Object.create(null);
+        derived.resistDelta[type] = (derived.resistDelta[type] || 0) + total;
       }
     }
     const accuracyFlat = perStack.accuracyFlat || 0;
