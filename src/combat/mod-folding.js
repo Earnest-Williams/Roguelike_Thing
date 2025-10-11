@@ -77,34 +77,43 @@ function foldAttunements(actor, cache) {
   const pool = actor.attune?.pool;
   if (!pool) return;
 
-  const thresholds = Object.entries(ATTUNE.thresholds || {})
-    .map(([th, pct]) => [Number(th), Number(pct)])
-    .filter(([th, pct]) => Number.isFinite(th) && Number.isFinite(pct))
-    .sort((a, b) => a[0] - b[0]);
-  if (thresholds.length === 0) return;
-
-  const topTierThreshold = thresholds[thresholds.length - 1][0];
-  const topTierResistBonus = Number(ATTUNE.topTierResistBonus ?? 0.03) || 0;
-
   cache.offense ||= {};
   cache.offense.affinities ||= Object.create(null);
 
   cache.defense ||= {};
   cache.defense.resists ||= Object.create(null);
 
+  const thresholds = [];
+  for (const [th, pct] of Object.entries(ATTUNE.thresholds || {})) {
+    const threshold = Number(th);
+    const percent = Number(pct) || 0;
+    if (!Number.isFinite(threshold)) continue;
+    thresholds.push({ threshold, percent });
+  }
+
+  let topThreshold = null;
+  for (const entry of thresholds) {
+    if (topThreshold === null || entry.threshold > topThreshold) {
+      topThreshold = entry.threshold;
+    }
+  }
+  const topTierResistBonus = Number(ATTUNE.topTierResistBonus);
+  const applyTopTierResist =
+    topThreshold !== null && Number.isFinite(topTierResistBonus) && topTierResistBonus !== 0;
+
   for (const [type, xpRaw] of Object.entries(pool)) {
     const xp = Number(xpRaw);
     if (!Number.isFinite(xp)) continue;
 
     let bonus = 0;
-    for (const [th, pct] of thresholds) {
-      if (xp < th) break;
-      bonus = Math.max(bonus, pct);
+    for (const { threshold, percent } of thresholds) {
+      if (xp < threshold) continue;
+      bonus = Math.max(bonus, percent);
     }
     if (bonus > 0) {
       cache.offense.affinities[type] = (cache.offense.affinities[type] || 0) + bonus;
 
-      if (topTierResistBonus > 0 && xp >= topTierThreshold) {
+      if (applyTopTierResist && topThreshold !== null && xp >= topThreshold) {
         cache.defense.resists[type] =
           (cache.defense.resists[type] || 0) + topTierResistBonus;
       }
