@@ -52,6 +52,8 @@ function mkActor(partial = {}) {
     conversions: [{ to: "fire", percent: 1 }]
   };
   const result = resolveAttack(ctx);
+  assert.ok(result.breakdown, "breakdown should exist");
+  assert.equal(result.breakdown.steps.length >= 3, true, "breakdown should record phases");
   assert.equal(result.totalDamage, 15);
   console.log("✓ resolveAttack order/resist");
 })();
