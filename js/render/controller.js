@@ -2,6 +2,19 @@
 
 import { buildMainViewBatch, buildMinimapPresentation } from "./presenters.js";
 
+let debugVisible = true;
+if (typeof window !== "undefined") {
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "`") {
+      debugVisible = !debugVisible;
+      const panelRoot = globalThis.dp?.root;
+      if (panelRoot instanceof HTMLElement) {
+        panelRoot.style.display = debugVisible ? "block" : "none";
+      }
+    }
+  });
+}
+
 /**
  * @typedef {import("./types.js").ViewTransform} ViewTransform
  */
