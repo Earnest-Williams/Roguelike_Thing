@@ -1,6 +1,5 @@
 // src/combat/mod-folding.js
 // @ts-check
-import { ATTUNE } from "../config.js";
 import { rebuildStatusDerived } from "./status.js";
 
 /**
@@ -73,55 +72,43 @@ function multiply(into, mults) {
   }
 }
 
-function foldAttunements(actor, cache) {
-  const pool = actor.attune?.pool;
-
-  cache.offense ||= {};
-  cache.offense.affinities ||= Object.create(null);
-
-  cache.defense ||= {};
-  cache.defense.resists ||= Object.create(null);
-
-  const applied = {
-    offenseAffinities: Object.create(null),
-    defenseResists: Object.create(null),
-  };
-
-  if (!pool) return applied;
-
-  const thresholds = ATTUNE.thresholds || {};
-  const topTierResistBonus = Number(ATTUNE.topTierResistBonus) || 0;
-  const topTierThreshold = Object.keys(thresholds)
-    .map((th) => Number(th))
-    .filter((value) => Number.isFinite(value))
-    .reduce((max, value) => Math.max(max, value), Number.NEGATIVE_INFINITY);
-
-  for (const [type, xpRaw] of Object.entries(pool)) {
-    const xp = Number(xpRaw);
-    if (!Number.isFinite(xp)) continue;
-
-    let bonus = 0;
-    for (const [th, pct] of Object.entries(thresholds)) {
-      const threshold = Number(th);
-      const pctValue = Number(pct);
-      if (!Number.isFinite(threshold) || !Number.isFinite(pctValue)) continue;
-      if (xp >= threshold) bonus = Math.max(bonus, pctValue);
-    }
-    if (bonus > 0) {
-      cache.offense.affinities[type] = (cache.offense.affinities[type] || 0) + bonus;
-      applied.offenseAffinities[type] = (applied.offenseAffinities[type] || 0) + bonus;
-
-      if (
-        topTierResistBonus > 0 &&
-        Number.isFinite(topTierThreshold) &&
-        xp >= topTierThreshold
-      ) {
-        cache.defense.resists[type] = (cache.defense.resists[type] || 0) + topTierResistBonus;
-      }
-    }
+function mergeAttunementDef(target, source) {
+  if (!source || typeof source !== "object") return;
+  if (source.maxStacks !== undefined || source.max !== undefined || source.maximum !== undefined || source.cap !== undefined) {
+    const maxCandidate = source.maxStacks ?? source.max ?? source.maximum ?? source.cap;
+    const max = Number(maxCandidate);
+    if (Number.isFinite(max)) target.maxStacks = max;
   }
+  if (source.decayPerTurn !== undefined || source.decay !== undefined || source.decayRate !== undefined) {
+    const decayCandidate = source.decayPerTurn ?? source.decay ?? source.decayRate;
+    const decay = Number(decayCandidate);
+    if (Number.isFinite(decay)) target.decayPerTurn = decay;
+  }
+  if (source.onUseGain !== undefined || source.gain !== undefined || source.perUseGain !== undefined || source.useGain !== undefined) {
+    const gainCandidate = source.onUseGain ?? source.gain ?? source.perUseGain ?? source.useGain;
+    const gain = Number(gainCandidate);
+    if (Number.isFinite(gain)) target.onUseGain = gain;
+  }
+}
 
-  return applied;
+function mergeAttunement(into, payload) {
+  if (!payload) return;
+  if (Array.isArray(payload)) {
+    for (const entry of payload) {
+      if (!entry) continue;
+      const type = entry.type ?? entry.id ?? entry.element ?? entry.damageType;
+      if (!type) continue;
+      const target = into[type] || (into[type] = {});
+      mergeAttunementDef(target, entry);
+    }
+    return;
+  }
+  if (typeof payload !== "object") return;
+  for (const [type, value] of Object.entries(payload)) {
+    if (!value || typeof value !== "object") continue;
+    const target = into[type] || (into[type] = {});
+    mergeAttunementDef(target, value);
+  }
 }
 
 /**
@@ -916,6 +903,7 @@ export function foldModsFromEquipment(actor) {
     dmgMult: 1,
     speedMult: 1,
     brands: [],
+    attunement: Object.create(null),
     offense: {
       conversions: [],
       brandAdds: [],
@@ -986,6 +974,9 @@ export function foldModsFromEquipment(actor) {
   for (const slot of Object.keys(equipment)) {
     const item = asItem(equipment[slot]);
     if (!item) continue;
+
+    mergeAttunement(mc.attunement, item.attunement);
+    mergeAttunement(mc.attunement, item.attunements);
 
     // Brands
     if (Array.isArray(item.brands)) {
@@ -1058,6 +1049,13 @@ export function foldModsFromEquipment(actor) {
     if (item.offense?.affinities) {
       mergeRecord(mc.affinities, item.offense.affinities);
       mergeRecord(mc.offense.affinities, item.offense.affinities);
+    }
+
+    if (item.offense?.attunement) {
+      mergeAttunement(mc.attunement, item.offense.attunement);
+    }
+    if (item.defense?.attunement) {
+      mergeAttunement(mc.attunement, item.defense.attunement);
     }
 
     // Resists / Immunities
@@ -1183,6 +1181,21 @@ export function foldModsFromEquipment(actor) {
         applyTemporalPayload(mc, mod.payload.temporal);
       }
 
+      if (mod.attunement) {
+        mergeAttunement(mc.attunement, mod.attunement);
+      }
+      if (mod.payload?.attunement) {
+        mergeAttunement(mc.attunement, mod.payload.attunement);
+      }
+      if (Array.isArray(mod.payloads)) {
+        for (const payload of mod.payloads) {
+          if (!payload) continue;
+          if (payload.attunement) {
+            mergeAttunement(mc.attunement, payload.attunement);
+          }
+        }
+      }
+
       if (mod.kind === "resource") {
         applyResourcePayload(mc, mod);
       }
@@ -1195,8 +1208,9 @@ export function foldModsFromEquipment(actor) {
     }
   }
 
-  const attuneApplied = foldAttunements(actor, mc);
-  mc.__attuneContrib = attuneApplied;
+  mc.offense.brands = Array.isArray(mc.offense.brandAdds)
+    ? mc.offense.brandAdds.slice()
+    : [];
 
   // Clamp resists per plan: [-0.50, +0.80]
   for (const key of Object.keys(mc.defense.resists)) {
@@ -1209,60 +1223,4 @@ export function foldModsFromEquipment(actor) {
   // Rebuild status-derived (equip can change it)
   actor.statusDerived = rebuildStatusDerived(actor);
   return mc;
-}
-
-/**
- * Recomputes attunement-derived modifiers on an existing mod cache.
- * Removes previous attunement contributions before reapplying based on the
- * current attunement pool.
- * @param {import("./actor.js").Actor} actor
- */
-export function refreshAttunementBonuses(actor) {
-  if (!actor?.modCache) return;
-
-  const cache = actor.modCache;
-  const prev = cache.__attuneContrib;
-
-  if (prev?.offenseAffinities && cache.offense?.affinities) {
-    for (const [type, value] of Object.entries(prev.offenseAffinities)) {
-      const current = cache.offense.affinities[type] || 0;
-      const next = current - value;
-      if (Math.abs(next) < 1e-6) {
-        delete cache.offense.affinities[type];
-      } else {
-        cache.offense.affinities[type] = next;
-      }
-    }
-  }
-
-  const touchedResists = new Set();
-  if (prev?.defenseResists && cache.defense?.resists) {
-    for (const [type, value] of Object.entries(prev.defenseResists)) {
-      touchedResists.add(type);
-      const current = cache.defense.resists[type] || 0;
-      const next = current - value;
-      if (Math.abs(next) < 1e-6) {
-        delete cache.defense.resists[type];
-      } else {
-        cache.defense.resists[type] = next;
-      }
-    }
-  }
-
-  const applied = foldAttunements(actor, cache);
-  cache.__attuneContrib = applied;
-
-  if (applied?.defenseResists) {
-    for (const type of Object.keys(applied.defenseResists)) {
-      touchedResists.add(type);
-    }
-  }
-
-  if (cache.defense?.resists) {
-    for (const type of touchedResists) {
-      const value = cache.defense.resists[type];
-      if (value === undefined) continue;
-      cache.defense.resists[type] = Math.max(-0.50, Math.min(0.80, value));
-    }
-  }
 }

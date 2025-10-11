@@ -227,12 +227,8 @@ export class Actor {
       polarity: {},
     };
 
-    // Track per-type attunement XP pools.
-    this.attune = this.attune || {
-      // numeric "XP" per DamageType
-      pool: Object.create(null),
-      lastTurnUpdated: -1,
-    };
+    // Track per-type attunement stack state.
+    this.attunements = this.attunements || Object.create(null);
 
     /** @type {Resources} */
     this.res = {

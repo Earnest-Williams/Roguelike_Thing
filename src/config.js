@@ -32,4 +32,3 @@ export const DEV_CONSOLE_LOOT_TOAST_BORDER_RADIUS_PX = 8;
 export const DEV_CONSOLE_LOOT_TOAST_FONT_SIZE_PX = 12;
 export const DEV_CONSOLE_LOOT_TOAST_BOX_SHADOW = "0 8px 24px rgba(15,23,42,0.35)";
 
-export { ATTUNE } from "./combat/config.js";
