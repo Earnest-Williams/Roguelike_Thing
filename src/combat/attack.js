@@ -141,6 +141,16 @@ export function resolveAttack(ctx) {
     packets[type] = value;
   }
 
+  const damageScalarRaw = Number(ctx?.damageScalar ?? 1);
+  const damageScalar = Number.isFinite(damageScalarRaw)
+    ? Math.max(0, damageScalarRaw)
+    : 1;
+  if (damageScalar !== 1) {
+    for (const type of Object.keys(packets)) {
+      packets[type] = Math.floor(packets[type] * damageScalar);
+    }
+  }
+
   // 8) Armour/DR (optional hook; physical-first)
   // if (defender.armor) { ... }
 
