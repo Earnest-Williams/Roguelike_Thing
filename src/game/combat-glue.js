@@ -3,6 +3,7 @@
 import { getAttackModesForItem } from "../../js/item-system.js";
 import { resolveAttack } from "../combat/attack.js";
 import { EVENT, emit } from "../ui/event-log.js";
+import { Sound } from "../ui/sound.js";
 import "../combat/status-registry.js";
 import { COMBAT_ATTACK_TYPE_HINT_DURATION_MS } from "../config.js";
 
@@ -169,6 +170,7 @@ export function performEquippedAttack(attacker, defender, weaponItem, distTiles,
     ctx,
   };
   emit(EVENT.COMBAT, payload);
+  Sound.playAttack(payload);
 
   const now =
     typeof performance !== "undefined" && typeof performance.now === "function"
