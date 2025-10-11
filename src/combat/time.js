@@ -27,11 +27,8 @@ export function gainAP(actor) {
  */
 export function apCost(actor, baseCostAP) {
   const base = Number(baseCostAP) || 0;
-  const temporal = actor?.modCache?.temporal || {};
-  const sd = actor?.statusDerived || {};
-  const add = (temporal.moveAPDelta || 0) + (sd.moveAPDelta || 0);
-  const mult = 1 + (temporal.actionSpeedPct || 0) + (sd.actionSpeedPct || 0);
-  const raw = (base + add) * mult;
+  const mult = typeof actor?.totalActionCostMult === "function" ? actor.totalActionCostMult() : 1;
+  const raw = base * mult;
   const cost = Number.isFinite(raw) ? raw : base;
   return Math.max(MIN_AP_COST, Math.floor(cost));
 }
