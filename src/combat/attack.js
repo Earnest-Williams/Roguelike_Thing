@@ -4,6 +4,7 @@ import { COMBAT_RESIST_MAX, COMBAT_RESIST_MIN } from "../config.js";
 import { gainAttunement } from "./attunement.js";
 import { applyStatuses } from "./status.js";
 import { polarityDefScalar, polarityOnHitScalar } from "./polarity.js";
+import { logAttackStep } from "./debug-log.js";
 
 /**
  * @typedef {Object} AttackContext
@@ -30,12 +31,33 @@ export function resolveAttack(ctx) {
   }
   const attacker = ctx.attacker;
   const defender = ctx.defender;
+  const attack = ctx.attack;
   const { resource: defenderResources, syncHp: syncDefenderHp } = ensureResourceHandles(defender);
+
+  logAttackStep(attacker, {
+    step: "begin",
+    attack: attack || null,
+    ctx: {
+      defenderId: defender?.id,
+      turn: ctx.turn,
+      physicalBase: ctx.physicalBase,
+      physicalBonus: ctx.physicalBonus,
+      tags: ctx.tags,
+    },
+  });
 
   let basePool = Math.max(0, Math.floor(ctx.physicalBase || 0));
   let bonusPool = Math.max(0, Math.floor(ctx.physicalBonus || 0));
   /** @type {Record<string, number>} */
   const packets = { ...(ctx.prePackets || {}) };
+
+  logAttackStep(attacker, {
+    step: "seed",
+    basePool,
+    bonusPool,
+    packets: { ...packets },
+    dmg: basePool + bonusPool,
+  });
 
   // 1) Conversions (includeBaseOnly, then global)
   const conv = [
@@ -81,6 +103,14 @@ export function resolveAttack(ctx) {
       ctx.statusAttempts.push(...b.onHitStatuses);
     }
   }
+
+  logAttackStep(attacker, {
+    step: "post_conversion_brand",
+    packets: { ...packets },
+    conversions: conv,
+    brands,
+    dmg: Object.values(packets).reduce((sum, value) => sum + (value | 0), 0),
+  });
 
   // 3.5) Global outgoing damage multiplier (applies uniformly to all packets)
   const dmgMultRaw = attacker.modCache?.dmgMult;
@@ -134,6 +164,17 @@ export function resolveAttack(ctx) {
     packets[type] = value;
   }
 
+  const postAffinityTotal = Object.values(packets).reduce((sum, value) => sum + (value | 0), 0);
+  logAttackStep(attacker, {
+    step: "post_affinity_resist",
+    packets: { ...packets },
+    statusDerived: {
+      attacker: atkSD,
+      defender: defSD,
+    },
+    dmg: postAffinityTotal,
+  });
+
   const damageScalarRaw = Number(ctx?.damageScalar ?? 1);
   const damageScalar = Number.isFinite(damageScalarRaw)
     ? Math.max(0, damageScalarRaw)
@@ -148,13 +189,23 @@ export function resolveAttack(ctx) {
   // if (defender.armor) { ... }
 
   // 9) Sum & apply
-  const total = Object.values(packets).reduce((a, b) => a + (b|0), 0);
+  const total = Object.values(packets).reduce((a, b) => a + (b | 0), 0);
   const currentHp = (defenderResources?.hp ?? 0) | 0;
   const nextHp = Math.max(0, currentHp - total);
   syncDefenderHp(nextHp);
 
   // 10) Status application
   const appliedStatuses = applyStatuses(ctx, attacker, defender, ctx.turn);
+
+  logAttackStep(attacker, {
+    step: "result",
+    packets: { ...packets },
+    total,
+    defenderId: defender?.id,
+    defenderHp: defender?.hp,
+    appliedStatuses,
+    dmg: total,
+  });
 
   return { packetsAfterDefense: packets, totalDamage: total, appliedStatuses };
 }

@@ -1,6 +1,8 @@
 // src/combat/status.js
 // @ts-check
 
+import { logStatusEvt } from "./debug-log.js";
+
 const REGISTRY = new Map();
 export const STATUS_REG = Object.create(null);
 
@@ -59,23 +61,62 @@ export function applyStatuses(ctx, attacker, defender, turn) {
         source: attacker?.id,
       };
       defender.statuses.push(instance);
+      logStatusEvt(defender, {
+        action: "apply",
+        id: instance.id,
+        stacks: instance.stacks,
+        potency: instance.potency,
+        endsAtTurn: instance.endsAtTurn,
+        ttl: Math.max(0, instance.endsAtTurn - currentTurn),
+        source: instance.source,
+        turn: currentTurn,
+      });
     } else if (def.stacking === "refresh") {
       instance.endsAtTurn = Math.max(instance.endsAtTurn, endsAtTurn);
       instance.stacks = clampStacks(Math.max(instance.stacks, stacks), def);
       if (def.tickEvery && typeof instance.nextTickAt !== "number") {
         instance.nextTickAt = currentTurn + def.tickEvery;
       }
+      logStatusEvt(defender, {
+        action: "refresh",
+        id: instance.id,
+        stacks: instance.stacks,
+        potency: instance.potency,
+        endsAtTurn: instance.endsAtTurn,
+        ttl: Math.max(0, instance.endsAtTurn - currentTurn),
+        source: instance.source,
+        turn: currentTurn,
+      });
     } else if (def.stacking === "add_stacks") {
       instance.stacks = clampStacks(instance.stacks + stacks, def);
       instance.endsAtTurn = Math.max(instance.endsAtTurn, endsAtTurn);
       if (def.tickEvery && typeof instance.nextTickAt !== "number") {
         instance.nextTickAt = currentTurn + def.tickEvery;
       }
+      logStatusEvt(defender, {
+        action: "add_stacks",
+        id: instance.id,
+        stacks: instance.stacks,
+        potency: instance.potency,
+        endsAtTurn: instance.endsAtTurn,
+        ttl: Math.max(0, instance.endsAtTurn - currentTurn),
+        source: instance.source,
+        turn: currentTurn,
+      });
     }
 
     const result = callHook(def.onApply, defender, instance, { turn: currentTurn, source: attacker });
     if (result && typeof result === "object" && Object.prototype.hasOwnProperty.call(result, "potency")) {
       instance.potency = result.potency;
+      logStatusEvt(defender, {
+        action: "potency",
+        id: instance.id,
+        potency: instance.potency,
+        stacks: instance.stacks,
+        ttl: Math.max(0, instance.endsAtTurn - currentTurn),
+        source: instance.source,
+        turn: currentTurn,
+      });
     }
     applied.push(attempt.id);
   }
@@ -115,6 +156,7 @@ export function tickStatusesAtTurnStart(actor, turn) {
   }
 
   const keep = [];
+  const expired = [];
   for (const instance of actor.statuses) {
     const def = REGISTRY.get(instance.id);
     if (!def) continue;
@@ -130,10 +172,23 @@ export function tickStatusesAtTurnStart(actor, turn) {
       keep.push(instance);
     } else {
       callHook(def.onExpire, actor, instance, { turn });
+      expired.push({
+        id: instance.id,
+        stacks: instance.stacks,
+        potency: instance.potency,
+      });
     }
   }
 
   actor.statuses = keep;
+  if (expired.length) {
+    logStatusEvt(actor, {
+      action: "expire",
+      removed: expired.length,
+      statuses: expired,
+      turn,
+    });
+  }
   rebuildDerived(actor);
 }
 
