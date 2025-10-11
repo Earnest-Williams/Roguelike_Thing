@@ -105,6 +105,8 @@ export class Door extends Furniture {
   } = {}) {
     const resolvedMaterial = resolveStuff(material);
     const normalizedState = normalizeDoorState(state);
+    const baseMetadata =
+      metadata && typeof metadata === "object" ? { ...metadata } : {};
     super({
       id,
       kind: FurnitureKind.DOOR,
@@ -114,7 +116,7 @@ export class Door extends Furniture {
       tags: Array.from(
         new Set(["door", variantId, type, ...(Array.isArray(tags) ? tags : [])]),
       ),
-      metadata: { ...metadata, variantId, type, state: normalizedState },
+      metadata: { ...baseMetadata, variantId, type, state: normalizedState },
     });
     this.type = type;
     this.state = normalizedState;
