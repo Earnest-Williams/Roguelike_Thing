@@ -70,7 +70,7 @@ function step(attacker, defender) {
     physicalBase: 8,
     attack: { type: "fire", base: 8 },
   });
-  const defenderHp = defender.res?.hp ?? defender.resources?.hp ?? defender.hp ?? 0;
+  const defenderHp = defender.hp ?? 0;
   const killed = coalesceKilled(r) || defenderHp <= 0;
   if (killed) applyStatus(attacker, "haste", 1, 2);
   endTurn(attacker);
