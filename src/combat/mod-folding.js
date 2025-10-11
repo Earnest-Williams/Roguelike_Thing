@@ -1,7 +1,7 @@
 // src/combat/mod-folding.js
 // @ts-check
 import { COMBAT_RESIST_MAX, COMBAT_RESIST_MIN } from "../config.js";
-import { rebuildStatusDerived } from "./status.js";
+import { rebuildDerived } from "./status.js";
 
 /**
  * @typedef {import("../../item-system.js").Item} Item
@@ -1228,6 +1228,6 @@ export function foldModsFromEquipment(actor) {
   }
 
   // Rebuild status-derived (equip can change it)
-  actor.statusDerived = rebuildStatusDerived(actor);
+  actor.statusDerived = rebuildDerived(actor);
   return mc;
 }

@@ -10,7 +10,7 @@ import {
   MIN_TOTAL_COOLDOWN_MULTIPLIER,
   SLOT,
 } from "../../constants.js";
-import { rebuildStatusDerived } from "./status.js";
+import { rebuildDerived } from "./status.js";
 
 /**
  * @typedef {import("../../item-system.js").Item} Item
@@ -153,7 +153,7 @@ export class Actor {
     this.statuses = [];
 
     /** @type {import("./status.js").StatusDerived} */
-    this.statusDerived = rebuildStatusDerived(this);
+    this.statusDerived = rebuildDerived(this);
 
     /** @type {ModCache} */
     this.modCache = {

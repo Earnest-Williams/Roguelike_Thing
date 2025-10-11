@@ -2,6 +2,7 @@
 // @ts-check
 
 const REGISTRY = new Map();
+export const STATUS_REG = Object.create(null);
 
 /**
  * Registers a status definition.
@@ -15,6 +16,7 @@ export function defineStatus(def) {
     ...def,
   };
   REGISTRY.set(normalized.id, normalized);
+  STATUS_REG[normalized.id] = normalized;
   return normalized;
 }
 
@@ -78,7 +80,7 @@ export function applyStatuses(ctx, attacker, defender, turn) {
     applied.push(attempt.id);
   }
 
-  defender.statusDerived = rebuildStatusDerived(defender);
+  rebuildDerived(defender);
   return applied;
 }
 
@@ -108,7 +110,7 @@ export function applyStatus(target, id, stacks = 1, duration = 1, source, turn) 
 export function tickStatusesAtTurnStart(actor, turn) {
   if (!actor) return;
   if (!Array.isArray(actor.statuses) || actor.statuses.length === 0) {
-    actor.statusDerived = rebuildStatusDerived(actor);
+    rebuildDerived(actor);
     return;
   }
 
@@ -132,15 +134,15 @@ export function tickStatusesAtTurnStart(actor, turn) {
   }
 
   actor.statuses = keep;
-  actor.statusDerived = rebuildStatusDerived(actor);
+  rebuildDerived(actor);
 }
 
 /**
  * Rebuilds derived aggregates based on current statuses.
  * @param {import("./actor.js").Actor} actor
  */
-export function rebuildStatusDerived(actor) {
-  const out = {
+export function rebuildDerived(actor) {
+  const derived = {
     moveAPDelta: 0,
     actionSpeedPct: 0,
     cooldownMult: 1,
@@ -155,26 +157,42 @@ export function rebuildStatusDerived(actor) {
     regen: { hp: 0, stamina: 0, mana: 0 },
   };
 
-  if (!actor) return out;
-  actor.statusDerived = out;
-
-  for (const instance of actor.statuses || []) {
-    const def = REGISTRY.get(instance.id);
-    if (!def?.derive) continue;
-
-    const payload = { target: actor, stacks: instance.stacks, potency: instance.potency };
-    const res = def.derive.length >= 2
-      ? def.derive(actor, instance)
-      : def.derive(payload);
-
-    if (res && typeof res === "object") mergeDerived(out, res);
+  if (!actor) {
+    return derived;
   }
 
-  out.regen.hp = out.regenFlat.hp;
-  out.regen.stamina = out.regenFlat.stamina;
-  out.regen.mana = out.regenFlat.mana;
-  return out;
+  const statuses = Array.isArray(actor.statuses) ? actor.statuses : [];
+  for (const instance of statuses) {
+    const def = REGISTRY.get(instance.id) || STATUS_REG[instance.id];
+    if (!def?.derive) continue;
+
+    const payload = {
+      target: actor,
+      stacks: instance?.stacks ?? 1,
+      potency: instance?.potency,
+      instance,
+      source: instance?.source,
+    };
+
+    let res;
+    if (typeof def.derive === "function") {
+      res = def.derive.length >= 2 ? def.derive(actor, instance) : def.derive(payload);
+    }
+
+    if (res && typeof res === "object") {
+      mergeDerived(derived, res);
+    }
+  }
+
+  derived.regen.hp = derived.regenFlat.hp;
+  derived.regen.stamina = derived.regenFlat.stamina;
+  derived.regen.mana = derived.regenFlat.mana;
+
+  actor.statusDerived = derived;
+  return derived;
 }
+
+export const rebuildStatusDerived = rebuildDerived;
 
 /**
  * @typedef {Object} StatusAttempt

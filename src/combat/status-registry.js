@@ -67,11 +67,12 @@ defineStatus({
   id: "slowed",
   stacking: "refresh",
   maxStacks: 1,
-  derive(actor, instance) {
-    const stacks = Math.max(1, instance?.stacks ?? 1);
-    const sd = actor.statusDerived || (actor.statusDerived = {});
-    sd.actionSpeedPct = (sd.actionSpeedPct || 0) + STATUS_SLOWED_ACTION_SPEED_PENALTY_PER_STACK * stacks;
-    sd.moveAPDelta = (sd.moveAPDelta || 0) + STATUS_SLOWED_MOVE_AP_DELTA;
+  derive({ stacks }) {
+    const amount = Math.max(1, stacks ?? 1);
+    return {
+      actionSpeedPct: STATUS_SLOWED_ACTION_SPEED_PENALTY_PER_STACK * amount,
+      moveAPDelta: STATUS_SLOWED_MOVE_AP_DELTA,
+    };
   },
 });
 
@@ -80,10 +81,11 @@ defineStatus({
   id: "stunned",
   stacking: "refresh",
   maxStacks: 1,
-  derive(actor, instance) {
-    const stacks = Math.max(1, instance?.stacks ?? 1);
-    const sd = actor.statusDerived || (actor.statusDerived = {});
-    sd.actionSpeedPct = (sd.actionSpeedPct || 0) + STATUS_STUNNED_ACTION_SPEED_PENALTY_PER_STACK * stacks;
+  derive({ stacks }) {
+    const amount = Math.max(1, stacks ?? 1);
+    return {
+      actionSpeedPct: STATUS_STUNNED_ACTION_SPEED_PENALTY_PER_STACK * amount,
+    };
   },
 });
 
@@ -92,9 +94,10 @@ defineStatus({
   id: "haste",
   stacking: "refresh",
   maxStacks: 1,
-  derive(actor, instance) {
-    const stacks = Math.max(1, instance?.stacks ?? 1);
-    const sd = actor.statusDerived || (actor.statusDerived = {});
-    sd.actionSpeedPct = (sd.actionSpeedPct || 0) - STATUS_HASTE_ACTION_SPEED_BONUS_PER_STACK * stacks;
+  derive({ stacks }) {
+    const amount = Math.max(1, stacks ?? 1);
+    return {
+      actionSpeedPct: -STATUS_HASTE_ACTION_SPEED_BONUS_PER_STACK * amount,
+    };
   },
 });
