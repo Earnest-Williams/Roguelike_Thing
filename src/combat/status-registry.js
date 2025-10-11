@@ -9,20 +9,21 @@ import {
   STATUS_SLOWED_MOVE_AP_DELTA,
   STATUS_STUNNED_ACTION_SPEED_PENALTY_PER_STACK,
 } from "../config.js";
-import { defineStatus } from "./status.js";
+import { registerStatus } from "./status.js";
 
 function ensureResources(actor) {
   if (!actor) return { hp: 0 };
   if (actor.resources && typeof actor.resources.hp === "number") return actor.resources;
-  const hp = typeof actor?.res?.hp === "number"
+  const hp = Number.isFinite(actor?.res?.hp)
     ? actor.res.hp
-    : typeof actor?.hp === "number"
+    : Number.isFinite(actor?.hp)
     ? actor.hp
     : 0;
-  actor.resources = { ...(actor.resources || {}), hp };
+  const bucket = { ...(actor.resources || {}), hp };
+  actor.resources = bucket;
   if (actor.res) actor.res.hp = hp;
   actor.hp = hp;
-  return actor.resources;
+  return bucket;
 }
 
 function loseHP(actor, amount) {
@@ -34,70 +35,66 @@ function loseHP(actor, amount) {
   actor.hp = next;
 }
 
-// burn: tick HP
-defineStatus({
+registerStatus({
   id: "burn",
-  stacking: "add_stacks",
-  maxStacks: STATUS_BURN_MAX_STACKS,
+  stacking: "add",
   tickEvery: 1,
-  onTick(actor, instance) {
-    const stacks = Math.max(1, instance?.stacks ?? 1);
-    loseHP(actor, STATUS_BURN_BASE_DAMAGE + stacks);
+  duration: STATUS_BURN_MAX_STACKS,
+  onTick(ctx) {
+    const stacks = Math.max(1, ctx.stacks);
+    loseHP(ctx.target, STATUS_BURN_BASE_DAMAGE + stacks);
   },
 });
 
-// poisoned: steady HP loss per stack
-defineStatus({
+registerStatus({
   id: "poisoned",
-  stacking: "independent",
-  maxStacks: Infinity,
+  stacking: "add",
   tickEvery: 1,
-  onApply(_actor, instance) {
-    const potency = Math.max(1, instance?.potency ?? instance?.stacks ?? 1);
-    return { potency };
+  duration: STATUS_BURN_MAX_STACKS,
+  onApply(ctx) {
+    const potency = Math.max(1, ctx.potency || ctx.stacks);
+    if (ctx.status) ctx.status.potency = potency;
   },
-  onTick(actor, instance) {
-    const potency = Math.max(1, instance?.potency ?? instance?.stacks ?? 1);
-    loseHP(actor, potency);
+  onTick(ctx) {
+    const potency = Math.max(1, ctx.status?.potency ?? ctx.stacks);
+    loseHP(ctx.target, potency);
   },
 });
 
-// slowed: action speed + move AP
-defineStatus({
+registerStatus({
   id: "slowed",
-  stacking: "refresh",
-  maxStacks: 1,
-  derive({ stacks }) {
-    const amount = Math.max(1, stacks ?? 1);
-    return {
-      actionSpeedPct: STATUS_SLOWED_ACTION_SPEED_PENALTY_PER_STACK * amount,
-      moveAPDelta: STATUS_SLOWED_MOVE_AP_DELTA,
-    };
+  stacking: "max",
+  duration: 3,
+  derive(ctx, d) {
+    const stacks = Math.max(1, ctx.stacks);
+    d.temporal.actionSpeedPct = (d.temporal.actionSpeedPct || 0)
+      + STATUS_SLOWED_ACTION_SPEED_PENALTY_PER_STACK * stacks;
+    d.temporal.moveAPDelta = (d.temporal.moveAPDelta || 0) + STATUS_SLOWED_MOVE_AP_DELTA;
+    return d;
   },
 });
 
-// stunned: hard stop via huge action cost
-defineStatus({
+registerStatus({
   id: "stunned",
-  stacking: "refresh",
-  maxStacks: 1,
-  derive({ stacks }) {
-    const amount = Math.max(1, stacks ?? 1);
-    return {
-      actionSpeedPct: STATUS_STUNNED_ACTION_SPEED_PENALTY_PER_STACK * amount,
-    };
+  stacking: "max",
+  duration: 2,
+  derive(ctx, d) {
+    const stacks = Math.max(1, ctx.stacks);
+    d.temporal.actionSpeedPct = (d.temporal.actionSpeedPct || 0)
+      + STATUS_STUNNED_ACTION_SPEED_PENALTY_PER_STACK * stacks;
+    return d;
   },
 });
 
-// haste: faster actions
-defineStatus({
-  id: "haste",
+registerStatus({
+  id: "haste_bonus",
   stacking: "refresh",
-  maxStacks: 1,
-  derive({ stacks }) {
-    const amount = Math.max(1, stacks ?? 1);
-    return {
-      actionSpeedPct: -STATUS_HASTE_ACTION_SPEED_BONUS_PER_STACK * amount,
-    };
+  duration: 4,
+  derive(ctx, d) {
+    const stacks = Math.max(1, ctx.stacks);
+    d.temporal.actionSpeedPct = (d.temporal.actionSpeedPct || 0)
+      - STATUS_HASTE_ACTION_SPEED_BONUS_PER_STACK * stacks;
+    return d;
   },
 });
+

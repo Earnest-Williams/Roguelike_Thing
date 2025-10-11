@@ -8,6 +8,91 @@ import { polarityDefScalar, polarityOnHitScalar } from "./polarity.js";
 import { logAttackStep } from "./debug-log.js";
 import { makeAttackContext } from "./attack-context.js";
 import { eventGain } from "./resources.js";
+import { POLAR_BIAS } from "./constants.js";
+import { logEvent } from "./debug.js";
+
+function applyPolarityBias(attacker, defender, packet) {
+  if (!packet || !Number.isFinite(packet.amount)) return packet?.amount ?? 0;
+  const aPol = attacker?.polarity?.type || attacker?.polarity;
+  const dPol = defender?.polarity?.type || defender?.polarity;
+  const aKey = typeof aPol === "string" ? aPol : attacker?.polarity?.current;
+  const dKey = typeof dPol === "string" ? dPol : defender?.polarity?.current;
+  const bias = (POLAR_BIAS[aKey]?.[dKey]) || 0;
+  return packet.amount * (1 + bias);
+}
+
+function gatherResist(source, type) {
+  if (!source) return 0;
+  if (source instanceof Map) {
+    const value = source.get(type);
+    return Number.isFinite(value) ? value : 0;
+  }
+  if (typeof source === "object") {
+    const value = source[type];
+    return Number.isFinite(value) ? value : 0;
+  }
+  return 0;
+}
+
+function gatherFlat(source, type) {
+  if (!source) return 0;
+  if (source instanceof Map) {
+    const value = source.get(type);
+    return Number.isFinite(value) ? value : 0;
+  }
+  if (typeof source === "object") {
+    const value = source[type];
+    return Number.isFinite(value) ? value : 0;
+  }
+  return 0;
+}
+
+function hasImmunity(defender, type) {
+  const candidates = [
+    defender?.immunities,
+    defender?.modCache?.immunities,
+    defender?.modCache?.defense?.immunities,
+  ];
+  for (const source of candidates) {
+    if (!source) continue;
+    if (source instanceof Set && source.has(type)) return true;
+    if (Array.isArray(source) && source.includes(type)) return true;
+    if (typeof source === "object" && source[type]) return true;
+  }
+  return false;
+}
+
+function applyDefenses(defender, packet, derived) {
+  if (!packet) return 0;
+  const type = packet.type;
+  let amount = Number(packet.amount) || 0;
+  if (amount <= 0) return 0;
+  if (hasImmunity(defender, type)) return 0;
+
+  const resists = [
+    defender?.resistsPct,
+    defender?.modCache?.resists,
+    defender?.modCache?.defense?.resists,
+    derived?.resistsPct,
+    derived?.resistDelta,
+  ];
+  let resistPct = 0;
+  for (const src of resists) {
+    resistPct += gatherResist(src, type);
+  }
+  resistPct = clamp(resistPct, COMBAT_RESIST_MIN, COMBAT_RESIST_MAX);
+  amount *= Math.max(0, 1 - resistPct);
+
+  const flats = [
+    defender?.flatDR,
+    defender?.modCache?.defense?.flatDR,
+    derived?.flatDR,
+  ];
+  let flat = 0;
+  for (const src of flats) flat += gatherFlat(src, type);
+  amount = Math.max(0, amount - flat);
+  return Math.max(0, Math.floor(amount));
+}
 
 /**
  * @typedef {Object} AttackContext
@@ -195,35 +280,39 @@ export function resolveAttack(ctx) {
   const polOff = polarityOnHitScalar(attacker, defender);
   const polDef = polarityDefScalar(defender, attacker);
 
-  // 7) Immunities & Resists
-  const defRes = defender.modCache?.defense?.resists || {};
-  const defImm = defender.modCache?.defense?.immunities || defender.modCache?.immunities || new Set();
-  const usedTypes = new Set();
-  for (const type of Object.keys(packets)) {
-    if (defImm?.has?.(type)) { packets[type] = 0; continue; }
-    let value = packets[type];
-    const out = (atkSD.damageDealtMult?.[type] || 0);
-    const inn = (defSD.damageTakenMult?.[type] || 0);
-    if (out) value = Math.floor(value * (1 + out));
-    if (inn) value = Math.floor(value * (1 + inn));
-    value = Math.floor(value * (1 + polOff) * (1 - polDef));
-    const resist = clamp(
-      (defRes[type] || 0) + (defSD.resistDelta?.[type] || 0),
-      COMBAT_RESIST_MIN,
-      COMBAT_RESIST_MAX,
-    );
-    if (resist) value = Math.floor(value * (1 - resist));
-    value = Math.max(0, Math.floor(value));
-    if (value > 0) usedTypes.add(type);
-    packets[type] = value;
+  const packetList = Object.entries(packets).map(([type, amount]) => ({
+    type,
+    amount: Math.max(0, Number(amount) || 0),
+  }));
+
+  for (const packet of packetList) {
+    const type = packet.type;
+    let value = packet.amount;
+    const out = atkSD.damageDealtMult?.[type] || 0;
+    const inn = defSD.damageTakenMult?.[type] || 0;
+    if (out) value *= 1 + out;
+    if (inn) value *= 1 + inn;
+    value *= Math.max(0, 1 + polOff);
+    value *= Math.max(0, 1 - polDef);
+    packet.amount = applyPolarityBias(attacker, defender, { type, amount: value });
   }
 
-  breakdown.steps.push({ stage: "defense", packets: { ...packets } });
+  const usedTypes = new Set();
+  const defensePackets = Object.create(null);
+  for (const packet of packetList) {
+    const reduced = applyDefenses(defender, packet, defSD);
+    if (reduced > 0) {
+      defensePackets[packet.type] = (defensePackets[packet.type] || 0) + reduced;
+      usedTypes.add(packet.type);
+    }
+  }
 
-  const postAffinityTotal = Object.values(packets).reduce((sum, value) => sum + (value | 0), 0);
+  breakdown.steps.push({ stage: "defense", packets: { ...defensePackets } });
+
+  const postAffinityTotal = Object.values(defensePackets).reduce((sum, value) => sum + (value | 0), 0);
   logAttackStep(attacker, {
     step: "post_affinity_resist",
-    packets: { ...packets },
+    packets: { ...defensePackets },
     statusDerived: {
       attacker: atkSD,
       defender: defSD,
@@ -236,18 +325,18 @@ export function resolveAttack(ctx) {
     ? Math.max(0, damageScalarRaw)
     : 1;
   if (damageScalar !== 1) {
-    for (const type of Object.keys(packets)) {
-      packets[type] = Math.floor(packets[type] * damageScalar);
+    for (const type of Object.keys(defensePackets)) {
+      defensePackets[type] = Math.floor(defensePackets[type] * damageScalar);
     }
   }
 
-  breakdown.postPackets = { ...packets };
+  breakdown.postPackets = { ...defensePackets };
 
   // 8) Armour/DR (optional hook; physical-first)
   // if (defender.armor) { ... }
 
   // 9) Sum & apply
-  const total = Object.values(packets).reduce((a, b) => a + (b | 0), 0);
+  const total = Object.values(defensePackets).reduce((a, b) => a + (b | 0), 0);
   const currentHp = (defenderResources?.hp ?? 0) | 0;
   const nextHp = Math.max(0, currentHp - total);
   syncDefenderHp(nextHp);
@@ -267,6 +356,7 @@ export function resolveAttack(ctx) {
 
   if (total > 0 && usedTypes.size) {
     noteUseGain(attacker, usedTypes);
+    logEvent(attacker, "attack_out", { packets: defensePackets, total });
   }
 
   // 10) Status application
@@ -276,7 +366,7 @@ export function resolveAttack(ctx) {
 
   logAttackStep(attacker, {
     step: "result",
-    packets: { ...packets },
+    packets: { ...defensePackets },
     total,
     defenderId: defender?.id,
     defenderHp: defender?.hp,
@@ -287,7 +377,7 @@ export function resolveAttack(ctx) {
   breakdown.totalDamage = total;
 
   return {
-    packetsAfterDefense: packets,
+    packetsAfterDefense: defensePackets,
     totalDamage: total,
     appliedStatuses,
     breakdown,

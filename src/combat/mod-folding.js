@@ -3,6 +3,11 @@
 import { COMBAT_RESIST_MAX, COMBAT_RESIST_MIN } from "../config.js";
 import { rebuildDerived } from "./status.js";
 
+const SLOT_RULES = {
+  offhand: ["parryPct"],
+  head: ["sightRange"],
+};
+
 /**
  * @typedef {import("../../item-system.js").Item} Item
  * @typedef {import("../../item-system.js").ItemStack} ItemStack
@@ -939,6 +944,7 @@ export function foldModsFromEquipment(actor) {
     defense: {
       resists: Object.create(null),
       immunities: new Set(),
+      flatDR: Object.create(null),
       polarity: { defenseBias: {} },
     },
     temporal: {
@@ -997,9 +1003,19 @@ export function foldModsFromEquipment(actor) {
   actor.polarity = {};
 
   const equipment = actor.equipment || {};
-  for (const slot of Object.keys(equipment)) {
+  const sortedSlots = Object.keys(equipment).sort((a, b) =>
+    String(a).localeCompare(String(b)),
+  );
+  for (const slot of sortedSlots) {
     const item = asItem(equipment[slot]);
     if (!item) continue;
+
+    const slotKey = typeof slot === "string" ? slot.toLowerCase() : String(slot).toLowerCase();
+    const allowed = SLOT_RULES[slotKey] || SLOT_RULES[slot] || null;
+    const allowField = (field) => {
+      if (!allowed) return true;
+      return allowed.includes(field);
+    };
 
     mergeAttunementPayload(mc.attunementRules, item.attunement);
     mergeAttunementPayload(mc.attunementRules, item.attunements);
@@ -1247,6 +1263,25 @@ export function foldModsFromEquipment(actor) {
       }
     }
 
+    if (item.defense?.flatDR && allowField("flatDR")) {
+      for (const [type, value] of Object.entries(item.defense.flatDR)) {
+        const amount = Number(value) || 0;
+        if (!amount) continue;
+        mc.defense.flatDR[type] = (mc.defense.flatDR[type] || 0) + amount;
+      }
+    }
+
+    if (item.defense && typeof item.defense === "object") {
+      for (const [field, value] of Object.entries(item.defense)) {
+        if (field === "resists" || field === "immunities" || field === "attunement" || field === "flatDR") {
+          continue;
+        }
+        if (!Number.isFinite(value)) continue;
+        if (!allowField(field)) continue;
+        mc.defense[field] = (mc.defense[field] || 0) + Number(value);
+      }
+    }
+
     // Scalar offense/tempo knobs
     const dmgMult = Number(item.dmgMult);
     if (Number.isFinite(dmgMult)) {
@@ -1460,6 +1495,10 @@ export function foldModsFromEquipment(actor) {
       COMBAT_RESIST_MIN,
       Math.min(COMBAT_RESIST_MAX, mc.resists[key]),
     );
+  }
+
+  if (Number.isFinite(mc.temporal.actionSpeedPct)) {
+    mc.temporal.actionSpeedPct = Math.min(0.75, mc.temporal.actionSpeedPct);
   }
 
   actor.attunement = actor.attunement || {};

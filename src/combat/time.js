@@ -112,40 +112,45 @@ export function spendAP(actor, costAP) {
  * We model this by accumulating fractional progress.
  * @param {import("./actor.js").Actor} actor
  */
+export function beginCooldown(actor, actionId, baseCooldown) {
+  if (!actor || !actionId) return;
+  const turns = finalCooldown(actor, baseCooldown);
+  if (turns <= 0) {
+    if (actor.cooldowns) delete actor.cooldowns[actionId];
+    return;
+  }
+  const store = actor.cooldowns || (actor.cooldowns = Object.create(null));
+  store[actionId] = Math.max(0, Math.floor(turns));
+}
+
 export function tickCooldowns(actor) {
-  if (!actor || !(actor.cooldowns instanceof Map)) return;
-  const turn = actor.turn || 0;
-  for (const [key, readyAt] of actor.cooldowns.entries()) {
-    if (turn >= readyAt) actor.cooldowns.delete(key);
+  if (!actor?.cooldowns) return;
+  const keys = Object.keys(actor.cooldowns);
+  for (const key of keys) {
+    const value = Number(actor.cooldowns[key]);
+    if (!Number.isFinite(value)) {
+      delete actor.cooldowns[key];
+      continue;
+    }
+    const next = value - 1;
+    if (next > 0) {
+      actor.cooldowns[key] = next;
+    } else {
+      delete actor.cooldowns[key];
+    }
   }
 }
 
-/**
- * Starts a cooldown in turns, scaled by cooldownMult (longer if >1).
- * @param {import("./actor.js").Actor} actor
- * @param {string} key
- * @param {number} baseTurns
- */
+export function isOnCooldown(actor, actionId) {
+  if (!actor?.cooldowns) return false;
+  const value = actor.cooldowns[actionId];
+  return Number.isFinite(value) && value > 0;
+}
+
 export function startCooldown(actor, key, baseTurns) {
-  if (!actor || !key) return;
-  const turns = finalCooldown(actor, baseTurns);
-  actor.cooldowns ||= new Map();
-  const currentTurn = actor.turn || 0;
-  actor.cooldowns.set(key, currentTurn + turns);
+  beginCooldown(actor, key, baseTurns);
 }
 
-/**
- * Returns true if an ability/key is ready (cooldown == 0).
- * @param {import("./actor.js").Actor} actor
- * @param {string} key
- */
 export function isReady(actor, key) {
-  if (!actor) return true;
-  if (!actor.cooldowns || !(actor.cooldowns instanceof Map)) {
-    return true;
-  }
-  const readyAt = actor.cooldowns.get(key);
-  if (readyAt === undefined) return true;
-  const turn = actor.turn || 0;
-  return turn >= readyAt;
+  return !isOnCooldown(actor, key);
 }

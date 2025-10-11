@@ -3,248 +3,322 @@
 
 import { contributeDerived } from "./attunement.js";
 import { logStatusEvt } from "./debug-log.js";
+import { EXTRA_STATUSES } from "../content/statuses.js";
 
-const REGISTRY = new Map();
-export const STATUS_REG = Object.create(null);
+/** @typedef {{
+ *   id: string,
+ *   stacking?: "add"|"max"|"replace"|"refresh",
+ *   tickEvery?: number,
+ *   duration?: number,
+ *   onApply?: (ctx: StatusHookContext) => void,
+ *   onTick?: (ctx: StatusHookContext) => void,
+ *   onRemove?: (ctx: StatusHookContext) => void,
+ *   derive?: (ctx: StatusHookContext, derived: StatusDerived) => StatusDerived | void
+ * }} StatusDefinition */
+
+/** @typedef {{
+ *   target: any,
+ *   stacks: number,
+ *   potency: number,
+ *   turn?: number,
+ *   source?: any,
+ *   status?: StatusInstance
+ * }} StatusHookContext */
+
+/** @typedef {{
+ *   id: string,
+ *   stacks: number,
+ *   potency: number,
+ *   nextTickAt: number,
+ *   endsAt: number,
+ *   source?: any
+ * }} StatusInstance */
+
+/** @typedef {{
+ *   temporal: Record<string, number>,
+ *   offense: Record<string, number>,
+ *   defense: Record<string, number>,
+ *   resistsPct: Record<string, number>,
+ *   flatDR: Record<string, number>,
+ *   regenFlat: Record<string, number>,
+ *   regenPct: Record<string, number>,
+ *   regen: Record<string, number>,
+ *   damageDealtMult: Record<string, number>,
+ *   damageTakenMult: Record<string, number>,
+ *   costMult: Record<string, number>,
+ *   actionSpeedPct?: number,
+ *   moveAPDelta?: number,
+ *   cooldownPct?: number,
+ *   cooldownMult?: number,
+ *   resistDelta?: Record<string, number>
+ * }} StatusDerived */
+
+const _registry = new Map();
+export const STATUS_REGISTRY = Object.create(null);
 
 /**
- * Registers a status definition.
- * @param {StatusDef} def
+ * Register or overwrite a status definition.
+ * @param {StatusDefinition} def
  */
-export function defineStatus(def) {
-  if (!def?.id) throw new Error("Status must have an id");
+export function registerStatus(def) {
+  if (!def || typeof def.id !== "string") {
+    throw new Error("registerStatus requires an id");
+  }
   const normalized = {
-    stacking: "independent",
-    maxStacks: Infinity,
+    stacking: "add",
+    tickEvery: 0,
+    duration: 0,
     ...def,
   };
-  REGISTRY.set(normalized.id, normalized);
-  STATUS_REG[normalized.id] = normalized;
+  _registry.set(normalized.id, normalized);
+  STATUS_REGISTRY[normalized.id] = normalized;
   return normalized;
 }
 
-export const registerStatus = defineStatus;
+export const defineStatus = registerStatus;
 
-/**
- * Attempts to apply multiple statuses using the context payload.
- * @param {{ statusAttempts?: Array<StatusAttempt> }} ctx
- * @param {import("./actor.js").Actor|undefined} attacker
- * @param {import("./actor.js").Actor} defender
- * @param {number} [turn]
- */
-export function applyStatuses(ctx, attacker, defender, turn) {
-  const attempts = ctx?.statusAttempts || [];
-  if (!defender || !attempts.length) return [];
-
-  defender.statuses ||= [];
-  const applied = [];
-  const currentTurn = typeof turn === "number" ? turn : defender.turn || 0;
-
-  for (const attempt of attempts) {
-    if (!attempt?.id) continue;
-    const def = REGISTRY.get(attempt.id);
-    if (!def) continue;
-
-    const baseChance = clamp(attempt.baseChance ?? 1, 0, 1);
-    if (Math.random() > baseChance) continue;
-
-    const stacks = clampStacks(Math.floor(attempt.stacks ?? 1), def);
-    const duration = Math.max(1, Math.floor(attempt.baseDuration ?? 1));
-    const endsAtTurn = currentTurn + duration;
-
-    let instance = findInstance(defender.statuses, attempt.id);
-    if (!instance || def.stacking === "independent") {
-      instance = {
-        id: attempt.id,
-        stacks,
-        endsAtTurn,
-        nextTickAt: def.tickEvery ? currentTurn + def.tickEvery : undefined,
-        source: attacker?.id,
-      };
-      defender.statuses.push(instance);
-      logStatusEvt(defender, {
-        action: "apply",
-        id: instance.id,
-        stacks: instance.stacks,
-        potency: instance.potency,
-        endsAtTurn: instance.endsAtTurn,
-        ttl: Math.max(0, instance.endsAtTurn - currentTurn),
-        source: instance.source,
-        turn: currentTurn,
-      });
-    } else if (def.stacking === "refresh") {
-      instance.endsAtTurn = Math.max(instance.endsAtTurn, endsAtTurn);
-      instance.stacks = clampStacks(Math.max(instance.stacks, stacks), def);
-      if (def.tickEvery && typeof instance.nextTickAt !== "number") {
-        instance.nextTickAt = currentTurn + def.tickEvery;
+const DEFAULT_STATUSES = {
+  haste: {
+    id: "haste",
+    stacking: "refresh",
+    tickEvery: 1,
+    duration: 6,
+    derive(ctx, d) {
+      d.temporal.actionSpeedPct = (d.temporal.actionSpeedPct || 0) + 0.15 * ctx.stacks;
+      return d;
+    },
+  },
+  burning: {
+    id: "burning",
+    stacking: "add",
+    tickEvery: 1,
+    duration: 4,
+    onTick({ target, potency }) {
+      if (target && Number.isFinite(target.hp)) {
+        target.hp = Math.max(0, target.hp - potency);
       }
-      logStatusEvt(defender, {
-        action: "refresh",
-        id: instance.id,
-        stacks: instance.stacks,
-        potency: instance.potency,
-        endsAtTurn: instance.endsAtTurn,
-        ttl: Math.max(0, instance.endsAtTurn - currentTurn),
-        source: instance.source,
-        turn: currentTurn,
-      });
-    } else if (def.stacking === "add_stacks") {
-      instance.stacks = clampStacks(instance.stacks + stacks, def);
-      instance.endsAtTurn = Math.max(instance.endsAtTurn, endsAtTurn);
-      if (def.tickEvery && typeof instance.nextTickAt !== "number") {
-        instance.nextTickAt = currentTurn + def.tickEvery;
-      }
-      logStatusEvt(defender, {
-        action: "add_stacks",
-        id: instance.id,
-        stacks: instance.stacks,
-        potency: instance.potency,
-        endsAtTurn: instance.endsAtTurn,
-        ttl: Math.max(0, instance.endsAtTurn - currentTurn),
-        source: instance.source,
-        turn: currentTurn,
-      });
-    }
+    },
+  },
+};
 
-    const result = callHook(def.onApply, defender, instance, { turn: currentTurn, source: attacker });
-    if (result && typeof result === "object" && Object.prototype.hasOwnProperty.call(result, "potency")) {
-      instance.potency = result.potency;
-      logStatusEvt(defender, {
-        action: "potency",
-        id: instance.id,
-        potency: instance.potency,
-        stacks: instance.stacks,
-        ttl: Math.max(0, instance.endsAtTurn - currentTurn),
-        source: instance.source,
-        turn: currentTurn,
-      });
-    }
-    applied.push(attempt.id);
-  }
-
-  rebuildDerived(defender);
-  return applied;
+for (const def of Object.values(DEFAULT_STATUSES)) {
+  registerStatus(def);
 }
 
-/**
- * Applies a single status directly.
- * @param {import("./actor.js").Actor} target
- * @param {string} id
- * @param {number} [stacks]
- * @param {number} [duration]
- * @param {import("./actor.js").Actor} [source]
- * @param {number} [turn]
- */
-export function applyStatus(target, id, stacks = 1, duration = 1, source, turn) {
-  if (!target || !id) return [];
-  const ctx = {
-    statusAttempts: [{ id, stacks, baseChance: 1, baseDuration: duration }],
-  };
-  const useTurn = typeof turn === "number" ? turn : target.turn || 0;
-  return applyStatuses(ctx, source, target, useTurn);
+if (EXTRA_STATUSES && typeof EXTRA_STATUSES === "object") {
+  for (const def of Object.values(EXTRA_STATUSES)) {
+    if (def && typeof def === "object") registerStatus(def);
+  }
 }
 
-/**
- * Advances active statuses at the start of a turn.
- * @param {import("./actor.js").Actor} actor
- * @param {number} turn
- */
-export function tickStatusesAtTurnStart(actor, turn) {
-  if (!actor) return;
-  if (!Array.isArray(actor.statuses) || actor.statuses.length === 0) {
-    rebuildDerived(actor);
-    return;
+function ensureStatusList(target) {
+  if (!target.statuses || !Array.isArray(target.statuses)) {
+    target.statuses = [];
   }
-
-  const keep = [];
-  const expired = [];
-  for (const instance of actor.statuses) {
-    const def = REGISTRY.get(instance.id);
-    if (!def) continue;
-
-    if (def.tickEvery) {
-      while (typeof instance.nextTickAt === "number" && turn >= instance.nextTickAt) {
-        callHook(def.onTick, actor, instance, { turn });
-        instance.nextTickAt += def.tickEvery;
-      }
-    }
-
-    if (turn < instance.endsAtTurn) {
-      keep.push(instance);
-    } else {
-      callHook(def.onExpire, actor, instance, { turn });
-      expired.push({
-        id: instance.id,
-        stacks: instance.stacks,
-        potency: instance.potency,
-      });
-    }
-  }
-
-  actor.statuses = keep;
-  if (expired.length) {
-    logStatusEvt(actor, {
-      action: "expire",
-      removed: expired.length,
-      statuses: expired,
-      turn,
-    });
-  }
-  rebuildDerived(actor);
+  return target.statuses;
 }
 
-/**
- * Rebuilds derived aggregates based on current statuses.
- * @param {import("./actor.js").Actor} actor
- */
-export function rebuildDerived(actor) {
-  const derived = {
-    moveAPDelta: 0,
-    actionSpeedPct: 0,
-    cooldownMult: 1,
-    accuracyFlat: 0,
-    critChancePct: 0,
+function makeDerivedBase() {
+  return {
+    temporal: Object.create(null),
+    offense: Object.create(null),
+    defense: Object.create(null),
+    resistsPct: Object.create(null),
+    flatDR: Object.create(null),
     regenFlat: { hp: 0, stamina: 0, mana: 0 },
     regenPct: { hp: 0, stamina: 0, mana: 0 },
-    costMult: { stamina: 1, mana: 1 },
+    regen: { hp: 0, stamina: 0, mana: 0 },
     damageDealtMult: Object.create(null),
     damageTakenMult: Object.create(null),
+    costMult: { hp: 1, stamina: 1, mana: 1 },
+    actionSpeedPct: 0,
+    moveAPDelta: 0,
+    cooldownPct: 0,
+    cooldownMult: 1,
     resistDelta: Object.create(null),
-    regen: { hp: 0, stamina: 0, mana: 0 },
   };
+}
 
-  if (!actor) {
-    return derived;
+function hookPayload(target, entry) {
+  return {
+    target,
+    stacks: entry.stacks,
+    potency: entry.potency,
+    turn: target.turn,
+    source: entry.source,
+    status: entry,
+  };
+}
+
+function normalizeEndsAt(target, endsAt) {
+  if (!Number.isFinite(endsAt) || endsAt <= target.turn) {
+    return Number.POSITIVE_INFINITY;
   }
+  return endsAt;
+}
 
-  const statuses = Array.isArray(actor.statuses) ? actor.statuses : [];
-  for (const instance of statuses) {
-    const def = REGISTRY.get(instance.id) || STATUS_REG[instance.id];
-    if (!def?.derive) continue;
+/**
+ * Apply a status by id, respecting stacking rules.
+ * @param {any} target
+ * @param {string} id
+ * @param {{ stacks?: number, potency?: number, duration?: number, source?: any }} [opts]
+ */
+export function addStatus(target, id, opts = {}) {
+  if (!target || !id) return null;
+  const def = _registry.get(id);
+  if (!def) return null;
 
-    const payload = {
-      target: actor,
-      stacks: instance?.stacks ?? 1,
-      potency: instance?.potency,
-      instance,
-      source: instance?.source,
+  const stacks = Math.max(1, Math.floor(Number(opts.stacks ?? 1) || 1));
+  const potency = Number.isFinite(opts.potency) ? Number(opts.potency) : stacks;
+  const duration = opts.duration ?? def.duration ?? 0;
+  const list = ensureStatusList(target);
+  const now = Number.isFinite(target.turn) ? target.turn : 0;
+  const existing = list.find(s => s.id === id) || null;
+  const nextEndsAt = normalizeEndsAt(target, now + duration);
+
+  if (!existing) {
+    const entry = {
+      id,
+      stacks,
+      potency,
+      nextTickAt: def.tickEvery ? now + def.tickEvery : now,
+      endsAt: nextEndsAt,
+      source: opts.source,
     };
-
-    let res;
-    if (typeof def.derive === "function") {
-      res = def.derive.length >= 2 ? def.derive(actor, instance) : def.derive(payload);
-    }
-
-    if (res && typeof res === "object") {
-      mergeDerived(derived, res);
-    }
+    list.push(entry);
+    def.onApply?.({ ...hookPayload(target, entry), source: opts.source });
+    logStatusEvt(target, {
+      action: "apply",
+      id,
+      stacks: entry.stacks,
+      potency: entry.potency,
+      endsAt: entry.endsAt,
+    });
+    return entry;
   }
 
-  derived.regen.hp = derived.regenFlat.hp;
-  derived.regen.stamina = derived.regenFlat.stamina;
-  derived.regen.mana = derived.regenFlat.mana;
+  const entry = existing;
+  switch (def.stacking) {
+    case "replace":
+      entry.stacks = stacks;
+      entry.potency = potency;
+      break;
+    case "max":
+      entry.stacks = Math.max(entry.stacks, stacks);
+      entry.potency = Math.max(entry.potency, potency);
+      break;
+    case "refresh":
+      entry.stacks += stacks;
+      entry.potency += potency;
+      break;
+    case "add":
+    default:
+      entry.stacks += stacks;
+      entry.potency += potency;
+      break;
+  }
+  entry.endsAt = Math.max(entry.endsAt, nextEndsAt);
+  if (opts.source !== undefined) {
+    entry.source = opts.source;
+  }
+  if (def.tickEvery && entry.nextTickAt < now) {
+    entry.nextTickAt = now + def.tickEvery;
+  }
+  def.onApply?.({ ...hookPayload(target, entry), source: opts.source });
+  logStatusEvt(target, {
+    action: "stack",
+    id,
+    stacks: entry.stacks,
+    potency: entry.potency,
+    endsAt: entry.endsAt,
+  });
+  return entry;
+}
 
+/**
+ * Remove a status entry from target.
+ * @param {any} target
+ * @param {StatusInstance} entry
+ */
+export function removeStatus(target, entry) {
+  if (!target || !entry) return;
+  const list = ensureStatusList(target);
+  const idx = list.indexOf(entry);
+  if (idx >= 0) {
+    list.splice(idx, 1);
+  }
+  const def = _registry.get(entry.id);
+  def?.onRemove?.(hookPayload(target, entry));
+  logStatusEvt(target, {
+    action: "remove",
+    id: entry.id,
+    stacks: entry.stacks,
+    potency: entry.potency,
+  });
+}
+
+/**
+ * Advance ticking statuses for the given actor/turn.
+ * @param {any} actor
+ * @param {number} turn
+ */
+export function tickStatuses(actor, turn) {
+  if (!actor) return;
+  actor.turn = turn;
+  const list = ensureStatusList(actor);
+  if (!list.length) return;
+
+  for (const entry of [...list]) {
+    const def = _registry.get(entry.id);
+    if (!def) {
+      removeStatus(actor, entry);
+      continue;
+    }
+    if (entry.endsAt !== Number.POSITIVE_INFINITY && turn > entry.endsAt) {
+      removeStatus(actor, entry);
+      continue;
+    }
+    if (def.tickEvery) {
+      while (turn >= entry.nextTickAt) {
+        def.onTick?.(hookPayload(actor, entry));
+        logStatusEvt(actor, {
+          action: "tick",
+          id: entry.id,
+          stacks: entry.stacks,
+          potency: entry.potency,
+          turn,
+        });
+        entry.nextTickAt += def.tickEvery;
+      }
+    }
+  }
+}
+
+/**
+ * Recompute derived aggregates from statuses and attunement.
+ * @param {any} actor
+ */
+export function rebuildDerived(actor) {
+  const derived = makeDerivedBase();
+  if (!actor) return derived;
+  const list = ensureStatusList(actor);
+  for (const entry of list) {
+    const def = _registry.get(entry.id);
+    if (!def?.derive) continue;
+    const result = def.derive(hookPayload(actor, entry), derived);
+    if (result && result !== derived) {
+      Object.assign(derived, result);
+    }
+  }
   contributeDerived(actor, derived);
+
+  derived.actionSpeedPct = derived.temporal.actionSpeedPct || 0;
+  derived.moveAPDelta = derived.temporal.moveAPDelta || 0;
+  derived.cooldownPct = derived.temporal.cooldownPct || 0;
+  derived.cooldownMult = Number.isFinite(derived.temporal.cooldownMult)
+    ? derived.temporal.cooldownMult
+    : derived.cooldownMult;
+  derived.resistDelta = derived.resistsPct;
 
   actor.statusDerived = derived;
   return derived;
@@ -253,97 +327,57 @@ export function rebuildDerived(actor) {
 export const rebuildStatusDerived = rebuildDerived;
 
 /**
- * @typedef {Object} StatusAttempt
- * @property {string} id
- * @property {number} [baseChance]
- * @property {number} [baseDuration]
- * @property {number} [stacks]
+ * Compatibility helper: apply multiple statuses using legacy context.
+ * @param {{ statusAttempts?: Array<{ id: string, baseChance?: number, baseDuration?: number, stacks?: number, potency?: number }> }} ctx
+ * @param {any} attacker
+ * @param {any} defender
+ * @param {number} [turn]
  */
-
-/**
- * @typedef {Object} StatusInstance
- * @property {string} id
- * @property {number} stacks
- * @property {number} endsAtTurn
- * @property {number} [nextTickAt]
- * @property {number} [potency]
- * @property {string} [source]
- */
-
-/**
- * @typedef {Object} StatusDef
- * @property {string} id
- * @property {"refresh"|"add_stacks"|"independent"} [stacking]
- * @property {number} [maxStacks]
- * @property {number} [tickEvery]
- * @property {(actor: import("./actor.js").Actor, instance: StatusInstance, extra?: any) => any} [onApply]
- * @property {(actor: import("./actor.js").Actor, instance: StatusInstance, extra?: any) => any} [onTick]
- * @property {(actor: import("./actor.js").Actor, instance: StatusInstance, extra?: any) => any} [onExpire]
- * @property {(actor: import("./actor.js").Actor, instance: StatusInstance) => any} [derive]
- */
-
-function clampStacks(stacks, def) {
-  const value = Number.isFinite(stacks) ? stacks : 1;
-  const max = Number.isFinite(def.maxStacks) ? def.maxStacks : Infinity;
-  return Math.max(1, Math.min(max, value));
-}
-
-function findInstance(instances, id) {
-  return instances.find(s => s.id === id) || null;
-}
-
-function mergeDerived(dst, src) {
-  if (!src) return;
-  if (typeof src.moveAPDelta === "number") dst.moveAPDelta += src.moveAPDelta;
-  if (typeof src.actionSpeedPct === "number") dst.actionSpeedPct += src.actionSpeedPct;
-  if (typeof src.cooldownMult === "number") dst.cooldownMult *= src.cooldownMult;
-  if (typeof src.accuracyFlat === "number") dst.accuracyFlat += src.accuracyFlat;
-  if (typeof src.critChancePct === "number") dst.critChancePct += src.critChancePct;
-  if (src.damageDealtMult) mergeMap(dst.damageDealtMult, src.damageDealtMult);
-  if (src.damageTakenMult) mergeMap(dst.damageTakenMult, src.damageTakenMult);
-  if (src.resistDelta) mergeMap(dst.resistDelta, src.resistDelta);
-  if (src.regen) addRecords(dst.regenFlat, src.regen);
-  if (src.regenFlat) addRecords(dst.regenFlat, src.regenFlat);
-  if (src.regenPct) addRecords(dst.regenPct, src.regenPct);
-  if (src.costMult) multiplyRecords(dst.costMult, src.costMult);
-}
-
-function mergeMap(dst, src) {
-  for (const key of Object.keys(src)) {
-    dst[key] = (dst[key] || 0) + (src[key] || 0);
+export function applyStatuses(ctx, attacker, defender, turn) {
+  const attempts = Array.isArray(ctx?.statusAttempts) ? ctx.statusAttempts : [];
+  if (!defender || !attempts.length) return [];
+  const applied = [];
+  const now = Number.isFinite(turn) ? turn : Number.isFinite(defender.turn) ? defender.turn : 0;
+  defender.turn = now;
+  for (const attempt of attempts) {
+    if (!attempt?.id) continue;
+    const def = _registry.get(attempt.id);
+    if (!def) continue;
+    const chance = Math.max(0, Math.min(1, Number(attempt.baseChance ?? 1)));
+    if (chance < 1 && Math.random() > chance) continue;
+    const stacks = attempt.stacks ?? 1;
+    const potency = attempt.potency ?? stacks;
+    const duration = attempt.baseDuration ?? def.duration;
+    const entry = addStatus(defender, attempt.id, {
+      stacks,
+      potency,
+      duration,
+      source: attacker,
+    });
+    if (entry) {
+      applied.push(attempt.id);
+    }
   }
+  rebuildDerived(defender);
+  return applied;
 }
 
-function addRecords(dst, src) {
-  for (const key of Object.keys(src)) {
-    dst[key] = (dst[key] || 0) + (src[key] || 0);
-  }
+export function applyStatus(target, id, stacks = 1, duration = 1, source, turn) {
+  if (!target) return [];
+  const now = Number.isFinite(turn) ? turn : Number.isFinite(target.turn) ? target.turn : 0;
+  target.turn = now;
+  const entry = addStatus(target, id, { stacks, potency: stacks, duration, source });
+  if (!entry) return [];
+  rebuildDerived(target);
+  return [id];
 }
 
-function multiplyRecords(dst, src) {
-  for (const key of Object.keys(src)) {
-    const value = Number.isFinite(src[key]) ? src[key] : 1;
-    dst[key] = (dst[key] || 1) * value;
-  }
-}
-
-function callHook(fn, actor, instance, extra) {
-  if (typeof fn !== "function") return undefined;
-  if (fn.length >= 2) return fn(actor, instance, extra);
-  return fn({
-    target: actor,
-    instance,
-    stacks: instance?.stacks ?? 0,
-    potency: instance?.potency,
-    turn: extra?.turn,
-    source: extra?.source,
-  });
-}
-
-function clamp(value, lo, hi) {
-  return Math.max(lo, Math.min(hi, value));
+export function tickStatusesAtTurnStart(actor, turn) {
+  tickStatuses(actor, turn);
+  rebuildDerived(actor);
 }
 
 export function getStatusDefinition(id) {
-  return REGISTRY.get(id);
+  return _registry.get(id) || null;
 }
+

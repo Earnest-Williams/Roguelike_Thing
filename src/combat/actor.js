@@ -294,8 +294,8 @@ export class Actor {
     /** @type {number} */
     this.turn = 0;
 
-    /** @type {Map<string, number>} */
-    this.cooldowns = new Map();
+    /** @type {Record<string, number>} */
+    this.cooldowns = Object.create(null);
   }
 
   /**

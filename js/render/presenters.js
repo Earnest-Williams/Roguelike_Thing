@@ -238,6 +238,47 @@ export function buildMinimapPresentation({
   };
 }
 
+export function drawHUD(ctx, actor) {
+  if (!actor) return "";
+  const attEntries = Object.entries(actor.attunement?.stacks || {})
+    .sort((a, b) => (b[1] || 0) - (a[1] || 0))
+    .slice(0, 2)
+    .map(([type, stacks]) => `${type}:${stacks}`)
+    .join(" ");
+
+  const pools = Object.entries(actor.resources?.pools || {})
+    .map(([name, state]) => {
+      const cur = Number(state?.cur ?? state);
+      const max = Number(state?.max ?? state);
+      return `${name}:${cur}/${max}`;
+    })
+    .join(" ");
+
+  const cds = Object.entries(actor.cooldowns || {})
+    .map(([key, value]) => `${key}:${value}`)
+    .join(" ");
+
+  const sts = Array.isArray(actor.statuses)
+    ? actor.statuses.map(s => `${s.id}(${s.stacks})`).join(" ")
+    : "";
+
+  const apCap = actor.maxAP ?? actor.apCap ?? actor.baseActionAP ?? 0;
+  const text = `AP:${actor.ap}/${apCap} RES[${pools}] ATTUNE[${attEntries}] CD[${cds}] ST[${sts}]`;
+
+  if (ctx) {
+    if (typeof ctx.debugText === "function") {
+      ctx.debugText(text);
+    } else if (typeof ctx.fillText === "function") {
+      ctx.save?.();
+      ctx.fillStyle = ctx.fillStyle || "#fff";
+      ctx.fillText(text, 8, 16);
+      ctx.restore?.();
+    }
+  }
+
+  return text;
+}
+
 /**
  * @param {string | RGBA | null | undefined} input
  * @returns {RGBA | null}

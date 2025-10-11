@@ -1,6 +1,6 @@
 // src/combat/loop.js
 // @ts-check
-import { rebuildDerived, tickStatusesAtTurnStart } from "./status.js";
+import { rebuildDerived, tickStatuses } from "./status.js";
 import { gainAP, tickCooldowns, initiativeWithTemporal } from "./time.js";
 import { updateResources, isDefeated, regenTurn } from "./resources.js";
 import { EVENT, emit } from "../ui/event-log.js";
@@ -10,6 +10,7 @@ import { logTurnEvt } from "./debug-log.js";
 export function startTurn(actor) {
   if (!actor) return;
   decayPerTurn(actor);
+  tickStatuses(actor, actor.turn || 0);
   rebuildDerived(actor);
   logTurnEvt(actor, {
     phase: "start_turn",
@@ -50,7 +51,6 @@ export function runTurn(actor, actionPlanner) {
   const turn = actor ? (actor.__turnCounter = (actor.__turnCounter ?? 0) + 1) : 0;
   if (actor) actor.turn = turn;
   startTurn(actor);
-  tickStatusesAtTurnStart(actor, turn);
   if (actor) {
     actor.resources ||= { pools: Object.create(null) };
     actor.resources.pools ||= Object.create(null);
