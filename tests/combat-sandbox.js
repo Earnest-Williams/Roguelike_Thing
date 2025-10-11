@@ -5,9 +5,15 @@ import { attachLogs } from "../src/combat/debug-log.js";
 
 function mkActor(id, hp, mods) {
   return attachLogs({
-    id, name: id, hp,
-    statuses: [], attunements: {},
-    modCache: mods
+    id,
+    name: id,
+    hp,
+    res: { hp },
+    resources: { hp },
+    statuses: [],
+    attunements: {},
+    modCache: mods,
+    turn: 0,
   });
 }
 
@@ -32,10 +38,18 @@ const A = mkActor("Hero", 60, modsFireSword);
 const B = mkActor("Slime", 50, modsSlime);
 
 function step(attacker, defender) {
+  attacker.turn = (attacker.turn ?? 0) + 1;
   startTurn(attacker);
-  const r = resolveAttack({ attacker, defender, attack: { type:"fire", base: 8 } });
-  const killed = defender.hp <= 0;
-  if (killed) applyStatus(attacker, { id:"haste", baseDuration:2, stacks:1 });
+  const r = resolveAttack({
+    attacker,
+    defender,
+    turn: attacker.turn,
+    physicalBase: 8,
+    attack: { type: "fire", base: 8 },
+  });
+  const defenderHp = defender.res?.hp ?? defender.resources?.hp ?? defender.hp ?? 0;
+  const killed = defenderHp <= 0;
+  if (killed) applyStatus(attacker, "haste", 1, 2);
   endTurn(attacker);
   return { ...r, killed };
 }
