@@ -206,9 +206,11 @@ export function spend(actor, action) {
  */
 export function regenTurn(actor) {
   if (!actor?.resources?.pools) return;
+  const channelingBonus = actor?.turnFlags?.channeled ? 0.5 : 0;
+  const mult = 1 + channelingBonus;
   for (const state of Object.values(actor.resources.pools)) {
     if (!state) continue;
-    const gain = Number(state.regenPerTurn || 0);
+    const gain = Number(state.regenPerTurn || 0) * mult;
     const next = Number(state.cur || 0) + gain;
     const max = state.max ?? Number.MAX_SAFE_INTEGER;
     state.cur = Math.min(max, Math.max(0, next));

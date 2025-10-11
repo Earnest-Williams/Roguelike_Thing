@@ -6,9 +6,15 @@ import { updateResources, isDefeated, regenTurn } from "./resources.js";
 import { EVENT, emit } from "../ui/event-log.js";
 import { decayPerTurn } from "./attunement.js";
 import { logTurnEvt } from "./debug-log.js";
+import { tickFreeAction } from "./actor.js";
 
 export function startTurn(actor) {
   if (!actor) return;
+  tickFreeAction(actor);
+  if (!actor.turnFlags || typeof actor.turnFlags !== "object") {
+    actor.turnFlags = { moved: false, attacked: false, channeled: false };
+  }
+  actor.turnFlags.channeled = false;
   decayPerTurn(actor);
   tickStatuses(actor, actor.turn || 0);
   rebuildDerived(actor);
@@ -22,6 +28,15 @@ export function startTurn(actor) {
 
 export function endTurn(actor) {
   if (!actor) return;
+  if (!actor.turnFlags || typeof actor.turnFlags !== "object") {
+    actor.turnFlags = { moved: false, attacked: false, channeled: false };
+  }
+  const canChannel = Boolean(actor.modCache?.resource?.channeling);
+  const flags = actor.turnFlags;
+  const idle = !flags.moved && !flags.attacked;
+  flags.channeled = Boolean(canChannel && idle);
+  flags.moved = false;
+  flags.attacked = false;
   logTurnEvt(actor, {
     phase: "end_turn",
     actorId: actor.id,

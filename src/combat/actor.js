@@ -99,8 +99,8 @@ import { rebuildDerived } from "./status.js";
  *   onSpendRefund: any,
  *   channeling: boolean,
  * }} resource
- * @property {{ inflictBonus: Record<string, number>, inflictDurMult: Record<string, number>, resistBonus: Record<string, number>, recvDurMult: Record<string, number>, buffDurMult: number, freeActionIgnore: Set<string> }} status
- * @property {{ onHitBias?: Record<string, number>, defenseBias?: Record<string, number> }} polarity
+ * @property {{ inflictBonus: Record<string, number>, inflictDurMult: Record<string, number>, resistBonus: Record<string, number>, recvDurMult: Record<string, number>, buffDurMult: number, freeActionIgnore: Set<string>, freeActionCooldown: number, freeActionPurge: boolean }} status
+ * @property {{ grant?: Record<string, number>, onHitBias?: Record<string, number>, defenseBias?: Record<string, number> }} polarity
  */
 
 /**
@@ -170,12 +170,12 @@ export class Actor {
         conversions: [],
         brandAdds: [],
         affinities: Object.create(null),
-        polarity: { onHitBias: {} },
+        polarity: { grant: Object.create(null), onHitBias: {} },
       },
       defense: {
         resists: Object.create(null),
         immunities: new Set(),
-        polarity: { defenseBias: {} },
+        polarity: { grant: Object.create(null), defenseBias: {} },
       },
       temporal: {
         actionSpeedPct: 0,
@@ -226,8 +226,10 @@ export class Actor {
         recvDurMult: Object.create(null),
         buffDurMult: 1,
         freeActionIgnore: new Set(),
+        freeActionCooldown: 0,
+        freeActionPurge: false,
       },
-      polarity: {},
+      polarity: { grant: Object.create(null) },
     };
 
     // Track per-type attunement runtime state (rules + live stacks).
@@ -282,6 +284,13 @@ export class Actor {
 
     /** @type {ChannelingState|null} */
     this.channeling = null;
+
+    this.freeAction = {
+      cooldownRemaining: 0,
+      ready: true,
+    };
+
+    this.turnFlags = { moved: false, attacked: false, channeled: false };
 
     // Temporal state
     /** @type {number} */
@@ -358,5 +367,49 @@ export class Actor {
     const it = this.equipment[slot];
     delete this.equipment[slot];
     return it;
+  }
+}
+
+function ensureTurnFlags(actor) {
+  if (!actor) return { moved: false, attacked: false, channeled: false };
+  if (!actor.turnFlags || typeof actor.turnFlags !== "object") {
+    actor.turnFlags = { moved: false, attacked: false, channeled: false };
+  }
+  return actor.turnFlags;
+}
+
+function ensureFreeActionState(actor) {
+  if (!actor) return null;
+  if (!actor.freeAction || typeof actor.freeAction !== "object") {
+    actor.freeAction = { cooldownRemaining: 0, ready: true };
+  }
+  return actor.freeAction;
+}
+
+export function noteMoved(actor) {
+  const flags = ensureTurnFlags(actor);
+  if (flags) {
+    flags.moved = true;
+    flags.channeled = false;
+  }
+  ensureFreeActionState(actor);
+}
+
+export function noteAttacked(actor) {
+  const flags = ensureTurnFlags(actor);
+  if (flags) {
+    flags.attacked = true;
+    flags.channeled = false;
+  }
+}
+
+export function tickFreeAction(actor) {
+  const fa = ensureFreeActionState(actor);
+  if (!fa) return;
+  if (fa.ready) return;
+  fa.cooldownRemaining = Math.max(0, Number(fa.cooldownRemaining || 0) - 1);
+  if (fa.cooldownRemaining <= 0) {
+    fa.cooldownRemaining = 0;
+    fa.ready = true;
   }
 }

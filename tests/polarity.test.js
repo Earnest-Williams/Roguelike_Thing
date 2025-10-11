@@ -1,7 +1,13 @@
 // tests/polarity.test.js
 // @ts-check
 import { Actor } from "../src/combat/actor.js";
-import { polarityDefScalar, polarityOnHitScalar, polaritySummary } from "../src/combat/polarity.js";
+import {
+  normalizePolarity,
+  polarityAlignmentScore,
+  polarityDefenseMult,
+  polarityOffenseMult,
+  polaritySummary,
+} from "../src/combat/polarity.js";
 
 function assert(cond, msg) {
   if (!cond) throw new Error(msg);
@@ -25,61 +31,41 @@ function makeActorWithPolarity(id, grant) {
       baseSpeed: 1,
     },
   });
-  actor.polarity = { ...grant };
+  actor.polarityRaw = { ...grant };
+  actor.polarity = normalizePolarity(grant);
+  actor.polarityVector = actor.polarity;
   return actor;
 }
 
-// --- Basic opposition clamps to configured bounds ---
+// --- Normalization produces unit vectors ---
 {
-  const attacker = makeActorWithPolarity("att-order", { order: 2 });
+  const norm = normalizePolarity({ order: 2, chaos: 1 });
+  assert(approxEqual(norm.order + norm.chaos, 1), "Normalized polarity should sum to 1");
+  assert(norm.growth === 0 && norm.decay === 0 && norm.void === 0, "Unused components should be zero");
+}
+
+// --- Alignment score drives offense/defense multipliers ---
+{
+  const attacker = makeActorWithPolarity("att-order", { order: 3 });
   const defender = makeActorWithPolarity("def-chaos", { chaos: 1 });
-  const scalar = polarityOnHitScalar(attacker, defender);
-  assert(approxEqual(scalar, -0.5), `Expected strong opposition to clamp at -0.5, got ${scalar}`);
+  const score = polarityAlignmentScore(attacker, defender);
+  const offMult = polarityOffenseMult(attacker, defender);
+  const defMult = polarityDefenseMult(defender, attacker);
+  assert(score < 0, "Order vs chaos should penalize the attacker in current tuning");
+  assert(offMult < 1, "Negative alignment should reduce offense");
+  assert(defMult > 1, "Negative alignment should increase defender mitigation");
 }
 
-// --- Neutral matchups are unaffected ---
-{
-  const attacker = makeActorWithPolarity("att-growth", { growth: 1 });
-  const defender = makeActorWithPolarity("def-growth", { growth: 1 });
-  const scalar = polarityOnHitScalar(attacker, defender);
-  assert(approxEqual(scalar, 0), `Matching polarities should be neutral, got ${scalar}`);
-}
-
-// --- Attacker on-hit bias stacks with opposition ---
-{
-  const attacker = makeActorWithPolarity("att-bias", { order: 1 });
-  attacker.modCache.polarity.onHitBias = { base: 0.2, vs: { chaos: 0.05 } };
-  const defender = makeActorWithPolarity("def-chaos-strong", { chaos: 2 });
-  const scalar = polarityOnHitScalar(attacker, defender);
-  const expected = -0.5 + 0.2 + (0.05 * 2);
-  assert(
-    approxEqual(scalar, expected),
-    `Expected bias-adjusted scalar ${expected}, received ${scalar}`,
-  );
-}
-
-// --- Defender bias reduces incoming damage ---
-{
-  const attacker = makeActorWithPolarity("att-chaos", { chaos: 1 });
-  const defender = makeActorWithPolarity("def-order", { order: 2 });
-  defender.modCache.polarity.defenseBias = { base: 0.1, vs: { chaos: 0.05 } };
-  const scalar = polarityDefScalar(defender, attacker);
-  const expected = -0.5 + 0.1 + (0.05 * 1);
-  assert(
-    approxEqual(scalar, expected),
-    `Expected defensive bias ${expected}, received ${scalar}`,
-  );
-}
-
-// --- Summary helper exposes derived grant maps ---
+// --- Summary helper exposes grant maps and multipliers ---
 {
   const attacker = makeActorWithPolarity("att-summary", { order: 1, void: 0.5 });
   const defender = makeActorWithPolarity("def-summary", { chaos: 0.75 });
   const summary = polaritySummary(attacker, defender);
   assert(approxEqual(summary.attGrant.order, 1), `Summary should capture attacker grant order=1 (got ${summary.attGrant.order})`);
   assert(approxEqual(summary.defGrant.chaos, 0.75), `Summary should capture defender grant chaos=0.75 (got ${summary.defGrant.chaos})`);
-  assert(approxEqual(summary.onHit, polarityOnHitScalar(attacker, defender)), "Summary onHit should match direct computation");
-  assert(approxEqual(summary.defense, polarityDefScalar(defender, attacker)), "Summary defense should match direct computation");
+  assert(approxEqual(summary.offenseMult, polarityOffenseMult(attacker, defender)), "Summary offense multiplier should match calculation");
+  assert(approxEqual(summary.defenseMult, polarityDefenseMult(defender, attacker)), "Summary defense multiplier should match calculation");
+  assert(approxEqual(summary.attVector.order + summary.attVector.void, 1), "Summary attacker vector should be normalized");
 }
 
-console.log("\u2713 polarity scalars and summary helpers");
+console.log("✓ polarity normalization and multipliers");

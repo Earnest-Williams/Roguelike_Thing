@@ -334,28 +334,103 @@ export const rebuildStatusDerived = rebuildDerived;
  * @param {any} defender
  * @param {number} [turn]
  */
+function ensureStatusInteraction(actor) {
+  const cache = actor?.modCache;
+  if (!cache) return Object.create(null);
+  return cache.status || cache.statusInteraction || Object.create(null);
+}
+
+function ensureFreeActionBucket(actor) {
+  if (!actor) return null;
+  if (!actor.freeAction || typeof actor.freeAction !== "object") {
+    actor.freeAction = { cooldownRemaining: 0, ready: true };
+  }
+  return actor.freeAction;
+}
+
+const clamp01 = (value) => Math.max(0, Math.min(1, value));
+
+/**
+ * Applies a single status attempt with status interaction bonuses and free-action handling.
+ * @param {{ attacker?: any, defender: any, attempt: any, turn?: number, rng?: ()=>number }} payload
+ */
+export function applyOneStatusAttempt({ attacker, defender, attempt, turn, rng }) {
+  if (!defender || !attempt?.id) return null;
+  const def = _registry.get(attempt.id);
+  if (!def) return null;
+
+  const now = Number.isFinite(turn)
+    ? Number(turn)
+    : Number.isFinite(defender.turn)
+    ? defender.turn
+    : 0;
+  defender.turn = now;
+
+  const roll = typeof rng === "function" ? rng : Math.random;
+  const aInt = ensureStatusInteraction(attacker);
+  const dInt = ensureStatusInteraction(defender);
+
+  let chance = Number(attempt.baseChance ?? attempt.chance ?? 1);
+  chance = Number.isFinite(chance) ? chance : 1;
+  chance += Number(aInt.inflictBonus?.[attempt.id] || 0);
+  chance += Number(dInt.resistBonus?.[attempt.id] || 0);
+  chance = clamp01(chance);
+
+  const stacks = Math.max(1, Math.floor(Number(attempt.stacks ?? 1) || 1));
+  const potency = Number.isFinite(attempt.potency)
+    ? Number(attempt.potency)
+    : stacks;
+
+  let duration = Number(attempt.baseDuration ?? attempt.duration ?? def.duration ?? 0) || 0;
+  const inflictMult = Number(aInt.inflictDurMult?.[attempt.id] || 0);
+  const recvMult = Number(dInt.recvDurMult?.[attempt.id] || 0);
+  duration *= 1 + inflictMult;
+  duration *= 1 + recvMult;
+  if (attacker && attacker === defender) {
+    const buffMult = Number(aInt.buffDurMult ?? defender?.modCache?.status?.buffDurMult ?? 1) || 1;
+    duration *= buffMult;
+  }
+  duration = Math.max(0, Math.floor(duration));
+
+  const faBucket = ensureFreeActionBucket(defender);
+  const faIgnore = dInt.freeActionIgnore instanceof Set && dInt.freeActionIgnore.has(attempt.id);
+  if (faIgnore && faBucket?.ready) {
+    faBucket.ready = false;
+    const cd = Number(dInt.freeActionCooldown || 0);
+    if (Number.isFinite(cd)) {
+      faBucket.cooldownRemaining = Math.max(cd, Number(faBucket.cooldownRemaining || 0));
+    }
+    if (dInt.freeActionPurge && Array.isArray(defender.statuses)) {
+      defender.statuses = defender.statuses.filter((s) => s?.id !== attempt.id);
+    }
+    if (Array.isArray(defender.logs?.attack?.messages)) {
+      defender.logs.attack.messages.push({ kind: "status_ignored_free_action", id: attempt.id });
+    }
+    return { id: attempt.id, ignored: true };
+  }
+
+  if (chance < 1 && roll() > chance) {
+    return null;
+  }
+  if (duration <= 0) {
+    return null;
+  }
+
+  return addStatus(defender, attempt.id, {
+    stacks,
+    potency,
+    duration,
+    source: attacker,
+  });
+}
+
 export function applyStatuses(ctx, attacker, defender, turn) {
   const attempts = Array.isArray(ctx?.statusAttempts) ? ctx.statusAttempts : [];
   if (!defender || !attempts.length) return [];
   const applied = [];
-  const now = Number.isFinite(turn) ? turn : Number.isFinite(defender.turn) ? defender.turn : 0;
-  defender.turn = now;
   for (const attempt of attempts) {
-    if (!attempt?.id) continue;
-    const def = _registry.get(attempt.id);
-    if (!def) continue;
-    const chance = Math.max(0, Math.min(1, Number(attempt.baseChance ?? 1)));
-    if (chance < 1 && Math.random() > chance) continue;
-    const stacks = attempt.stacks ?? 1;
-    const potency = attempt.potency ?? stacks;
-    const duration = attempt.baseDuration ?? def.duration;
-    const entry = addStatus(defender, attempt.id, {
-      stacks,
-      potency,
-      duration,
-      source: attacker,
-    });
-    if (entry) {
+    const res = applyOneStatusAttempt({ attacker, defender, attempt, turn });
+    if (res && !res.ignored) {
       applied.push(attempt.id);
     }
   }

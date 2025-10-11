@@ -18,6 +18,7 @@ import {
   SLOT,
 } from "../../constants.js";
 import { canPay, spend as spendResources, eventGain } from "./resources.js";
+import { noteAttacked, noteMoved } from "./actor.js";
 
 /**
  * @typedef {import("./actor.js").Actor} Actor
@@ -37,6 +38,7 @@ export function tryMove(actor, dir) {
   actor.x = (actor.x || 0) + dir.dx;
   actor.y = (actor.y || 0) + dir.dy;
   eventGain(actor, { kind: "move" });
+  noteMoved(actor);
   return true;
 }
 
@@ -82,6 +84,7 @@ export function tryAttack(attacker, defender, opts = {}) {
     physicalBase: profile.base,
   };
   const result = resolveAttack(ctx);
+  noteAttacked(attacker);
   tryTemporalEcho(ctx, result);
 
   if (defender?.res && typeof defender.res.hp === "number") {
@@ -148,6 +151,8 @@ export function tryAttackEquipped(
 
   const res = performEquippedAttack(attacker, defender, item, distTiles, mode);
   if (!res.ok) return false;
+
+  noteAttacked(attacker);
 
   startCooldown(attacker, key, action.baseCooldown);
 
