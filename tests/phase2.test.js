@@ -17,13 +17,13 @@ const a = new Actor({
   baseStats: { str: 10, dex: 10, int: 8, vit: 10, maxHP: 20, maxStamina: 10, maxMana: 5, baseSpeed: 1 },
   equipment: { [SLOT.RightHand]: makeItem("long_sword") },
 });
-a.setFoldedMods(foldModsFromEquipment(a.equipment));
+foldModsFromEquipment(a);
 
 const b = new Actor({
   id: "dummy",
   baseStats: { str: 5, dex: 5, int: 5, vit: 5, maxHP: 30, maxStamina: 5, maxMana: 0, baseSpeed: 1 },
 });
-b.setFoldedMods(foldModsFromEquipment(b.equipment));
+foldModsFromEquipment(b);
 
 // Apply adrenaline to hero (faster actions + cooldowns)
 applyStatus(a, "adrenaline", 3, 1);

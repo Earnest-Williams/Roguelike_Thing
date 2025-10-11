@@ -1,218 +1,88 @@
 // src/combat/mod-folding.js
 // @ts-check
-import {
-  ALL_SLOTS_ORDER,
-  BASE_DAMAGE_MULTIPLIER,
-  BASE_SPEED_MULTIPLIER,
-  MAX_AFFINITY_CAP,
-  MAX_RESIST_CAP,
-  MIN_AFFINITY_CAP,
-  MIN_SPEED_MULTIPLIER,
-  MAX_SPEED_MULTIPLIER,
-} from "../../constants.js";
+import { rebuildStatusDerived } from "./status.js";
 
 /**
- * Normalizes “mod payload” fields we allow on items:
- *  - brands: BrandMod[]
- *  - resists: Record<string, number>  (defensive, e.g., { fire: 0.25 })
- *  - affinities: Record<string, number> (offensive, e.g., { fire: 0.10 })
- *  - immunities: string[]
- *  - dmgMult: number
- *  - speedMult: number
- *  - offense bucket (conversions, brandAdds, affinities, polarity)
- *  - defense bucket (resists, immunities, polarity)
- *  - temporal bucket (action speed, AP deltas, cooldown knobs)
- *  - resource bucket (max/regen adjustments, cost multipliers, onHit/onKill gains)
- *  - status bucket (inflict/resist knobs, buff adjustments)
- *  - polarity bucket (actor-level bias overrides)
- */
-
-/**
- * @typedef {import("./actor.js").ModCache} ModCache
  * @typedef {import("../../item-system.js").Item} Item
  * @typedef {import("../../item-system.js").ItemStack} ItemStack
  */
 
 /**
- * @param {Item|ItemStack|undefined} entry
+ * Normalize an equipment entry into an Item.
+ * @param {Item|ItemStack|any} entry
  * @returns {Item|null}
  */
 function asItem(entry) {
   if (!entry) return null;
-  // ItemStack from your system exposes `.item`
-  // Guard to support both Item and ItemStack seamlessly
-  return /** @type {any} */ (entry).item ? /** @type {ItemStack} */(entry).item : /** @type {Item} */(entry);
+  if (typeof entry !== "object") return null;
+  if (entry instanceof Object && "item" in entry && entry.item) {
+    return /** @type {ItemStack} */ (entry).item;
+  }
+  return /** @type {Item} */ (entry);
 }
 
 /**
- * Merge helper for numeric maps
+ * Merge helper for "record" style numeric payloads. Supports both objects and
+ * arrays of { type, amount } style entries.
  * @param {Record<string, number>} into
- * @param {Record<string, number>=} add
+ * @param {Record<string, number>|Array<{ type?: string, id?: string, amount?: number, value?: number, flat?: number, pct?: number, percent?: number }> | undefined} add
  */
-function mergeNumMap(into, add) {
+function mergeRecord(into, add) {
   if (!add) return;
-  for (const k of Object.keys(add)) {
-    const v = Number(add[k]) || 0;
-    into[k] = (into[k] || 0) + v;
+  if (Array.isArray(add)) {
+    for (const entry of add) {
+      if (!entry) continue;
+      const key = entry.type ?? entry.id;
+      if (!key) continue;
+      const amount = Number(entry.amount ?? entry.value ?? entry.flat ?? entry.percent ?? entry.pct ?? 0) || 0;
+      into[key] = (into[key] || 0) + amount;
+    }
+    return;
+  }
+  for (const key of Object.keys(add)) {
+    const amount = Number(add[key]) || 0;
+    into[key] = (into[key] || 0) + amount;
   }
 }
 
 /**
- * Merge helper for polarity bias maps – latter wins per key.
- * @param {Record<string, number>=} base
- * @param {Record<string, number>=} add
+ * Adds numeric properties from `add` into `into`.
+ * @param {Record<string, number>} into
+ * @param {Record<string, number>|undefined|null} add
  */
-function mergePolBias(base = {}, add = {}) {
-  return { ...base, ...add };
+function add(into, add) {
+  if (!add) return;
+  for (const key of Object.keys(add)) {
+    const amount = Number(add[key]) || 0;
+    into[key] = (into[key] || 0) + amount;
+  }
 }
 
 /**
- * Folds all equip mods into an aggregate ModCache.
- * Call this whenever equipment changes, then stash on the Actor via setFoldedMods().
- * @param {Partial<Record<string, Item|ItemStack>>} equipment
- * @returns {ModCache}
+ * Merge polarity bias style maps additively.
+ * @param {Record<string, number>} into
+ * @param {Record<string, number>|undefined|null} add
  */
-function foldItemInto(item, folded) {
-  if (!item) return;
-  if (Array.isArray(item.brands)) {
-    for (const b of item.brands) {
-      folded.brands.push({
-        kind: "brand",
-        id: b.id ?? `${item.id}#brand`,
-        type: b.type ?? null,
-        flat: Number.isFinite(b.flat) ? b.flat : 0,
-        pct: Number.isFinite(b.pct) ? b.pct : 0,
-      });
-    }
-  }
-  mergeNumMap(folded.resists, item.resists);
-  mergeNumMap(folded.affinities, item.affinities);
-  if (folded.offense) {
-    mergeNumMap(folded.offense.affinities, item.affinities);
-  }
-  if (folded.defense) {
-    mergeNumMap(folded.defense.resists, item.resists);
-  }
-
-  if (Array.isArray(item.immunities)) {
-    for (const t of item.immunities) {
-      const key = String(t);
-      folded.immunities.add(key);
-      if (folded.defense) {
-        folded.defense.immunities.add(key);
-      }
-    }
-  }
-
-  if (typeof item.dmgMult === "number" && Number.isFinite(item.dmgMult)) {
-    folded.dmgMult *= item.dmgMult;
-  }
-  if (typeof item.speedMult === "number" && Number.isFinite(item.speedMult)) {
-    folded.speedMult *= item.speedMult;
+function mergePolarity(into, add) {
+  if (!add) return;
+  for (const key of Object.keys(add)) {
+    const amount = Number(add[key]) || 0;
+    into[key] = (into[key] || 0) + amount;
   }
 }
 
-function foldItemIntoExtended(item, F) {
-  foldItemInto(item, F);
-
-  if (Array.isArray(item.conversions)) F.offense.conversions.push(...item.conversions);
-  if (Array.isArray(item.brands)) F.offense.brandAdds.push(...item.brands);
-
-  if (item.temporal) {
-    const t = item.temporal;
-    F.temporal.actionSpeedPct += t.actionSpeedPct ?? 0;
-    F.temporal.moveAPDelta += t.moveAPDelta ?? 0;
-    if (typeof t.cooldownMult === "number") F.temporal.cooldownMult *= t.cooldownMult;
-    if (t.cooldownPerTag) {
-      for (const [k, v] of Object.entries(t.cooldownPerTag)) {
-        const prev = F.temporal.cooldownPerTag.get(k) || 1;
-        F.temporal.cooldownPerTag.set(k, prev * v);
-      }
-    }
-    if (t.echo) F.temporal.echo = t.echo;
-    if (t.onKillHaste) F.temporal.onKillHaste = t.onKillHaste;
-  }
-
-  if (item.resource) {
-    const r = item.resource;
-    for (const k of ["stamina", "mana"]) {
-      F.resource.maxFlat[k] += r.maxFlat?.[k] ?? 0;
-      F.resource.maxPct[k] += r.maxPct?.[k] ?? 0;
-      F.resource.regenFlat[k] += r.regenFlat?.[k] ?? 0;
-      F.resource.regenPct[k] += r.regenPct?.[k] ?? 0;
-      if (typeof r.costMult?.[k] === "number") {
-        F.resource.costMult[k] *= r.costMult[k];
-      }
-    }
-    if (r.onHitGain) F.resource.onHitGain = r.onHitGain;
-    if (r.onKillGain) F.resource.onKillGain = r.onKillGain;
-    if (r.channeling) F.resource.channeling = true;
-  }
-
-  if (item.statusMods) {
-    const s = item.statusMods;
-    mergeNumMap(F.status.inflictBonus, s.inflictBonus);
-    mergeNumMap(F.status.inflictDurMult, s.inflictDurMult);
-    mergeNumMap(F.status.resistBonus, s.resistBonus);
-    mergeNumMap(F.status.recvDurMult, s.recvDurMult);
-    F.status.buffDurMult += s.buffDurMult ?? 0;
-    if (Array.isArray(s.freeActionIgnore)) {
-      for (const id of s.freeActionIgnore) {
-        F.status.freeActionIgnore.add(id);
-      }
-    }
-  }
-
-  if (item.polarity) {
-    F.polarity.onHitBias = mergePolBias(
-      F.polarity.onHitBias,
-      item.polarity.onHitBias,
-    );
-    F.polarity.defenseBias = mergePolBias(
-      F.polarity.defenseBias,
-      item.polarity.defenseBias,
-    );
-    F.offense.polarity.onHitBias = mergePolBias(
-      F.offense.polarity.onHitBias,
-      item.polarity.onHitBias,
-    );
-    F.defense.polarity.defenseBias = mergePolBias(
-      F.defense.polarity.defenseBias,
-      item.polarity.defenseBias,
-    );
-  }
-}
-
-function clampFolded(F) {
-  for (const k of Object.keys(F.resists)) {
-    F.resists[k] = Math.max(0, Math.min(MAX_RESIST_CAP, F.resists[k]));
-  }
-  for (const k of Object.keys(F.affinities)) {
-    F.affinities[k] = Math.max(
-      MIN_AFFINITY_CAP,
-      Math.min(MAX_AFFINITY_CAP, F.affinities[k]),
-    );
-  }
-  F.dmgMult = Math.max(0, F.dmgMult);
-  F.speedMult = Math.max(
-    MIN_SPEED_MULTIPLIER,
-    Math.min(MAX_SPEED_MULTIPLIER, F.speedMult),
-  );
-
-  for (const k of Object.keys(F.defense.resists)) {
-    F.defense.resists[k] = Math.max(-0.5, Math.min(0.8, F.defense.resists[k]));
-  }
-  F.temporal.actionSpeedPct = Math.max(-0.5, Math.min(1.0, F.temporal.actionSpeedPct));
-}
-
-export function foldModsFromEquipment(equipment) {
-  /** @type {ModCache} */
-  const folded = {
+/**
+ * Aggregates all modifiers from currently equipped items and stores the result
+ * on the actor. This builds the canonical mod cache for combat resolution.
+ * @param {import("./actor.js").Actor} actor
+ */
+export function foldModsFromEquipment(actor) {
+  const mc = actor.modCache = {
     resists: Object.create(null),
     affinities: Object.create(null),
     immunities: new Set(),
-    dmgMult: BASE_DAMAGE_MULTIPLIER,
-    speedMult: BASE_SPEED_MULTIPLIER,
+    dmgMult: 1,
+    speedMult: 1,
     brands: [],
     offense: {
       conversions: [],
@@ -248,25 +118,218 @@ export function foldModsFromEquipment(equipment) {
       inflictDurMult: Object.create(null),
       resistBonus: Object.create(null),
       recvDurMult: Object.create(null),
-      buffDurMult: 0,
+      buffDurMult: 1,
       freeActionIgnore: new Set(),
     },
     polarity: { onHitBias: {}, defenseBias: {} },
   };
 
-  const seen = new Set();
-  for (const slot of ALL_SLOTS_ORDER) {
+  const equipment = actor.equipment || {};
+  for (const slot of Object.keys(equipment)) {
     const item = asItem(equipment[slot]);
     if (!item) continue;
-    seen.add(slot);
-    foldItemIntoExtended(item, folded);
-  }
-  for (const key of Object.keys(equipment)) {
-    if (seen.has(key)) continue;
-    const item = asItem(equipment[key]);
-    if (item) foldItemIntoExtended(item, folded);
+
+    // Brands
+    if (Array.isArray(item.brands)) {
+      for (const brand of item.brands) {
+        if (!brand) continue;
+        const type = brand.type ?? brand.element ?? brand.damageType ?? null;
+        const flat = Number(brand.flat ?? brand.amount ?? 0) || 0;
+        const percent = Number(brand.percent ?? brand.pct ?? 0) || 0;
+        const onHitStatuses = Array.isArray(brand.onHitStatuses)
+          ? brand.onHitStatuses.slice()
+          : [];
+        mc.offense.brandAdds.push({ type, flat, percent, onHitStatuses });
+        mc.brands.push({ kind: "brand", type, flat, pct: percent, onHitStatuses });
+      }
+    }
+
+    // Conversions / Affinities
+    if (Array.isArray(item.conversions)) {
+      for (const conv of item.conversions) {
+        if (!conv) continue;
+        mc.offense.conversions.push({
+          from: conv.from ?? null,
+          to: conv.to,
+          percent: Number(conv.percent ?? conv.pct ?? 0) || 0,
+          includeBaseOnly: !!conv.includeBaseOnly,
+        });
+      }
+    }
+    mergeRecord(mc.affinities, item.affinities);
+    mergeRecord(mc.offense.affinities, item.affinities);
+    if (item.offense?.affinities) {
+      mergeRecord(mc.affinities, item.offense.affinities);
+      mergeRecord(mc.offense.affinities, item.offense.affinities);
+    }
+
+    // Resists / Immunities
+    if (Array.isArray(item.resists)) {
+      for (const r of item.resists) {
+        if (!r) continue;
+        const type = r.type ?? r.id;
+        if (!type) continue;
+        if (r.immunity) {
+          mc.immunities.add(type);
+          mc.defense.immunities.add(type);
+          continue;
+        }
+        const amount = Number(r.amount ?? r.value ?? r.percent ?? r.pct ?? 0) || 0;
+        mc.resists[type] = (mc.resists[type] || 0) + amount;
+        mc.defense.resists[type] = (mc.defense.resists[type] || 0) + amount;
+      }
+    } else if (item.resists && typeof item.resists === "object") {
+      for (const type of Object.keys(item.resists)) {
+        const amount = Number(item.resists[type]) || 0;
+        mc.resists[type] = (mc.resists[type] || 0) + amount;
+        mc.defense.resists[type] = (mc.defense.resists[type] || 0) + amount;
+      }
+    }
+    if (item.defense?.resists) {
+      mergeRecord(mc.resists, item.defense.resists);
+      mergeRecord(mc.defense.resists, item.defense.resists);
+    }
+    if (Array.isArray(item.immunities)) {
+      for (const type of item.immunities) {
+        if (!type) continue;
+        const key = String(type);
+        mc.immunities.add(key);
+        mc.defense.immunities.add(key);
+      }
+    }
+    if (Array.isArray(item.defense?.immunities)) {
+      for (const type of item.defense.immunities) {
+        if (!type) continue;
+        const key = String(type);
+        mc.immunities.add(key);
+        mc.defense.immunities.add(key);
+      }
+    }
+
+    // Scalar offense/tempo knobs
+    if (Number.isFinite(item.dmgMult)) {
+      mc.dmgMult *= Number(item.dmgMult);
+    }
+    if (Number.isFinite(item.speedMult)) {
+      mc.speedMult *= Number(item.speedMult);
+    }
+
+    // Polarity grant/bias
+    if (item.polarity?.grant) {
+      actor.polarity ||= {};
+      for (const key of Object.keys(item.polarity.grant)) {
+        actor.polarity[key] = (actor.polarity[key] || 0) + (Number(item.polarity.grant[key]) || 0);
+      }
+    }
+    if (item.polarity?.onHitBias) {
+      mergePolarity(mc.polarity.onHitBias, item.polarity.onHitBias);
+      mergePolarity(mc.offense.polarity.onHitBias, item.polarity.onHitBias);
+    }
+    if (item.polarity?.defenseBias) {
+      mergePolarity(mc.polarity.defenseBias, item.polarity.defenseBias);
+      mergePolarity(mc.defense.polarity.defenseBias, item.polarity.defenseBias);
+    }
+
+    // Status interaction
+    if (item.statusMods) {
+      const sm = item.statusMods;
+      mergeRecord(mc.status.inflictBonus, sm.inflictBonus || sm.inflictChanceBonus);
+      mergeRecord(mc.status.inflictDurMult, sm.inflictDurMult || sm.inflictDurationMult);
+      mergeRecord(mc.status.resistBonus, sm.resistBonus || sm.resistChanceBonus);
+      mergeRecord(mc.status.recvDurMult, sm.recvDurMult || sm.receivedDurationMult);
+      const buffMult = sm.buffDurMult ?? sm.buffDurationMult;
+      if (Number.isFinite(buffMult)) {
+        mc.status.buffDurMult *= Number(buffMult);
+      }
+      const freeIgnores = sm.freeActionIgnore || sm.freeAction?.ignore;
+      if (Array.isArray(freeIgnores)) {
+        for (const id of freeIgnores) {
+          if (id) mc.status.freeActionIgnore.add(String(id));
+        }
+      }
+    }
+
+    // Temporal
+    if (item.temporal) {
+      const t = item.temporal;
+      mc.temporal.actionSpeedPct += Number(t.actionSpeedPct) || 0;
+      mc.temporal.moveAPDelta += Number(t.moveAPDelta) || 0;
+      if (Number.isFinite(t.cooldownMult)) {
+        mc.temporal.cooldownMult *= Number(t.cooldownMult);
+      }
+      if (t.cooldownPerTag instanceof Map) {
+        for (const [tag, mult] of t.cooldownPerTag.entries()) {
+          const prev = mc.temporal.cooldownPerTag.get(tag) || 1;
+          mc.temporal.cooldownPerTag.set(tag, prev * (Number(mult) || 1));
+        }
+      } else if (t.cooldownPerTag && typeof t.cooldownPerTag === "object") {
+        for (const tag of Object.keys(t.cooldownPerTag)) {
+          const prev = mc.temporal.cooldownPerTag.get(tag) || 1;
+          mc.temporal.cooldownPerTag.set(tag, prev * (Number(t.cooldownPerTag[tag]) || 1));
+        }
+      }
+      if (t.echo !== undefined && t.echo !== null) {
+        mc.temporal.echo = t.echo;
+      }
+      if (t.onKillHaste) {
+        mc.temporal.onKillHaste = t.onKillHaste;
+      }
+    }
+
+    // Resource
+    if (item.resource) {
+      const r = item.resource;
+      add(mc.resource.maxFlat, {
+        stamina: r.maxStaminaFlat ?? r.maxFlat?.stamina ?? 0,
+        mana: r.maxManaFlat ?? r.maxFlat?.mana ?? 0,
+      });
+      add(mc.resource.maxPct, {
+        stamina: r.maxStaminaPct ?? r.maxPct?.stamina ?? 0,
+        mana: r.maxManaPct ?? r.maxPct?.mana ?? 0,
+      });
+      add(mc.resource.regenFlat, {
+        stamina: r.staminaRegenPerTurn ?? r.regenFlat?.stamina ?? 0,
+        mana: r.manaRegenPerTurn ?? r.regenFlat?.mana ?? 0,
+      });
+      add(mc.resource.regenPct, {
+        stamina: r.staminaRegenPct ?? r.regenPct?.stamina ?? 0,
+        mana: r.manaRegenPct ?? r.regenPct?.mana ?? 0,
+      });
+      if (r.costMult) {
+        if (Number.isFinite(r.costMult.stamina)) {
+          mc.resource.costMult.stamina *= Number(r.costMult.stamina);
+        }
+        if (Number.isFinite(r.costMult.mana)) {
+          mc.resource.costMult.mana *= Number(r.costMult.mana);
+        }
+      }
+      if (Number.isFinite(r.staminaCostMult)) {
+        mc.resource.costMult.stamina *= Number(r.staminaCostMult);
+      }
+      if (Number.isFinite(r.manaCostMult)) {
+        mc.resource.costMult.mana *= Number(r.manaCostMult);
+      }
+      if (r.onHitGain && !mc.resource.onHitGain) {
+        mc.resource.onHitGain = r.onHitGain;
+      }
+      if (r.onKillGain && !mc.resource.onKillGain) {
+        mc.resource.onKillGain = r.onKillGain;
+      }
+      if (r.channeling) {
+        mc.resource.channeling = true;
+      }
+    }
   }
 
-  clampFolded(folded);
-  return folded;
+  // Clamp resists per plan: [-0.50, +0.80]
+  for (const key of Object.keys(mc.defense.resists)) {
+    mc.defense.resists[key] = Math.max(-0.50, Math.min(0.80, mc.defense.resists[key]));
+  }
+  for (const key of Object.keys(mc.resists)) {
+    mc.resists[key] = Math.max(-0.50, Math.min(0.80, mc.resists[key]));
+  }
+
+  // Rebuild status-derived (equip can change it)
+  actor.statusDerived = rebuildStatusDerived(actor);
+  return mc;
 }
