@@ -6,6 +6,11 @@ import { Door, DOOR_STATE, DOOR_TYPE, DOOR_VARIANT_IDS } from "../furniture/door
 import { FurnitureOrientation } from "../furniture/furniture.js";
 import { FurnitureEffect, FURNITURE_EFFECT_IDS } from "../furniture/effects.js";
 import { chooseStuffByWeight, resolveStuff, STUFF } from "../stuff.js";
+import {
+  DUNGEON_DOOR_DEFAULT_EFFECT_CHANCES,
+  DUNGEON_DOOR_DEFAULT_SPAWN_CHANCE,
+  DUNGEON_DOOR_MAX_PER_CONNECTION,
+} from "../../config.js";
 
 const DEFAULT_VARIANTS = [
   {
@@ -122,13 +127,6 @@ const DEFAULT_VARIANTS = [
     ],
   },
 ];
-
-const DEFAULT_EFFECT_CHANCES = {
-  locked: 0.18,
-  jammed: 0.08,
-  broken: 0.04,
-  magical: 0.06,
-};
 
 function clamp01(value) {
   if (!Number.isFinite(value)) return 0;
@@ -370,13 +368,15 @@ export function generateDoorsForDungeon(
   { rooms = [], corridors = [], config = {}, rng = Math.random } = {},
 ) {
   const { tileRooms, byId } = buildRoomTileLookup(rooms);
-  const spawnChance = clamp01(config.spawnChance ?? 0.6);
+  const spawnChance = clamp01(
+    config.spawnChance ?? DUNGEON_DOOR_DEFAULT_SPAWN_CHANCE,
+  );
   const maxPerConnection = Number.isFinite(config.maxPerConnection)
     ? Math.max(0, Math.floor(config.maxPerConnection))
-    : 2;
+    : DUNGEON_DOOR_MAX_PER_CONNECTION;
   const variants = Array.isArray(config.variants) ? config.variants : DEFAULT_VARIANTS;
   const effectChances = {
-    ...DEFAULT_EFFECT_CHANCES,
+    ...DUNGEON_DOOR_DEFAULT_EFFECT_CHANCES,
     ...(config.effectChances || {}),
   };
 
