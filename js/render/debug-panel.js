@@ -50,6 +50,13 @@ export class DebugPanel {
     const status = a.logs?.status?.toArray() ?? [];
     const turn = a.logs?.turn?.toArray() ?? [];
 
+    const attuneEntries = Object.entries(a.attunement?.stacks || {})
+      .sort((lhs, rhs) => (rhs[1] | 0) - (lhs[1] | 0))
+      .slice(0, 2);
+    const attuneText = attuneEntries.length
+      ? attuneEntries.map(([t, s]) => `${t}:${s}`).join(" ")
+      : "none";
+
     const block = (title, rows) => `
       <div style="margin:6px 0 10px;">
         <div style="opacity:.8;margin-bottom:3px;">${title}</div>
@@ -59,7 +66,7 @@ export class DebugPanel {
       </div>`;
 
     this.body.innerHTML = `
-      <div>HP: ${a.hp} | Attunements: ${JSON.stringify(a.attunements)}</div>
+      <div>HP: ${a.hp} | Attunement: ${attuneText}</div>
       ${block("Turn", turn)}
       ${block("Attack", attack)}
       ${block("Status", status)}

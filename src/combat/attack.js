@@ -1,7 +1,7 @@
 // src/combat/attack.js
 // @ts-check
 import { COMBAT_RESIST_MAX, COMBAT_RESIST_MIN } from "../config.js";
-import { gainAttunement } from "./attunement.js";
+import { applyOutgoingScaling, noteUseGain } from "./attunement.js";
 import { applyStatuses } from "./status.js";
 import { polarityDefScalar, polarityOnHitScalar } from "./polarity.js";
 import { logAttackStep } from "./debug-log.js";
@@ -160,23 +160,22 @@ export function resolveAttack(ctx) {
     dmg: Object.values(packets).reduce((sum, value) => sum + (value | 0), 0),
   });
 
+  // 3.25) Attunement scaling before other offensive multipliers
+  const attunementPackets = Object.entries(packets).map(([type, amount]) => ({
+    type,
+    amount,
+  }));
+  applyOutgoingScaling({ packets: attunementPackets, attacker, target: defender });
+  for (const packet of attunementPackets) {
+    packets[packet.type] = Math.max(0, packet.amount);
+  }
+
   // 3.5) Global outgoing damage multiplier (applies uniformly to all packets)
   const dmgMultRaw = attacker.modCache?.dmgMult;
   const dmgMult = Number.isFinite(dmgMultRaw) ? Math.max(0, dmgMultRaw) : 1;
   if (dmgMult !== 1) {
     for (const type of Object.keys(packets)) {
       packets[type] = Math.floor(packets[type] * dmgMult);
-    }
-  }
-
-  // 4) Attunement usage tracking (step 14 in the combat flow)
-  const attunementDefs = attacker.modCache?.attunement;
-  if (attunementDefs && ctx.attacker) {
-    for (const [type, def] of Object.entries(attunementDefs)) {
-      if (!def || typeof def !== "object") continue;
-      const gain = Number(def.onUseGain);
-      if (!Number.isFinite(gain) || gain <= 0) continue;
-      gainAttunement(ctx.attacker, type, gain);
     }
   }
 
@@ -197,6 +196,7 @@ export function resolveAttack(ctx) {
   // 7) Immunities & Resists
   const defRes = defender.modCache?.defense?.resists || {};
   const defImm = defender.modCache?.defense?.immunities || defender.modCache?.immunities || new Set();
+  const usedTypes = new Set();
   for (const type of Object.keys(packets)) {
     if (defImm?.has?.(type)) { packets[type] = 0; continue; }
     let value = packets[type];
@@ -211,6 +211,8 @@ export function resolveAttack(ctx) {
       COMBAT_RESIST_MAX,
     );
     if (resist) value = Math.floor(value * (1 - resist));
+    value = Math.max(0, Math.floor(value));
+    if (value > 0) usedTypes.add(type);
     packets[type] = value;
   }
 
@@ -247,6 +249,10 @@ export function resolveAttack(ctx) {
   const currentHp = (defenderResources?.hp ?? 0) | 0;
   const nextHp = Math.max(0, currentHp - total);
   syncDefenderHp(nextHp);
+
+  if (total > 0 && usedTypes.size) {
+    noteUseGain(attacker, usedTypes);
+  }
 
   // 10) Status application
   const appliedStatuses = applyStatuses(ctx, attacker, defender, ctx.turn);

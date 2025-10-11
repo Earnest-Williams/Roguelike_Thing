@@ -4,17 +4,17 @@ import { rebuildDerived, tickStatusesAtTurnStart } from "./status.js";
 import { gainAP, tickCooldowns } from "./time.js";
 import { updateResources, isDefeated } from "./resources.js";
 import { EVENT, emit } from "../ui/event-log.js";
-import { tickAttunements } from "./attunement.js";
+import { decayPerTurn } from "./attunement.js";
 import { logTurnEvt } from "./debug-log.js";
 
 export function startTurn(actor) {
   if (!actor) return;
-  tickAttunements(actor);
+  decayPerTurn(actor);
   rebuildDerived(actor);
   logTurnEvt(actor, {
     phase: "start_turn",
     actorId: actor.id,
-    attunements: actor.attunements,
+    attunement: actor.attunement,
     turn: actor.turn,
   });
 }
