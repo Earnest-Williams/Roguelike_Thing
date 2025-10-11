@@ -12,16 +12,23 @@ import { applyStatuses } from "./status.js";
  * @property {Record<string, number>} [prePackets]
  * @property {Array<{id:string, baseChance:number, baseDuration:number, stacks?:number}>} [statusAttempts]
  * @property {Array<string>} [tags]
+ * @property {Array<{to:string, percent?:number, pct?:number, includeBaseOnly?:boolean}>} [conversions]
+ * @property {Array<{type:string, flat?:number, percent?:number, pct?:number, onHitStatuses?:any[]}>} [brands]
  */
 
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 
 export function resolveAttack(ctx) {
-  const { attacker, defender } = ctx;
-  if (defender && !defender.resources) {
-    if (defender.res) defender.resources = defender.res;
-    else defender.resources = { hp: defender.hp ?? 0 };
+  if (!ctx.attacker) {
+    throw new Error("resolveAttack: ctx.attacker is required");
   }
+  if (!ctx.defender) {
+    throw new Error("resolveAttack: ctx.defender is required");
+  }
+  const attacker = ctx.attacker;
+  const defender = ctx.defender;
+  const { resource: defenderResources, syncHp: syncDefenderHp } = ensureResourceHandles(defender);
+
   let basePool = Math.max(0, Math.floor(ctx.physicalBase || 0));
   let bonusPool = Math.max(0, Math.floor(ctx.physicalBonus || 0));
   /** @type {Record<string, number>} */
@@ -108,15 +115,48 @@ export function resolveAttack(ctx) {
 
   // 9) Sum & apply
   const total = Object.values(packets).reduce((a, b) => a + (b|0), 0);
-  if (defender.resources) {
-    defender.resources.hp = Math.max(0, (defender.resources.hp|0) - total);
-    if (defender.res && defender.res !== defender.resources) defender.res.hp = defender.resources.hp;
-  }
+  const currentHp = (defenderResources?.hp ?? 0) | 0;
+  const nextHp = Math.max(0, currentHp - total);
+  syncDefenderHp(nextHp);
 
   // 10) Status application
   const appliedStatuses = applyStatuses(ctx, attacker, defender, ctx.turn);
 
   return { packetsAfterDefense: packets, totalDamage: total, appliedStatuses };
+}
+
+function ensureResourceHandles(defender) {
+  if (!defender) {
+    return { resource: null, syncHp: () => {} };
+  }
+  let resource = defender.resources;
+  if (!resource) {
+    if (defender.res) {
+      resource = defender.res;
+      defender.resources = resource;
+    } else {
+      const startHp = typeof defender.hp === "number" ? defender.hp : 0;
+      resource = { hp: startHp };
+      defender.resources = resource;
+      if (!defender.res) defender.res = resource;
+    }
+  }
+  if (typeof resource.hp !== "number") {
+    resource.hp = typeof defender.hp === "number" ? defender.hp : 0;
+  }
+  return {
+    resource,
+    syncHp(nextHp) {
+      if (resource) resource.hp = nextHp;
+      if (defender.resources && defender.resources !== resource) {
+        defender.resources.hp = nextHp;
+      }
+      if (defender.res && defender.res !== resource) {
+        defender.res.hp = nextHp;
+      }
+      defender.hp = nextHp;
+    },
+  };
 }
 
 // Simple polarity scalars (cap ±0.5)
