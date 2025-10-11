@@ -1,5 +1,6 @@
 // src/ui/event-log.js
 // @ts-check
+import { EVENT_LOG_RING_MAX, EVENT_LOG_LATEST_DEFAULT } from "../config.js";
 
 export const EVENT = Object.freeze({
   TURN: "turn",
@@ -10,7 +11,6 @@ export const EVENT = Object.freeze({
 
 /** @type {Map<string, Set<Function>>} */
 const subs = new Map();
-const RING_MAX = 200;
 /** @type {Array<{ t: number, type: string, payload: any }>} */
 const ring = [];
 
@@ -18,7 +18,7 @@ const ring = [];
 export function emit(type, payload) {
   const entry = { t: Date.now(), type, payload };
   ring.push(entry);
-  if (ring.length > RING_MAX) ring.shift();
+  if (ring.length > EVENT_LOG_RING_MAX) ring.shift();
   const s = subs.get(type);
   if (s) for (const fn of s) fn(entry);
   const any = subs.get("*");
@@ -38,6 +38,6 @@ export function subscribe(type, fn) {
 /**
  * @param {number} [n]
  */
-export function latest(n = 50) {
+export function latest(n = EVENT_LOG_LATEST_DEFAULT) {
   return ring.slice(Math.max(0, ring.length - n));
 }
