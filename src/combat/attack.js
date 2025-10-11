@@ -1,8 +1,9 @@
 // src/combat/attack.js
 // @ts-check
-import { COMBAT_RESIST_MAX, COMBAT_RESIST_MIN, POLARITY_CLAMP, POLARITY_SCALAR } from "../config.js";
+import { COMBAT_RESIST_MAX, COMBAT_RESIST_MIN } from "../config.js";
 import { gainAttunement } from "./attunement.js";
 import { applyStatuses } from "./status.js";
+import { polarityDefScalar, polarityOnHitScalar } from "./polarity.js";
 
 /**
  * @typedef {Object} AttackContext
@@ -19,14 +20,6 @@ import { applyStatuses } from "./status.js";
  */
 
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
-
-const POLAR_OPPOSE = Object.freeze({
-  order: ["chaos", "void"],
-  growth: ["decay", "void"],
-  chaos: ["order", "void"],
-  decay: ["growth", "void"],
-  void: ["order", "growth", "chaos", "decay"],
-});
 
 export function resolveAttack(ctx) {
   if (!ctx.attacker) {
@@ -118,8 +111,8 @@ export function resolveAttack(ctx) {
   // 6) Status-derived (outgoing/incoming) and Polarity
   const atkSD = attacker.statusDerived || {};
   const defSD = defender.statusDerived || {};
-  const polOff = polarityOnHitScalar(attacker.polarity, defender.polarity);
-  const polDef = polarityDefScalar(defender.polarity, attacker.polarity);
+  const polOff = polarityOnHitScalar(attacker, defender);
+  const polDef = polarityDefScalar(defender, attacker);
 
   // 7) Immunities & Resists
   const defRes = defender.modCache?.defense?.resists || {};
@@ -200,21 +193,3 @@ function ensureResourceHandles(defender) {
   };
 }
 
-// Simple polarity scalars (cap ±0.5)
-export function polarityOnHitScalar(att, def) {
-  if (!att?.dominant) return 0;
-  const oppositions = POLAR_OPPOSE[att.dominant];
-  if (!oppositions) return 0;
-  let bias = 0;
-  for (const o of oppositions) bias += (def?.[o] || 0);
-  return clamp(bias * POLARITY_SCALAR, POLARITY_CLAMP.min, POLARITY_CLAMP.max);
-}
-
-export function polarityDefScalar(def, att) {
-  if (!def?.dominant) return 0;
-  const oppositions = POLAR_OPPOSE[def.dominant];
-  if (!oppositions) return 0;
-  let bias = 0;
-  for (const o of oppositions) bias += (att?.[o] || 0);
-  return clamp(bias * POLARITY_SCALAR, POLARITY_CLAMP.min, POLARITY_CLAMP.max);
-}
