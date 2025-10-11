@@ -47,11 +47,12 @@ function mkActor() {
   assert(defender.freeAction.cooldownRemaining === 2, "Cooldown should be applied");
   assert(defender.statuses.length === 0, "Existing burn should be purged on ignore");
 
-  const res2 = applyOneStatusAttempt({ attacker, defender, attempt, turn: 2 });
+  const turn = 2;
+  const res2 = applyOneStatusAttempt({ attacker, defender, attempt, turn });
   assert(res2 && !res2.ignored, "Second burn should apply while free action on cooldown");
   assert(defender.statuses.length === 1, "Burn should be added");
   const applied = defender.statuses[0];
-  assert(applied.endsAt === defender.turn + 2, "Duration modifiers should resolve to 2 turns");
+  assert(applied.endsAt === turn + 2, "Duration modifiers should resolve to 2 turns");
 
   Math.random = originalRandom;
   console.log("✓ status interaction bonuses and free action");
