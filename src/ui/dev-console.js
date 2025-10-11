@@ -8,6 +8,14 @@ import {
   DEV_CONSOLE_LOOT_TOAST_TRANSITION_MS,
   DEV_CONSOLE_LOOT_TOAST_TRANSLATE_Y_PX,
   DEV_CONSOLE_LOOT_TOAST_VISIBLE_DURATION_MS,
+  DEV_CONSOLE_LOOT_TOAST_CONTAINER_BOTTOM_PX,
+  DEV_CONSOLE_LOOT_TOAST_CONTAINER_GAP_PX,
+  DEV_CONSOLE_LOOT_TOAST_CONTAINER_RIGHT_PX,
+  DEV_CONSOLE_LOOT_TOAST_CONTAINER_Z_INDEX,
+  DEV_CONSOLE_LOOT_TOAST_BOX_SHADOW,
+  DEV_CONSOLE_LOOT_TOAST_BORDER_RADIUS_PX,
+  DEV_CONSOLE_LOOT_TOAST_FONT_SIZE_PX,
+  DEV_CONSOLE_LOOT_TOAST_PADDING,
   DEV_CONSOLE_RAF_FALLBACK_DELAY_MS,
 } from "../config.js";
 import { createActorFromTemplate, createItem } from "../factories/index.js";
@@ -134,14 +142,14 @@ function ensureLootToastContainer() {
   if (lootToastContainer && lootToastContainer.isConnected) return lootToastContainer;
   const el = document.createElement("div");
   el.style.position = "fixed";
-  el.style.right = "16px";
-  el.style.bottom = "96px";
+  el.style.right = `${DEV_CONSOLE_LOOT_TOAST_CONTAINER_RIGHT_PX}px`;
+  el.style.bottom = `${DEV_CONSOLE_LOOT_TOAST_CONTAINER_BOTTOM_PX}px`;
   el.style.display = "flex";
   el.style.flexDirection = "column";
   el.style.alignItems = "flex-end";
-  el.style.gap = "8px";
+  el.style.gap = `${DEV_CONSOLE_LOOT_TOAST_CONTAINER_GAP_PX}px`;
   el.style.pointerEvents = "none";
-  el.style.zIndex = "2000";
+  el.style.zIndex = `${DEV_CONSOLE_LOOT_TOAST_CONTAINER_Z_INDEX}`;
   document.body.appendChild(el);
   lootToastContainer = el;
   return el;
@@ -155,11 +163,11 @@ function showLootToast(drop) {
   toast.textContent = `${drop.name || drop.id} — ${names.join(" · ")}`;
   toast.style.background = "rgba(15,23,42,0.92)";
   toast.style.color = "#f8fafc";
-  toast.style.padding = "8px 12px";
-  toast.style.borderRadius = "8px";
+  toast.style.padding = DEV_CONSOLE_LOOT_TOAST_PADDING;
+  toast.style.borderRadius = `${DEV_CONSOLE_LOOT_TOAST_BORDER_RADIUS_PX}px`;
   toast.style.fontFamily = "monospace";
-  toast.style.fontSize = "12px";
-  toast.style.boxShadow = "0 8px 24px rgba(15,23,42,0.35)";
+  toast.style.fontSize = `${DEV_CONSOLE_LOOT_TOAST_FONT_SIZE_PX}px`;
+  toast.style.boxShadow = DEV_CONSOLE_LOOT_TOAST_BOX_SHADOW;
   toast.style.opacity = "0";
   toast.style.transform = `translateY(${DEV_CONSOLE_LOOT_TOAST_TRANSLATE_Y_PX}px)`;
   toast.style.transition = `opacity ${DEV_CONSOLE_LOOT_TOAST_TRANSITION_MS}ms ease-out, transform ${DEV_CONSOLE_LOOT_TOAST_TRANSITION_MS}ms ease-out`;
