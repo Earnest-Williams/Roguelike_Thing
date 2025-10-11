@@ -93,8 +93,58 @@ function multiply(into, mults) {
 function applyTemporalPayload(cache, payload) {
   if (!payload) return;
   const temporal = cache.temporal;
-  temporal.actionSpeedPct += Number(payload.actionSpeedPct ?? 0) || 0;
-  temporal.moveAPDelta += Number(payload.moveAPDelta ?? payload.moveApDelta ?? 0) || 0;
+  const addNumber = (field, ...aliases) => {
+    for (const alias of [field, ...aliases]) {
+      if (payload[alias] === undefined) continue;
+      const value = Number(payload[alias]);
+      if (!Number.isFinite(value)) continue;
+      temporal[field] = (temporal[field] || 0) + value;
+      return;
+    }
+  };
+  const multNumber = (field, ...aliases) => {
+    for (const alias of [field, ...aliases]) {
+      if (payload[alias] === undefined) continue;
+      const value = Number(payload[alias]);
+      if (!Number.isFinite(value)) continue;
+      temporal[field] = (temporal[field] ?? 1) * value;
+      return;
+    }
+  };
+
+  addNumber("actionSpeedPct", "actionSpeedPct", "actionSpeedPercent", "speedPct", "speedPercent");
+  addNumber("moveAPDelta", "moveAPDelta", "moveApDelta", "moveApFlat", "moveAPFlat");
+  addNumber("moveAPPct", "moveAPPct", "moveApPct", "moveApPercent", "moveAPPercent");
+  multNumber("moveAPMult", "moveAPMult", "moveApMult", "moveApMultiplier");
+  addNumber(
+    "baseActionAPDelta",
+    "baseActionAPDelta",
+    "baseActionApDelta",
+    "baseActionApFlat",
+    "baseActionAPFlat",
+  );
+  addNumber(
+    "baseActionAPPct",
+    "baseActionAPPct",
+    "baseActionApPct",
+    "baseActionApPercent",
+    "baseActionAPPercent",
+  );
+  multNumber(
+    "baseActionAPMult",
+    "baseActionAPMult",
+    "baseActionApMult",
+    "baseActionApMultiplier",
+  );
+  addNumber("apGainFlat", "apGainFlat", "apRegenFlat", "apGainPerTurn", "apRegenPerTurn");
+  addNumber("apGainPct", "apGainPct", "apGainPercent", "apRegenPct", "apRegenPercent");
+  multNumber("apGainMult", "apGainMult", "apGainMultiplier", "apRegenMult", "apRegenMultiplier");
+  addNumber("apCapFlat", "apCapFlat", "apCapDelta", "apCapAdd");
+  addNumber("apCapPct", "apCapPct", "apCapPercent");
+  multNumber("apCapMult", "apCapMult", "apCapMultiplier");
+  addNumber("initiativeFlat", "initiativeFlat", "initFlat", "initiativeDelta");
+  addNumber("initiativePct", "initiativePct", "initPct", "initiativePercent");
+  multNumber("initiativeMult", "initiativeMult", "initMult", "initiativeMultiplier");
   const cooldownMult = Number(payload.cooldownMult);
   if (Number.isFinite(cooldownMult)) {
     temporal.cooldownMult *= cooldownMult;
@@ -170,6 +220,34 @@ function applyResourcePayload(cache, payload) {
     stamina: payload.staminaRegenPct ?? payload.staminaRegenPercent ?? 0,
     mana: payload.manaRegenPct ?? payload.manaRegenPercent ?? 0,
   });
+  if (payload.startFlat && typeof payload.startFlat === "object") {
+    add(resource.startFlat, payload.startFlat);
+  }
+  add(resource.startFlat, {
+    hp: payload.startHpFlat ?? payload.startHPFlat ?? payload.startHp ?? 0,
+    stamina: payload.startStaminaFlat ?? payload.startStamina ?? 0,
+    mana: payload.startManaFlat ?? payload.startMana ?? 0,
+  });
+  if (payload.startPct && typeof payload.startPct === "object") {
+    add(resource.startPct, payload.startPct);
+  }
+  add(resource.startPct, {
+    hp: payload.startHpPct ?? payload.startHPPct ?? payload.startHpPercent ?? 0,
+    stamina: payload.startStaminaPct ?? payload.startStaminaPercent ?? 0,
+    mana: payload.startManaPct ?? payload.startManaPercent ?? 0,
+  });
+  if (payload.gainFlat && typeof payload.gainFlat === "object") {
+    add(resource.gainFlat, payload.gainFlat);
+  }
+  if (payload.gainPct && typeof payload.gainPct === "object") {
+    add(resource.gainPct, payload.gainPct);
+  }
+  if (payload.leechFlat && typeof payload.leechFlat === "object") {
+    add(resource.leechFlat, payload.leechFlat);
+  }
+  if (payload.leechPct && typeof payload.leechPct === "object") {
+    add(resource.leechPct, payload.leechPct);
+  }
   multiply(resource.costMult, payload.costMult);
   const staminaCostMult = Number(payload.staminaCostMult ?? payload.staminaCostMultiplier);
   if (Number.isFinite(staminaCostMult)) {
@@ -183,11 +261,73 @@ function applyResourcePayload(cache, payload) {
   if (Number.isFinite(hpCostMult)) {
     resource.costMult.hp = (resource.costMult.hp ?? 1) * hpCostMult;
   }
+  if (payload.costFlat && typeof payload.costFlat === "object") {
+    add(resource.costFlat, payload.costFlat);
+  }
+  const applyCostPerTag = (tag, value) => {
+    if (!tag) return;
+    const key = String(tag);
+    const prev = resource.costPerTag.get(key) || { hp: 1, stamina: 1, mana: 1 };
+    if (typeof value === "number") {
+      const mult = Number(value);
+      if (Number.isFinite(mult)) {
+        for (const res of ["hp", "stamina", "mana"]) {
+          prev[res] = (prev[res] ?? 1) * mult;
+        }
+      }
+    } else if (value && typeof value === "object") {
+      for (const res of Object.keys(value)) {
+        const mult = Number(value[res]);
+        if (!Number.isFinite(mult)) continue;
+        prev[res] = (prev[res] ?? 1) * mult;
+      }
+    }
+    resource.costPerTag.set(key, prev);
+  };
+  const costPerTag = payload.costPerTag ?? payload.costMultByTag ?? payload.costMultiplierByTag;
+  if (costPerTag instanceof Map) {
+    for (const [tag, value] of costPerTag.entries()) {
+      applyCostPerTag(tag, value);
+    }
+  } else if (Array.isArray(costPerTag)) {
+    for (const entry of costPerTag) {
+      if (!entry) continue;
+      const tag = entry.tag ?? entry.type ?? entry.id;
+      if (!tag) continue;
+      const value =
+        entry.mult ??
+        entry.value ??
+        entry.amount ??
+        entry.pct ??
+        entry.percent ??
+        entry.multiplier ??
+        entry.byResource ??
+        entry.resources ??
+        null;
+      if (value !== null && value !== undefined) {
+        applyCostPerTag(tag, value);
+        continue;
+      }
+      if (entry.cost && typeof entry.cost === "object") {
+        applyCostPerTag(tag, entry.cost);
+      }
+    }
+  } else if (costPerTag && typeof costPerTag === "object") {
+    for (const tag of Object.keys(costPerTag)) {
+      applyCostPerTag(tag, costPerTag[tag]);
+    }
+  }
   if (payload.onHitGain && !resource.onHitGain) {
     resource.onHitGain = payload.onHitGain;
   }
   if (payload.onKillGain && !resource.onKillGain) {
     resource.onKillGain = payload.onKillGain;
+  }
+  if (payload.onSpendGain && !resource.onSpendGain) {
+    resource.onSpendGain = payload.onSpendGain;
+  }
+  if (payload.onSpendRefund && !resource.onSpendRefund) {
+    resource.onSpendRefund = payload.onSpendRefund;
   }
   if (payload.channeling) {
     resource.channeling = true;
@@ -221,19 +361,43 @@ export function foldModsFromEquipment(actor) {
     temporal: {
       actionSpeedPct: 0,
       moveAPDelta: 0,
+      moveAPPct: 0,
+      moveAPMult: 1,
+      baseActionAPDelta: 0,
+      baseActionAPPct: 0,
+      baseActionAPMult: 1,
+      apGainFlat: 0,
+      apGainPct: 0,
+      apGainMult: 1,
+      apCapFlat: 0,
+      apCapPct: 0,
+      apCapMult: 1,
+      initiativeFlat: 0,
+      initiativePct: 0,
+      initiativeMult: 1,
       cooldownMult: 1,
       cooldownPerTag: new Map(),
       echo: null,
       onKillHaste: null,
     },
     resource: {
-      maxFlat: { stamina: 0, mana: 0 },
-      maxPct: { stamina: 0, mana: 0 },
-      regenFlat: { stamina: 0, mana: 0 },
-      regenPct: { stamina: 0, mana: 0 },
-      costMult: { stamina: 1, mana: 1 },
+      maxFlat: { hp: 0, stamina: 0, mana: 0 },
+      maxPct: { hp: 0, stamina: 0, mana: 0 },
+      regenFlat: { hp: 0, stamina: 0, mana: 0 },
+      regenPct: { hp: 0, stamina: 0, mana: 0 },
+      startFlat: { hp: 0, stamina: 0, mana: 0 },
+      startPct: { hp: 0, stamina: 0, mana: 0 },
+      gainFlat: { hp: 0, stamina: 0, mana: 0 },
+      gainPct: { hp: 0, stamina: 0, mana: 0 },
+      leechFlat: { hp: 0, stamina: 0, mana: 0 },
+      leechPct: { hp: 0, stamina: 0, mana: 0 },
+      costFlat: { hp: 0, stamina: 0, mana: 0 },
+      costMult: { hp: 1, stamina: 1, mana: 1 },
+      costPerTag: new Map(),
       onHitGain: null,
       onKillGain: null,
+      onSpendGain: null,
+      onSpendRefund: null,
       channeling: false,
     },
     status: {
