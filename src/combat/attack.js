@@ -255,6 +255,12 @@ export function resolveAttack(ctx) {
   if (total > 0) {
     eventGain(attacker, { kind: "hit" });
   }
+  const wasCrit = Boolean(
+    ctx.crit || ctx.wasCrit || ctx.attack?.crit || ctx.result?.crit,
+  );
+  if (wasCrit) {
+    eventGain(attacker, { kind: "crit" });
+  }
   if (currentHp > HEALTH_FLOOR && nextHp <= HEALTH_FLOOR) {
     eventGain(attacker, { kind: "kill" });
   }
@@ -280,7 +286,13 @@ export function resolveAttack(ctx) {
 
   breakdown.totalDamage = total;
 
-  return { packetsAfterDefense: packets, totalDamage: total, appliedStatuses, breakdown };
+  return {
+    packetsAfterDefense: packets,
+    totalDamage: total,
+    appliedStatuses,
+    breakdown,
+    crit: wasCrit,
+  };
 }
 
 function ensureResourceHandles(defender) {
