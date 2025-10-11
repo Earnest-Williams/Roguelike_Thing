@@ -19,6 +19,15 @@ function testStatusTicking() {
   console.log("✓ status ticking & expiry");
 }
 
+function testStatusZeroDuration() {
+  const actor = { statuses: [], turn: 0 };
+  addStatus(actor, "haste", { duration: 0 });
+  assert.equal(actor.statuses.length, 1, "status applies immediately");
+  tickStatuses(actor, 1);
+  assert.equal(actor.statuses.length, 0, "zero-duration status should drop on next tick");
+  console.log("✓ status zero-duration cleanup");
+}
+
 function testResolveWithPolarity() {
   const attacker = { id: "atk", polarity: "order", statusDerived: {}, modCache: { offense: { conversions: [], brandAdds: [], affinities: {} }, defense: { resists: {}, immunities: new Set() }, brands: [], immunities: new Set() }, attunement: { rules: Object.create(null), stacks: Object.create(null) } };
   const defender = { id: "def", polarity: "chaos", hp: 100, statusDerived: {}, modCache: { defense: { resists: { fire: 0.2 }, immunities: new Set(), flatDR: {} }, immunities: new Set() }, resources: { hp: 100 } };
@@ -104,6 +113,7 @@ function testFoldMods() {
 
 (function run() {
   testStatusTicking();
+  testStatusZeroDuration();
   testResolveWithPolarity();
   testFoldModsSlotFilters();
   testCooldownLifecycle();

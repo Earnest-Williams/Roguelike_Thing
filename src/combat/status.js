@@ -151,10 +151,11 @@ function hookPayload(target, entry) {
 }
 
 function normalizeEndsAt(target, endsAt) {
-  if (!Number.isFinite(endsAt) || endsAt <= target.turn) {
+  const now = Number.isFinite(target?.turn) ? target.turn : 0;
+  if (!Number.isFinite(endsAt)) {
     return Number.POSITIVE_INFINITY;
   }
-  return endsAt;
+  return Math.max(now, endsAt);
 }
 
 /**
