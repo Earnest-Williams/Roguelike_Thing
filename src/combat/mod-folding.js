@@ -251,7 +251,7 @@ export function foldModsFromEquipment(equipment) {
       buffDurMult: 0,
       freeActionIgnore: new Set(),
     },
-    polarity: {},
+    polarity: { onHitBias: {}, defenseBias: {} },
   };
 
   const seen = new Set();
