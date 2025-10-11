@@ -36,7 +36,7 @@ registerStatus({
   label: "Stunned",
   harmful: true,
   stacking: "refresh",
-  derive: () => ({ actionSpeedPct: +1.0 }),
+  derive: () => ({ actionSpeedPct: 1.0 }),
 });
 
 // haste: refresh, faster actions
