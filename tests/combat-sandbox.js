@@ -9,7 +9,6 @@ function mkActor(id, hp, mods) {
     name: id,
     hp,
     res: { hp },
-    resources: { hp },
     statuses: [],
     attunements: {},
     modCache: mods,
