@@ -96,14 +96,8 @@ export function resolveAttack(ctx) {
   // 5) Status-derived (outgoing/incoming) and Polarity
   const atkSD = attacker.statusDerived || {};
   const defSD = defender.statusDerived || {};
-  const polOff = polarityOnHitScalar(
-    attacker.polarity || attacker.modCache?.polarity?.onHitBias,
-    defender.polarity || defender.modCache?.polarity?.defenseBias,
-  );
-  const polDef = polarityDefScalar(
-    defender.polarity || defender.modCache?.polarity?.defenseBias,
-    attacker.polarity || attacker.modCache?.polarity?.onHitBias,
-  );
+  const polOff = polarityOnHitScalar(attacker.polarity, defender.polarity);
+  const polDef = polarityDefScalar(defender.polarity, attacker.polarity);
 
   // 6) Immunities & Resists
   const defRes = defender.modCache?.defense?.resists || {};
@@ -115,9 +109,7 @@ export function resolveAttack(ctx) {
     const inn = (defSD.damageTakenMult?.[type] || 0);
     if (out) value = Math.floor(value * (1 + out));
     if (inn) value = Math.floor(value * (1 + inn));
-    if (polOff || polDef) {
-      value = Math.floor(value * (1 + polOff) * (1 - polDef));
-    }
+    value = Math.floor(value * (1 + polOff) * (1 - polDef));
     const resist = clamp((defRes[type] || 0) + (defSD.resistDelta?.[type] || 0), -0.50, 0.80);
     if (resist) value = Math.floor(value * (1 - resist));
     packets[type] = value;
@@ -174,18 +166,19 @@ function ensureResourceHandles(defender) {
 
 // Simple polarity scalars (cap ±0.5)
 export function polarityOnHitScalar(att, def) {
-  if (!att) return 0;
+  if (!att?.dominant) return 0;
   const oppositions = POLAR_OPPOSE[att.dominant];
   if (!oppositions) return 0;
   let bias = 0;
-  for (const o of oppositions) bias += (Number(def?.[o]) || 0);
+  for (const o of oppositions) bias += (def?.[o] || 0);
   return clamp(bias * 0.25, -0.5, 0.5);
 }
+
 export function polarityDefScalar(def, att) {
-  if (!def) return 0;
+  if (!def?.dominant) return 0;
   const oppositions = POLAR_OPPOSE[def.dominant];
   if (!oppositions) return 0;
   let bias = 0;
-  for (const o of oppositions) bias += (Number(att?.[o]) || 0);
+  for (const o of oppositions) bias += (att?.[o] || 0);
   return clamp(bias * 0.25, -0.5, 0.5);
 }
