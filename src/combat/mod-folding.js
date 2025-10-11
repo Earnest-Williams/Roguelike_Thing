@@ -118,11 +118,13 @@ export function foldModsFromEquipment(actor) {
       inflictDurMult: Object.create(null),
       resistBonus: Object.create(null),
       recvDurMult: Object.create(null),
-      buffDurMult: 0,
+      buffDurMult: 1,
       freeActionIgnore: new Set(),
     },
     polarity: { onHitBias: {}, defenseBias: {} },
   };
+
+  actor.polarity = {};
 
   const equipment = actor.equipment || {};
   for (const slot of Object.keys(equipment)) {
@@ -144,9 +146,48 @@ export function foldModsFromEquipment(actor) {
       }
     }
 
+    // Nested offense payloads (brands / conversions / affinities)
+    if (Array.isArray(item.offense?.brands)) {
+      for (const brand of item.offense.brands) {
+        if (!brand) continue;
+        const type = brand.type ?? brand.element ?? brand.damageType ?? null;
+        const flat = Number(brand.flat ?? brand.amount ?? 0) || 0;
+        const percent = Number(brand.percent ?? brand.pct ?? 0) || 0;
+        const onHitStatuses = Array.isArray(brand.onHitStatuses)
+          ? brand.onHitStatuses.slice()
+          : [];
+        mc.offense.brandAdds.push({ type, flat, percent, onHitStatuses });
+        mc.brands.push({ kind: "brand", type, flat, pct: percent, onHitStatuses });
+      }
+    }
+    if (Array.isArray(item.offense?.brandAdds)) {
+      for (const brand of item.offense.brandAdds) {
+        if (!brand) continue;
+        const type = brand.type ?? brand.element ?? brand.damageType ?? null;
+        const flat = Number(brand.flat ?? brand.amount ?? 0) || 0;
+        const percent = Number(brand.percent ?? brand.pct ?? 0) || 0;
+        const onHitStatuses = Array.isArray(brand.onHitStatuses)
+          ? brand.onHitStatuses.slice()
+          : [];
+        mc.offense.brandAdds.push({ type, flat, percent, onHitStatuses });
+        mc.brands.push({ kind: "brand", type, flat, pct: percent, onHitStatuses });
+      }
+    }
+
     // Conversions / Affinities
     if (Array.isArray(item.conversions)) {
       for (const conv of item.conversions) {
+        if (!conv) continue;
+        mc.offense.conversions.push({
+          from: conv.from ?? null,
+          to: conv.to,
+          percent: Number(conv.percent ?? conv.pct ?? 0) || 0,
+          includeBaseOnly: !!conv.includeBaseOnly,
+        });
+      }
+    }
+    if (Array.isArray(item.offense?.conversions)) {
+      for (const conv of item.offense.conversions) {
         if (!conv) continue;
         mc.offense.conversions.push({
           from: conv.from ?? null,
@@ -207,16 +248,17 @@ export function foldModsFromEquipment(actor) {
     }
 
     // Scalar offense/tempo knobs
-    if (Number.isFinite(item.dmgMult)) {
-      mc.dmgMult *= Number(item.dmgMult);
+    const dmgMult = Number(item.dmgMult);
+    if (Number.isFinite(dmgMult)) {
+      mc.dmgMult *= dmgMult;
     }
-    if (Number.isFinite(item.speedMult)) {
-      mc.speedMult *= Number(item.speedMult);
+    const speedMult = Number(item.speedMult);
+    if (Number.isFinite(speedMult)) {
+      mc.speedMult *= speedMult;
     }
 
     // Polarity grant/bias
     if (item.polarity?.grant) {
-      actor.polarity ||= {};
       for (const key of Object.keys(item.polarity.grant)) {
         actor.polarity[key] = (actor.polarity[key] || 0) + (Number(item.polarity.grant[key]) || 0);
       }
@@ -237,9 +279,9 @@ export function foldModsFromEquipment(actor) {
       mergeRecord(mc.status.inflictDurMult, sm.inflictDurMult || sm.inflictDurationMult);
       mergeRecord(mc.status.resistBonus, sm.resistBonus || sm.resistChanceBonus);
       mergeRecord(mc.status.recvDurMult, sm.recvDurMult ?? sm.receivedDurationMult);
-      const buffMult = sm.buffDurMult ?? sm.buffDurationMult;
+      const buffMult = Number(sm.buffDurMult ?? sm.buffDurationMult);
       if (Number.isFinite(buffMult)) {
-        mc.status.buffDurMult *= Number(buffMult);
+        mc.status.buffDurMult *= buffMult;
       }
       const freeIgnores = sm.freeActionIgnore || sm.freeAction?.ignore;
       if (Array.isArray(freeIgnores)) {
@@ -254,13 +296,22 @@ export function foldModsFromEquipment(actor) {
       const t = item.temporal;
       mc.temporal.actionSpeedPct += Number(t.actionSpeedPct) || 0;
       mc.temporal.moveAPDelta += Number(t.moveAPDelta) || 0;
-      if (Number.isFinite(t.cooldownMult)) {
-        mc.temporal.cooldownMult *= Number(t.cooldownMult);
+      const cooldownMult = Number(t.cooldownMult);
+      if (Number.isFinite(cooldownMult)) {
+        mc.temporal.cooldownMult *= cooldownMult;
       }
       if (t.cooldownPerTag instanceof Map) {
         for (const [tag, mult] of t.cooldownPerTag.entries()) {
           const prev = mc.temporal.cooldownPerTag.get(tag) || 1;
           mc.temporal.cooldownPerTag.set(tag, prev * (Number(mult) || 1));
+        }
+      } else if (Array.isArray(t.cooldownPerTag)) {
+        for (const entry of t.cooldownPerTag) {
+          if (!entry) continue;
+          const tag = entry.tag ?? entry.type ?? entry.id;
+          if (!tag) continue;
+          const prev = mc.temporal.cooldownPerTag.get(tag) || 1;
+          mc.temporal.cooldownPerTag.set(tag, prev * (Number(entry.mult ?? entry.value ?? entry.amount ?? entry.pct ?? entry.percent) || 1));
         }
       } else if (t.cooldownPerTag && typeof t.cooldownPerTag === "object") {
         for (const tag of Object.keys(t.cooldownPerTag)) {
@@ -296,18 +347,22 @@ export function foldModsFromEquipment(actor) {
         mana: r.manaRegenPct ?? r.regenPct?.mana ?? 0,
       });
       if (r.costMult) {
-        if (Number.isFinite(r.costMult.stamina)) {
-          mc.resource.costMult.stamina *= Number(r.costMult.stamina);
+        const staminaMult = Number(r.costMult.stamina);
+        if (Number.isFinite(staminaMult)) {
+          mc.resource.costMult.stamina *= staminaMult;
         }
-        if (Number.isFinite(r.costMult.mana)) {
-          mc.resource.costMult.mana *= Number(r.costMult.mana);
+        const manaMult = Number(r.costMult.mana);
+        if (Number.isFinite(manaMult)) {
+          mc.resource.costMult.mana *= manaMult;
         }
       }
-      if (Number.isFinite(r.staminaCostMult)) {
-        mc.resource.costMult.stamina *= Number(r.staminaCostMult);
+      const staminaCostMult = Number(r.staminaCostMult);
+      if (Number.isFinite(staminaCostMult)) {
+        mc.resource.costMult.stamina *= staminaCostMult;
       }
-      if (Number.isFinite(r.manaCostMult)) {
-        mc.resource.costMult.mana *= Number(r.manaCostMult);
+      const manaCostMult = Number(r.manaCostMult);
+      if (Number.isFinite(manaCostMult)) {
+        mc.resource.costMult.mana *= manaCostMult;
       }
       if (r.onHitGain && !mc.resource.onHitGain) {
         mc.resource.onHitGain = r.onHitGain;
