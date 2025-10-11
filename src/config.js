@@ -48,6 +48,16 @@ export const DEV_CONSOLE_LOOT_TOAST_BORDER_RADIUS_PX = 8;
 export const DEV_CONSOLE_LOOT_TOAST_FONT_SIZE_PX = 12;
 export const DEV_CONSOLE_LOOT_TOAST_BOX_SHADOW = "0 8px 24px rgba(15,23,42,0.35)";
 
+// Dungeon door placement tuning
+export const DUNGEON_DOOR_DEFAULT_SPAWN_CHANCE = 0.6;
+export const DUNGEON_DOOR_MAX_PER_CONNECTION = 2;
+export const DUNGEON_DOOR_DEFAULT_EFFECT_CHANCES = Object.freeze({
+  locked: 0.18,
+  jammed: 0.08,
+  broken: 0.04,
+  magical: 0.06,
+});
+
 // Combat status tuning
 export const STATUS_BURN_MAX_STACKS = BURN_MAX_STACKS;
 export const STATUS_BURN_BASE_DAMAGE = BURN_TICK_DAMAGE_PER_STACK;
