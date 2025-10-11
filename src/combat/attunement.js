@@ -2,6 +2,18 @@
 // @ts-check
 
 /**
+ * @typedef {Object} AttuneRule
+ * @property {number} [onUseGain]
+ * @property {number} [decayPerTurn]
+ * @property {number} [maxStacks]
+ * @property {{ damagePct?: number, resistPct?: number, accuracyFlat?: number }} [perStack]
+ */
+
+/**
+ * @typedef {{ rules: Record<string, AttuneRule>, stacks: Record<string, number> }} AttunementState
+ */
+
+/**
  * Fetch the current attunement stacks for a given damage type.
  * @param {import("./actor.js").Actor|{attunement?: {stacks?: Record<string, number>}}} actor
  * @param {string} type
@@ -52,14 +64,18 @@ export function applyOutgoingScaling(ctx) {
   const applied = [];
   for (const packet of packets) {
     if (!packet || typeof packet.type !== "string") continue;
+    const amount = Number(packet.amount);
+    if (!Number.isFinite(amount) || amount <= 0) continue;
     const rule = ruleFor(attacker, packet.type);
     if (!rule) continue;
     const stacks = getStacks(attacker, packet.type);
     if (!stacks) continue;
     const dmgPct = rule.perStack?.damagePct || 0;
     if (!dmgPct) continue;
-    packet.amount = Math.max(0, packet.amount * (1 + dmgPct * stacks));
-    applied.push({ type: packet.type, stacks, amount: packet.amount });
+    const scaled = Math.max(0, amount * (1 + dmgPct * stacks));
+    if (scaled === amount) continue;
+    packet.amount = scaled;
+    applied.push({ type: packet.type, stacks, amount: scaled });
   }
 
   if (applied.length) {
@@ -84,6 +100,7 @@ export function noteUseGain(attacker, usedTypes) {
     const rawMax = rule.maxStacks;
     const cap = Number.isFinite(rawMax) && rawMax > 0 ? rawMax : Number.POSITIVE_INFINITY;
     const next = Math.min(cap, current + gain);
+    if (next === current) continue;
     setStacks(attacker, type, next);
     attacker.logs?.attack?.push?.({ kind: "attune_gain", type, stacks: next });
     attacker.log?.push?.({ kind: "attune_gain", type, stacks: next });
