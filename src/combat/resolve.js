@@ -51,7 +51,17 @@ function applyConversions(actor, packets) {
   for (const pkt of packets) {
     let remaining = pkt.amount;
     for (const c of convs) {
-      if (pkt.type !== c.from) continue;
+      // Validate c.from and c.pct
+      if (
+        typeof c.from !== "string" ||
+        pkt.type !== c.from ||
+        typeof c.pct !== "number" ||
+        !Number.isFinite(c.pct) ||
+        c.pct <= 0 ||
+        c.pct > 1
+      ) {
+        continue;
+      }
       const take = Math.floor(pkt.amount * c.pct);
       if (take > 0) {
         out.push({ type: c.to, amount: take });
