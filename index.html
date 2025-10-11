@@ -431,6 +431,15 @@
       import { RenderController } from "./js/render/controller.js";
       import { resolveAttack } from "./src/combat/attack.js";
       import { Sound } from "./src/ui/sound.js";
+      import {
+        FurnitureKind,
+        FurnitureOrientation,
+        Door,
+        DOOR_TYPE,
+        DOOR_STATE,
+        FURNITURE_EFFECT_IDS,
+      } from "./src/world/furniture/index.js";
+      import { generateDoorsForDungeon } from "./src/world/dungeon/door-placement.js";
 
       Sound.init();
 
@@ -449,6 +458,17 @@
             end: "#f44336",
             player: "#2196f3",
             playerGlyph: "#fff",
+            door: "#8b5a2b",
+            doorGlyph: "#fef3c7",
+            doorOpenGlyph: "#fde68a",
+            doorLocked: "#facc15",
+            doorJammed: "#fb923c",
+            doorBroken: "#9ca3af",
+            doorMagic: "#a855f7",
+            doorPortcullis: "#d1d5db",
+            doorReinforced: "#cbd5f5",
+            doorArchway: "#fcd34d",
+            doorSecret: "#22d3ee",
             visibleOverlay: "rgba(255,255,102,0.20)",
           },
           light: {
@@ -492,6 +512,80 @@
             corridors: {
               extraEdgeFraction: 0.15,
               rescueConnectivity: true,
+            },
+            doors: {
+              spawnChance: 0.65,
+              maxPerConnection: 2,
+              effectChances: {
+                locked: 0.2,
+                jammed: 0.08,
+                broken: 0.05,
+                magical: 0.07,
+              },
+              variants: [
+                {
+                  id: "standard",
+                  type: "hinged",
+                  weight: 6,
+                  materialWeights: [
+                    { id: "wood", weight: 6 },
+                    { id: "iron", weight: 2 },
+                    { id: "stone", weight: 1 },
+                  ],
+                },
+                {
+                  id: "reinforced",
+                  type: "hinged",
+                  weight: 2,
+                  tags: ["reinforced"],
+                  materialWeights: [
+                    { id: "iron", weight: 4 },
+                    { id: "steel", weight: 3 },
+                    { id: "stone", weight: 1 },
+                  ],
+                },
+                {
+                  id: "portcullis",
+                  type: "portcullis",
+                  weight: 1,
+                  tags: ["heavy"],
+                  materialWeights: [
+                    { id: "iron", weight: 3 },
+                    { id: "steel", weight: 4 },
+                  ],
+                },
+                {
+                  id: "archway",
+                  type: "archway",
+                  weight: 1,
+                  allowRandomEffects: false,
+                  initialState: "open",
+                  tags: ["archway", "permanent_open"],
+                  materialWeights: [
+                    { id: "stone", weight: 4 },
+                    { id: "wood", weight: 1 },
+                  ],
+                },
+                {
+                  id: "secret",
+                  type: "secret",
+                  weight: 0.5,
+                  allowRandomEffects: false,
+                  tags: ["secret", "concealed"],
+                  materialWeights: [
+                    { id: "stone", weight: 3 },
+                    { id: "wood", weight: 2 },
+                  ],
+                  defaultEffects: [
+                    {
+                      id: "magic_aura",
+                      tags: ["magical", "illusion"],
+                      description:
+                        "A faint shimmer betrays the outline of this hidden door.",
+                    },
+                  ],
+                },
+              ],
             },
           },
         },
@@ -1041,7 +1135,39 @@
           grid: [],
           explored: [],
           known: [],
+          furniture: [],
+          furnitureIndex: new Map(),
         };
+
+        function rebuildFurnitureIndex(furniturePlacements = mapState.furniture) {
+          mapState.furnitureIndex = new Map();
+          if (!Array.isArray(furniturePlacements)) return;
+          for (const placement of furniturePlacements) {
+            if (!placement || !placement.position) continue;
+            const px = Math.round(placement.position.x);
+            const py = Math.round(placement.position.y);
+            if (!Number.isFinite(px) || !Number.isFinite(py)) continue;
+            const keyStr = posKeyFromCoords(px, py);
+            mapState.furnitureIndex.set(keyStr, placement);
+          }
+        }
+
+        function normalizeFurniturePlacements(placements) {
+          if (!Array.isArray(placements)) return [];
+          return placements
+            .map((placement) => {
+              if (!placement) return null;
+              const rawPos = placement.position || placement.pos || {};
+              const px = Math.round(rawPos.x ?? NaN);
+              const py = Math.round(rawPos.y ?? NaN);
+              if (!Number.isFinite(px) || !Number.isFinite(py)) return null;
+              return {
+                ...placement,
+                position: { x: px, y: py },
+              };
+            })
+            .filter(Boolean);
+        }
 
         const fovState = {
           currentVisible: new Set(),
@@ -3552,31 +3678,39 @@
           const tx = Math.round(p2.x),
             ty = Math.round(p2.y);
 
-          if (inBounds(grid, x, y)) grid[y][x] = TILE_FLOOR;
+          const carved = [];
+          const record = (cx, cy) => {
+            if (!inBounds(grid, cx, cy)) return;
+            grid[cy][cx] = TILE_FLOOR;
+            const last = carved[carved.length - 1];
+            if (!last || last.x !== cx || last.y !== cy) {
+              carved.push({ x: cx, y: cy });
+            }
+          };
 
-          if (Math.random() > 0.5) {
-            // Go X then Y
+          record(x, y);
+          const goXFirst = Math.random() > 0.5;
+          if (goXFirst) {
             while (x !== tx) {
-              if (inBounds(grid, x, y)) grid[y][x] = TILE_FLOOR;
               x += Math.sign(tx - x);
+              record(x, y);
             }
             while (y !== ty) {
-              if (inBounds(grid, x, y)) grid[y][x] = TILE_FLOOR; // x is now tx
               y += Math.sign(ty - y);
+              record(x, y);
             }
           } else {
-            // Go Y then X
             while (y !== ty) {
-              if (inBounds(grid, x, y)) grid[y][x] = TILE_FLOOR;
               y += Math.sign(ty - y);
+              record(x, y);
             }
             while (x !== tx) {
-              if (inBounds(grid, x, y)) grid[y][x] = TILE_FLOOR; // y is now ty
               x += Math.sign(tx - x);
+              record(x, y);
             }
           }
-          // Always carve the final destination tile to guarantee connection
-          if (inBounds(grid, tx, ty)) grid[ty][tx] = TILE_FLOOR;
+          record(tx, ty);
+          return carved;
         }
         function floodFillOpen(grid, start) {
           const H = grid.length,
@@ -3604,7 +3738,7 @@
           }
           return seen;
         }
-        function ensureConnectivity(grid, nodes) {
+        function ensureConnectivity(grid, nodes, options = {}) {
           // BFS from first node center; if a node is isolated, connect it to nearest reachable cell.
           if (nodes.length === 0) return;
           const start = nodes[0];
@@ -3615,6 +3749,10 @@
           const key = (x, y) => `${x},${y}`;
           const has = (p) =>
             reachable.has(key(Math.round(p.center.x), Math.round(p.center.y)));
+          const onCorridorCarved =
+            typeof options.onCorridorCarved === "function"
+              ? options.onCorridorCarved
+              : null;
           for (const n of nodes) {
             if (has(n)) continue;
             // find nearest reachable cell
@@ -3631,11 +3769,14 @@
               }
             }
             if (best) {
-              carveLCorridor(
+              const path = carveLCorridor(
                 grid,
                 { x: Math.round(n.center.x), y: Math.round(n.center.y) },
                 best,
               );
+              if (onCorridorCarved && Array.isArray(path) && path.length > 0) {
+                onCorridorCarved(path, { fromRoom: n, toRoom: null, target: best });
+              }
               reachable = floodFillOpen(grid, {
                 x: Math.round(start.center.x),
                 y: Math.round(start.center.y),
@@ -3666,24 +3807,23 @@
           mapState.width = largeOut.width;
           mapState.height = largeOut.height;
           const grid = largeOut.grid.map((row) => row.slice()); // copy
-          const allLarge = largeOut.largeRooms;
+          const largeRooms = largeOut.largeRooms.map((room, idx) => ({
+            ...room,
+            id: typeof room.id === "string" ? room.id : `large-${idx}`,
+          }));
           // Phase B: small rooms filling
-          const smallRooms = smallRoomsFillIntoGrid(
+          const smallRaw = smallRoomsFillIntoGrid(
             grid,
-            allLarge,
+            largeRooms,
             largeOut.border,
             HYBRID_CFG.small,
           );
+          const smallRooms = smallRaw.map((room, idx) => ({
+            ...room,
+            id: typeof room.id === "string" ? room.id : `small-${idx}`,
+          }));
           // Unified node list (centers)
-          const largeRoomNodes = allLarge.map((R) => ({
-            kind: R.kind,
-            center: { x: R.center.x, y: R.center.y },
-          }));
-          const smallRoomNodes = smallRooms.map((r) => ({
-            kind: r.kind,
-            center: { x: r.center.x, y: r.center.y },
-          }));
-          const allRooms = largeRoomNodes.concat(smallRoomNodes);
+          const allRooms = largeRooms.concat(smallRooms);
           // Phase C: corridors (only now)
           const points = allRooms.map((r) => ({
             x: r.center.x,
@@ -3700,18 +3840,41 @@
           ).slice(0, extrasCount);
           const finalEdges = mst.concat(extraEdges);
           // Carve corridors
+          const corridorConnections = [];
+          const addCorridor = (path, fromRoom, toRoom) => {
+            if (!Array.isArray(path) || path.length === 0) return null;
+            const id = `corr-${corridorConnections.length}`;
+            corridorConnections.push({
+              id,
+              path: path.map((step) => ({ x: step.x, y: step.y })),
+              fromRoomId: fromRoom?.id ?? null,
+              toRoomId: toRoom?.id ?? null,
+            });
+            return id;
+          };
           for (const e of finalEdges) {
-            carveLCorridor(grid, points[e.p1], points[e.p2]);
+            const path = carveLCorridor(grid, points[e.p1], points[e.p2]);
+            if (path && path.length > 0) {
+              addCorridor(path, allRooms[e.p1], allRooms[e.p2]);
+            }
           }
           // Rescue connectivity if any isolated parts remain
           if (HYBRID_CFG.corridors.rescueConnectivity) {
-            ensureConnectivity(grid, allRooms);
+            ensureConnectivity(grid, allRooms, {
+              onCorridorCarved(path, meta) {
+                if (!path || path.length === 0) return;
+                addCorridor(path, meta?.fromRoom ?? null, meta?.toRoom ?? null);
+              },
+            });
           }
           // Choose start/end on far rooms
-          const start = allRooms[0]?.center || {
-            x: Math.floor(mapState.width / 2),
-            y: Math.floor(mapState.height / 2),
-          };
+          const startRoom = allRooms[0] || null;
+          const start = startRoom?.center
+            ? { x: startRoom.center.x, y: startRoom.center.y }
+            : {
+                x: Math.floor(mapState.width / 2),
+                y: Math.floor(mapState.height / 2),
+              };
           let farIdx = 0,
             farDist = -1;
           for (let i = 0; i < allRooms.length; i++) {
@@ -3721,14 +3884,27 @@
               farIdx = i;
             }
           }
-          const end = allRooms[farIdx]?.center || start;
+          const endRoom = allRooms[farIdx] || startRoom;
+          const end = endRoom?.center
+            ? { x: endRoom.center.x, y: endRoom.center.y }
+            : start;
           // Force floors at start/end
           ensureFloorAt(grid, start);
           ensureFloorAt(grid, end);
+          const doorPlan = generateDoorsForDungeon(grid, {
+            rooms: allRooms,
+            corridors: corridorConnections,
+            config: HYBRID_CFG.doors || {},
+            rng: Math.random,
+          });
+          const furniturePlacements = normalizeFurniturePlacements(
+            doorPlan?.placements || [],
+          );
           return {
             grid,
             start: { x: Math.round(start.x), y: Math.round(start.y) },
             end: { x: Math.round(end.x), y: Math.round(end.y) },
+            furniture: furniturePlacements,
           };
         }
         function applyCellSize(size) {
@@ -4000,7 +4176,16 @@
             ? { ...fovState.overlayRgb, a: 1 }
             : null;
 
+          const furnitureEntities = buildFurnitureVisuals(
+            mapState,
+            currentVisible,
+            CONFIG.visual.colors,
+          );
           const mobEntities = buildMobVisuals(mobManager, currentVisible);
+          const entities =
+            furnitureEntities.length > 0
+              ? furnitureEntities.concat(mobEntities)
+              : mobEntities;
 
           renderController.render(
             {
@@ -4012,10 +4197,194 @@
               colors: CONFIG.visual.colors,
               overlayAlphaAt: (x, y) => computeTileOverlayAlpha(x, y, lightCtx),
               overlayColor,
-              entities: mobEntities,
+              entities,
             },
             view,
           );
+        }
+        function buildFurnitureVisuals(map, visibleSet, colors) {
+          if (!map || !Array.isArray(map.furniture)) return [];
+          if (!(visibleSet instanceof Set)) return [];
+          const visuals = [];
+          for (const placement of map.furniture) {
+            if (!placement || !placement.position) continue;
+            const x = Math.round(placement.position.x);
+            const y = Math.round(placement.position.y);
+            if (!map.explored?.[y]?.[x]) continue;
+            const keyStr = posKeyFromCoords(x, y);
+            if (!visibleSet.has(keyStr)) continue;
+            const visual = describeFurnitureVisual(placement.furniture, colors);
+            if (!visual) continue;
+            visual.x = x;
+            visual.y = y;
+            visuals.push(visual);
+          }
+          return visuals;
+        }
+        function describeFurnitureVisual(furniture, colors) {
+          if (!furniture) return null;
+          if (furniture instanceof Door || furniture.kind === FurnitureKind.DOOR) {
+            return describeDoorVisual(furniture, colors);
+          }
+          return describeFixtureVisual(furniture, colors);
+        }
+        function describeFixtureVisual(fixture, colors) {
+          if (!fixture) return null;
+          const kind = fixture.kind || FurnitureKind.GENERIC;
+          const orientation = fixture.orientation || FurnitureOrientation.FLOOR;
+          const hasEffect =
+            typeof fixture.hasEffect === "function"
+              ? (id) => fixture.hasEffect(id)
+              : () => false;
+          const base = {
+            glyph: "□",
+            fg: colors.fixtureGlyph || colors.door || "#e2e8f0",
+            bg: colors.floor || "#1f2933",
+            name: fixture.name || "Furniture",
+            orientation,
+            metadata: fixture.metadata || {},
+            tags:
+              typeof fixture.listTags === "function"
+                ? fixture.listTags()
+                : Array.isArray(fixture.tags)
+                  ? fixture.tags
+                  : [],
+          };
+          switch (kind) {
+            case FurnitureKind.TABLE:
+              base.glyph = "⊞";
+              base.fg = colors.tableGlyph || "#fbbf24";
+              break;
+            case FurnitureKind.SEAT:
+              base.glyph = "¤";
+              base.fg = colors.seatGlyph || "#f97316";
+              break;
+            case FurnitureKind.STORAGE:
+              base.glyph = "⌂";
+              base.fg = colors.storageGlyph || "#b45309";
+              break;
+            case FurnitureKind.LIGHT:
+              base.glyph = "✶";
+              base.fg = colors.lightGlyph || "#fde68a";
+              if (hasEffect(FURNITURE_EFFECT_IDS.MAGIC_AURA)) {
+                base.fg = colors.lightMagicGlyph || "#a855f7";
+              }
+              break;
+            case FurnitureKind.DECOR:
+              base.glyph = "▤";
+              base.fg = colors.decorGlyph || "#60a5fa";
+              break;
+            default:
+              break;
+          }
+          return base;
+        }
+        function describeDoorVisual(door, colors) {
+          const doorType = door.type || door.metadata?.type || null;
+          const variantId = door.variantId || door.metadata?.variantId || "standard";
+          const orientation = door.orientation || FurnitureOrientation.NONE;
+          const hasEffect =
+            typeof door.hasEffect === "function"
+              ? (id) => door.hasEffect(id)
+              : () => false;
+          const isOpen =
+            typeof door.isOpen === "function"
+              ? door.isOpen()
+              : door.state === DOOR_STATE.OPEN;
+          const state =
+            typeof door.state === "string"
+              ? door.state
+              : door.metadata?.state || (isOpen ? DOOR_STATE.OPEN : DOOR_STATE.CLOSED);
+          const isPortcullis =
+            doorType === DOOR_TYPE.PORTCULLIS || variantId === "portcullis";
+          const isArchway =
+            doorType === DOOR_TYPE.ARCHWAY || variantId === "archway";
+          const isSecret = doorType === DOOR_TYPE.SECRET || variantId === "secret";
+          const isSliding =
+            doorType === DOOR_TYPE.SLIDING || variantId === "sliding";
+          const isDouble =
+            doorType === DOOR_TYPE.DOUBLE || variantId === "double";
+          const isGrate = doorType === DOOR_TYPE.GRATE || variantId === "grate";
+          const isRuned = variantId === "runed";
+
+          const baseBg = colors.door || colors.floor || "#2a1a0f";
+          const baseFg = colors.doorGlyph || colors.floorGlyph || "#fef3c7";
+          let glyph = "+";
+          if (isPortcullis) {
+            glyph = "#";
+          } else if (isArchway) {
+            glyph = "∩";
+          } else if (isSecret) {
+            glyph = "▣";
+          } else if (isGrate) {
+            glyph = "╬";
+          } else if (isSliding) {
+            glyph = "═";
+          } else if (isDouble) {
+            glyph = "≡";
+          }
+          let fg = baseFg;
+          let bg = baseBg;
+
+          if (isPortcullis) {
+            fg = colors.doorPortcullis || fg;
+          } else if (isGrate) {
+            fg = colors.doorGrate || colors.doorPortcullis || fg;
+          } else if (variantId === "reinforced") {
+            fg = colors.doorReinforced || fg;
+          } else if (isArchway) {
+            fg = colors.doorArchway || fg;
+            bg = colors.floor || bg;
+          } else if (isSecret) {
+            fg = colors.doorSecret || fg;
+          } else if (isSliding) {
+            fg = colors.doorSliding || fg;
+          } else if (isDouble) {
+            fg = colors.doorDouble || fg;
+          }
+
+          if (isRuned || hasEffect(FURNITURE_EFFECT_IDS.MAGIC_SEAL)) {
+            fg = colors.doorRuned || colors.doorMagic || fg;
+          }
+
+          if (hasEffect(FURNITURE_EFFECT_IDS.BROKEN)) {
+            glyph = "×";
+            fg = colors.doorBroken || "#9ca3af";
+            bg = colors.floor || bg;
+          } else if (state === DOOR_STATE.BLOCKED) {
+            glyph = "!";
+            fg = colors.doorJammed || fg;
+          } else if (!isArchway && isOpen) {
+            glyph =
+              orientation === FurnitureOrientation.NORTH_SOUTH ? "⟍" : "⟋";
+            fg = colors.doorOpenGlyph || fg;
+            bg = colors.floor || bg;
+          }
+
+          if (!hasEffect(FURNITURE_EFFECT_IDS.BROKEN)) {
+            if (hasEffect(FURNITURE_EFFECT_IDS.LOCKED)) {
+              fg = colors.doorLocked || fg;
+            }
+            if (hasEffect(FURNITURE_EFFECT_IDS.JAMMED)) {
+              fg = colors.doorJammed || fg;
+            }
+          }
+
+          const visual = {
+            kind: "furniture:door",
+            glyph,
+            fg,
+            bg,
+          };
+
+          const hasMagicSeal = hasEffect(FURNITURE_EFFECT_IDS.MAGIC_SEAL);
+          const hasMagicAura = hasEffect(FURNITURE_EFFECT_IDS.MAGIC_AURA);
+          if (hasMagicSeal || hasMagicAura) {
+            visual.overlayA = hasMagicSeal ? 0.4 : 0.25;
+            visual.overlayColor = colors.doorMagic || "#a855f7";
+          }
+
+          return visual;
         }
         function buildMobVisuals(manager, visibleSet) {
           if (!manager || !Array.isArray(manager.list)) return [];
@@ -4801,6 +5170,8 @@
           currentEndPos = null;
           hasPrevPlayerPos = false;
           simState.turnCounter = 0;
+          mapState.furniture = [];
+          rebuildFurnitureIndex();
         }
 
         function setupPlayer() {
@@ -4887,6 +5258,10 @@
           mapState.grid = dungeonData.grid;
           mapState.width = mapState.grid[0].length;
           mapState.height = mapState.grid.length;
+          mapState.furniture = normalizeFurniturePlacements(
+            dungeonData.furniture || [],
+          );
+          rebuildFurnitureIndex();
 
           const isConnected = !!aStarPath(
             mapState.grid,
@@ -4917,6 +5292,11 @@
           const startPos = dungeonData.start;
           const endPos = dungeonData.end;
           currentEndPos = endPos;
+
+          mapState.furniture = normalizeFurniturePlacements(
+            dungeonData.furniture || mapState.furniture || [],
+          );
+          rebuildFurnitureIndex();
 
           mapState.explored = Array.from({ length: mapState.height }, () =>
             Array(mapState.width).fill(false),
