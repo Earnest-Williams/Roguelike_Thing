@@ -21,10 +21,19 @@ export function gainAP(actor) {
  * @param {import("./actor.js").Actor} actor
  * @param {number} baseCostAP
  */
-export function apCost(actor, baseAP) {
+/**
+ * Computes AP cost for a given action type, factoring in temporal/status modifiers.
+ * E.g., a standard action is actor.baseActionAP (100) before temporal/status deltas.
+ * @param {import("./actor.js").Actor} actor
+ * @param {number} baseAP
+ * @param {boolean} [isMovement=false] - Whether this is a movement action.
+ */
+export function apCost(actor, baseAP, isMovement = false) {
   const sd = actor?.statusDerived || {};
   const temporal = actor?.modCache?.temporal || { actionSpeedPct: 0, moveAPDelta: 0 };
-  const add = (temporal.moveAPDelta || 0) + (sd.moveAPDelta || 0);
+  const add = isMovement
+    ? (temporal.moveAPDelta || 0) + (sd.moveAPDelta || 0)
+    : 0;
   const mult = 1 + (temporal.actionSpeedPct || 0) + (sd.actionSpeedPct || 0);
   const base = Number(baseAP) || 0;
   const raw = (base + add) * mult;
