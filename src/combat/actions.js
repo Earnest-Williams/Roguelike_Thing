@@ -28,7 +28,7 @@ import {
  */
 export function tryMove(actor, dir) {
   const base = Math.max(MIN_AP_COST, BASE_MOVE_AP_COST);
-  const cost = apCost(actor, base);
+  const cost = apCost(actor, base, { includeMoveDelta: true });
   if (!spendAP(actor, cost)) return false;
 
   actor.x = (actor.x || 0) + dir.dx;
