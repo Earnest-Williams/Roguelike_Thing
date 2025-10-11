@@ -1,5 +1,17 @@
 const REGISTRY = new Map(); // id -> StatusDef
 
+/**
+ * Registers a new status definition.
+ * @param {Object} def - The status definition object.
+ * @param {string} def.id - Unique identifier for the status (required).
+ * @param {string} [def.stacking="independent"] - Stacking behavior: "refresh", "add_stacks", or "independent".
+ * @param {number} [def.maxStacks=Infinity] - Maximum number of stacks (used with "add_stacks" stacking).
+ * @param {number} [def.tickEvery] - Number of turns between onTick triggers (optional).
+ * @param {function} [def.onApply] - Function called when the status is applied. Receives an object: { target, source, stacks, turn }.
+ * @param {function} [def.onTick] - Function called on each tick. Receives an object: { target, stacks, potency, turn }.
+ * @param {function} [def.onExpire] - Function called when the status expires. Receives an object: { target, stacks, potency, turn }.
+ * @param {...any} [def.*] - Additional custom properties as needed.
+ */
 export function registerStatus(def) {
   if (!def?.id) throw new Error("Status must have an id");
   REGISTRY.set(def.id, def);
