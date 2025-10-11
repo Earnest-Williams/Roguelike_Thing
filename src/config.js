@@ -1,6 +1,8 @@
 // src/config.js
 // Central configuration for tweakable gameplay and UI values.
 import {
+  DEFAULT_ATTACK_BASE_DAMAGE,
+  DEFAULT_MELEE_RANGE_TILES,
   DEFAULT_STATUS_DURATION_TURNS,
   DEFAULT_STATUS_STACKS,
   BURN_MAX_STACKS,
@@ -9,6 +11,12 @@ import {
 
 export const COMBAT_ATTACK_TYPE_HINT_DURATION_MS = 250;
 
+export const COMBAT_RESIST_MIN = -0.5;
+export const COMBAT_RESIST_MAX = 0.8;
+
+export const POLARITY_SCALAR = 0.25;
+export const POLARITY_CLAMP = Object.freeze({ min: -0.5, max: 0.5 });
+
 export const EVENT_LOG_RING_MAX = 200;
 export const EVENT_LOG_LATEST_DEFAULT = 50;
 
@@ -16,6 +24,12 @@ export const DEBUG_OVERLAY_LOG_LIMIT = 60;
 export const DEBUG_OVERLAY_BREAKDOWN_LIMIT = 8;
 export const DEBUG_OVERLAY_MIN_PERCENT_DISPLAY = 1e-4;
 export const DEBUG_OVERLAY_NUMBER_DIGITS = 2;
+
+// Probability applied when rolling affixes for generated loot.
+export const LOOT_AFFIX_CHANCE = 0.30;
+
+// Upper bound for the random suffix appended to dynamic item IDs.
+export const DYNAMIC_ID_RANDOMIZATION_MODULUS = 1e9;
 
 export const DEV_CONSOLE_DEFAULT_STATUS_DURATION = DEFAULT_STATUS_DURATION_TURNS;
 export const DEV_CONSOLE_DEFAULT_STATUS_STACKS = DEFAULT_STATUS_STACKS;
@@ -41,4 +55,6 @@ export const STATUS_SLOWED_ACTION_SPEED_PENALTY_PER_STACK = 0.1;
 export const STATUS_SLOWED_MOVE_AP_DELTA = 0.1;
 export const STATUS_STUNNED_ACTION_SPEED_PENALTY_PER_STACK = 1.0;
 export const STATUS_HASTE_ACTION_SPEED_BONUS_PER_STACK = 0.15;
+export const COMBAT_DEFAULT_MELEE_RANGE_TILES = DEFAULT_MELEE_RANGE_TILES;
+export const COMBAT_FALLBACK_ATTACK_BASE_DAMAGE = DEFAULT_ATTACK_BASE_DAMAGE;
 

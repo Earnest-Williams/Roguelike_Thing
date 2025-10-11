@@ -97,9 +97,11 @@ export function attachDevConsole(ctx) {
         }
         case "/sim": {
           const N = +args[0] || DEV_CONSOLE_DEFAULT_SIM_ITERATIONS;
-          import("../sim/sim.js").then(({ simulate })=>{
-            const out = simulate({ a:"brigand", b:"dummy", N, seed:20251010 });
-            log(JSON.stringify(out));
+          import("../sim/sim.js").then(({ simulate, SIMULATION_CONFIG })=>{
+            const seedArg = args[1];
+            const seed = seedArg ? +seedArg : SIMULATION_CONFIG.DEFAULT_SEED;
+            const out = simulate({ a:"brigand", b:"dummy", N, seed });
+            log(JSON.stringify({ ...out, config: SIMULATION_CONFIG }));
           });
           break;
         }
