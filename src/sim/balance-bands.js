@@ -1,5 +1,4 @@
 // src/sim/balance-bands.js
-export const BANDS = {
-  "brigand_vs_dummy_ttk": { min: 4, max: 10 },
-  "pyro_vs_dummy_ttk": { min: 3, max: 8 },
-};
+import { SIM_BALANCE_BANDS } from "./config.js";
+
+export const BANDS = SIM_BALANCE_BANDS;

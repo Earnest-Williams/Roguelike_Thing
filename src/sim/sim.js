@@ -3,6 +3,12 @@
 import { createActorFromTemplate, ensureItemsRegistered } from "../factories/index.js";
 import { runTurn } from "../combat/loop.js";
 import { tryAttackEquipped } from "../combat/actions.js";
+import {
+  SIM_DEFAULT_RUN_COUNT,
+  SIM_DEFAULT_SEED,
+  SIM_MAX_TURNS,
+  SIM_PARTIAL_TURN_CREDIT,
+} from "./config.js";
 
 export function mulberry32(seed) {
   return function() {
@@ -17,7 +23,12 @@ export function mulberry32(seed) {
  * Runs N fights of A vs B with a simple planner.
  * Returns stats: { winsA, winsB, turnsAvg, dpsAvg }
  */
-export function simulate({ a="brigand", b="dummy", N=50, seed=1234 }) {
+export function simulate({
+  a = "brigand",
+  b = "dummy",
+  N = SIM_DEFAULT_RUN_COUNT,
+  seed = SIM_DEFAULT_SEED,
+} = {}) {
   ensureItemsRegistered();
   const rng = mulberry32(seed);
   let winsA=0, winsB=0, turnsSum=0, dmgSum=0;
@@ -32,10 +43,10 @@ export function simulate({ a="brigand", b="dummy", N=50, seed=1234 }) {
     const planB = (actor) => { if (!tryAttackEquipped(actor, A, 1)) {/* idle */} };
 
     let partialTurn = 0;
-    while (A.res.hp>0 && B.res.hp>0 && turns<200) {
+    while (A.res.hp>0 && B.res.hp>0 && turns<SIM_MAX_TURNS) {
       const aDefeated = runTurn(A, planA);
       if (aDefeated || B.res.hp <= 0) {
-        partialTurn = 0.5;
+        partialTurn = SIM_PARTIAL_TURN_CREDIT;
         break;
       }
 
@@ -47,7 +58,7 @@ export function simulate({ a="brigand", b="dummy", N=50, seed=1234 }) {
 
       turns++;
     }
-    const totalTurns = Math.max(turns + partialTurn, 0.5);
+    const totalTurns = Math.max(turns + partialTurn, SIM_PARTIAL_TURN_CREDIT);
     if (A.res.hp>0) winsA++; else winsB++;
     dmg += (A.base.maxHP - A.res.hp) + (B.base.maxHP - B.res.hp);
     turnsSum += totalTurns; dmgSum += dmg/totalTurns;
@@ -59,3 +70,12 @@ export function simulate({ a="brigand", b="dummy", N=50, seed=1234 }) {
     N, seed
   };
 }
+
+export {
+  SIM_DEFAULT_RUN_COUNT,
+  SIM_DEFAULT_SEED,
+  SIM_MAX_TURNS,
+  SIM_PARTIAL_TURN_CREDIT,
+  SIM_BALANCE_BANDS,
+  SIMULATION_CONFIG,
+} from "./config.js";
