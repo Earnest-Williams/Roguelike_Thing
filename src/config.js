@@ -23,3 +23,5 @@ export const DEV_CONSOLE_LOOT_TOAST_TRANSITION_MS = 150;
 export const DEV_CONSOLE_LOOT_TOAST_VISIBLE_DURATION_MS = 2600;
 export const DEV_CONSOLE_LOOT_TOAST_HIDE_DELAY_MS = 200;
 export const DEV_CONSOLE_LOOT_TOAST_TRANSLATE_Y_PX = 8;
+
+export { ATTUNE } from "./combat/config.js";
