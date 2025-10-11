@@ -1,41 +1,40 @@
 // tests/attunement-gain.test.js
 import assert from "node:assert/strict";
-import { gainAttunementsFromPackets } from "../src/combat/attunement.js";
-import { ATTUNE } from "../src/config.js";
+import { gainAttunement, tickAttunements } from "../src/combat/attunement.js";
 
-const attacker = {
+const actor = {
   id: "tester",
-  attune: {
-    pool: { physical: 1, fire: ATTUNE.cap - 1 },
-    lastTurnUpdated: 0,
+  modCache: {
+    offense: {
+      brands: [
+        { type: "fire" },
+        { type: "ice" },
+      ],
+    },
+    attunement: {
+      fire: { maxStacks: 5, decayPerTurn: 2, onUseGain: 2 },
+      ice: { maxStacks: 3, decayPerTurn: 1, onUseGain: 1 },
+      shadow: { maxStacks: 4, decayPerTurn: 1 },
+    },
   },
+  attunements: Object.create(null),
 };
 
-const packets = {
-  physical: 10,
-  fire: 5,
-  shadow: 2,
-  poison: 0,
-  cold: -3,
-  void: Number.NaN,
-};
+gainAttunement(actor, "fire", 3);
+assert.equal(actor.attunements.fire.stacks, 3, "fire attunement should gain stacks");
 
-gainAttunementsFromPackets(attacker, packets);
+gainAttunement(actor, "fire", 10);
+assert.equal(actor.attunements.fire.stacks, 5, "fire attunement respects max stacks");
 
-const pool = attacker.attune.pool;
+// Unknown brand should be ignored
+gainAttunement(actor, "shadow", 2);
+assert.ok(!("shadow" in actor.attunements), "attunement without matching brand is ignored");
 
-assert.equal(pool.physical, 1 + Math.max(ATTUNE.minPerHitGain, packets.physical * ATTUNE.gainPerPointDamage));
-assert.equal(
-  pool.fire,
-  Math.min(
-    ATTUNE.cap,
-    (ATTUNE.cap - 1) + Math.max(ATTUNE.minPerHitGain, packets.fire * ATTUNE.gainPerPointDamage),
-  ),
-);
-assert.equal(
-  pool.shadow,
-  Math.max(ATTUNE.minPerHitGain, packets.shadow * ATTUNE.gainPerPointDamage),
-);
-assert.ok(!("poison" in pool), "zero damage types should not be added");
-assert.ok(!("cold" in pool), "negative damage types should not be added");
-assert.ok(!("void" in pool), "non-finite packet values should be ignored");
+// Tick should decay and prune empty entries
+gainAttunement(actor, "ice", 1);
+tickAttunements(actor);
+assert.equal(actor.attunements.fire.stacks, 3, "fire decays by configured amount");
+assert.ok(!actor.attunements.ice, "ice attunement should decay to zero and be removed");
+
+tickAttunements(actor);
+assert.ok(actor.attunements.fire.stacks < 3, "further ticks continue to decay");

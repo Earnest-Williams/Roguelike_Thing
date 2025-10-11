@@ -1,7 +1,6 @@
 // src/combat/attack.js
 // @ts-check
-import { gainAttunementsFromPackets } from "./attunement.js";
-import { refreshAttunementBonuses } from "./mod-folding.js";
+import { gainAttunement } from "./attunement.js";
 import { applyStatuses } from "./status.js";
 
 /**
@@ -73,7 +72,7 @@ export function resolveAttack(ctx) {
   // 3) Brands (flats + percent of remaining physical; no feedback into conversions)
   const brands = [
     ...(Array.isArray(ctx.brands) ? ctx.brands : []),
-    ...(attacker.modCache?.offense?.brandAdds || attacker.modCache?.brands || []),
+    ...(attacker.modCache?.offense?.brandAdds || attacker.modCache?.offense?.brands || attacker.modCache?.brands || []),
   ];
   const remainingPhys = packets.physical || 0;
   for (const b of brands) {
@@ -89,19 +88,30 @@ export function resolveAttack(ctx) {
     }
   }
 
-  // 4) Affinities (attacker)
+  // 4) Attunement usage tracking (step 14 in the combat flow)
+  const attunementDefs = attacker.modCache?.attunement;
+  if (attunementDefs && ctx.attacker) {
+    for (const [type, def] of Object.entries(attunementDefs)) {
+      if (!def || typeof def !== "object") continue;
+      const gain = Number(def.onUseGain);
+      if (!Number.isFinite(gain) || gain <= 0) continue;
+      gainAttunement(ctx.attacker, type, gain);
+    }
+  }
+
+  // 5) Affinities (attacker)
   const aff = attacker.modCache?.offense?.affinities || {};
   for (const k of Object.keys(packets)) {
     packets[k] = Math.floor(packets[k] * (1 + (aff[k] || 0)));
   }
 
-  // 5) Status-derived (outgoing/incoming) and Polarity
+  // 6) Status-derived (outgoing/incoming) and Polarity
   const atkSD = attacker.statusDerived || {};
   const defSD = defender.statusDerived || {};
   const polOff = polarityOnHitScalar(attacker.polarity, defender.polarity);
   const polDef = polarityDefScalar(defender.polarity, attacker.polarity);
 
-  // 6) Immunities & Resists
+  // 7) Immunities & Resists
   const defRes = defender.modCache?.defense?.resists || {};
   const defImm = defender.modCache?.defense?.immunities || defender.modCache?.immunities || new Set();
   for (const type of Object.keys(packets)) {
@@ -117,33 +127,19 @@ export function resolveAttack(ctx) {
     packets[type] = value;
   }
 
-  // 7) Armour/DR (optional hook; physical-first)
+  // 8) Armour/DR (optional hook; physical-first)
   // if (defender.armor) { ... }
 
-  // 8) Sum & apply
+  // 9) Sum & apply
   const total = Object.values(packets).reduce((a, b) => a + (b|0), 0);
   const currentHp = (defenderResources?.hp ?? 0) | 0;
   const nextHp = Math.max(0, currentHp - total);
   syncDefenderHp(nextHp);
-  gainAttunementsFromPackets(attacker, packets);
-  if (attacker && hasPositivePackets(packets)) {
-    refreshAttunementBonuses(attacker);
-  }
 
-  // 9) Status application
+  // 10) Status application
   const appliedStatuses = applyStatuses(ctx, attacker, defender, ctx.turn);
 
   return { packetsAfterDefense: packets, totalDamage: total, appliedStatuses };
-}
-
-function hasPositivePackets(packets) {
-  if (!packets) return false;
-  for (const value of Object.values(packets)) {
-    if (Number.isFinite(value) && value > 0) {
-      return true;
-    }
-  }
-  return false;
 }
 
 function ensureResourceHandles(defender) {

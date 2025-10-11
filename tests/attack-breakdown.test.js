@@ -4,7 +4,6 @@ import { Actor } from "../src/combat/actor.js";
 import { foldModsFromEquipment } from "../src/combat/mod-folding.js";
 import { makeItem } from "../js/item-system.js";
 import { performEquippedAttack } from "../src/game/combat-glue.js";
-import { ATTUNE } from "../src/config.js";
 
 const attacker = new Actor({
   id: "attacker",
@@ -48,7 +47,7 @@ defender.modCache.resists.physical = 0.1;
 
 const startHp = defender.res.hp;
 const weapon = attacker.equipment.RightHand;
-attacker.attune.pool = Object.create(null);
+attacker.modCache.attunement.physical = { maxStacks: 10, decayPerTurn: 1, onUseGain: 2 };
 const result = performEquippedAttack(attacker, defender, weapon, 1);
 
 assert.equal(result.ok, true, "attack should resolve");
@@ -67,12 +66,8 @@ assert.equal(
   "hp reduced by total damage",
 );
 
-const physicalPacket = result.outcome.packetsAfterDefense.physical || 0;
-const expectedGain = Math.min(
-  ATTUNE.cap,
-  Math.max(ATTUNE.minPerHitGain, physicalPacket * ATTUNE.gainPerPointDamage),
-);
-assert.ok(
-  attacker.attune.pool.physical >= expectedGain,
-  "attacker should gain attunement for damage dealt",
+assert.equal(
+  attacker.attunements.physical?.stacks,
+  2,
+  "attacker should gain configured attunement stacks when using the brand",
 );

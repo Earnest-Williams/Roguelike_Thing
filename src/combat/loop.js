@@ -4,25 +4,7 @@ import { tickStatusesAtTurnStart } from "./status.js";
 import { gainAP, tickCooldowns } from "./time.js";
 import { updateResources, isDefeated } from "./resources.js";
 import { EVENT, emit } from "../ui/event-log.js";
-import { ATTUNE } from "../config.js";
-import { refreshAttunementBonuses } from "./mod-folding.js";
-
-export function decayAttunementsAtTurnStart(actor, turn) {
-  if (actor.attune?.lastTurnUpdated === turn) return;
-  const pool = actor.attune?.pool;
-  if (!pool) return;
-
-  for (const key of Object.keys(pool)) {
-    const next = Math.max(0, Math.min(ATTUNE.cap, pool[key] - ATTUNE.decayPerTurn));
-    if (next === 0) {
-      delete pool[key];
-    } else {
-      pool[key] = next;
-    }
-  }
-
-  actor.attune.lastTurnUpdated = turn;
-}
+import { tickAttunements } from "./attunement.js";
 
 /**
  * Runs one turn for an actor.
@@ -43,9 +25,8 @@ export function decayAttunementsAtTurnStart(actor, turn) {
 export function runTurn(actor, actionPlanner) {
   const turn = actor ? (actor.__turnCounter = (actor.__turnCounter ?? 0) + 1) : 0;
   if (actor) actor.turn = turn;
-  decayAttunementsAtTurnStart(actor, turn);
+  if (actor) tickAttunements(actor);
   tickStatusesAtTurnStart(actor, turn);
-  if (actor) refreshAttunementBonuses(actor);
   updateResources(actor);
   gainAP(actor);
 
