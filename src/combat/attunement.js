@@ -7,10 +7,7 @@
  * @param {string} type
  */
 export function getStacks(actor, type) {
-  if (!actor || typeof actor !== "object") return 0;
-  const stacks = actor.attunement?.stacks;
-  if (!stacks || typeof stacks !== "object") return 0;
-  return stacks[type] | 0;
+  return actor?.attunement?.stacks?.[type] | 0;
 }
 
 /**
@@ -20,16 +17,11 @@ export function getStacks(actor, type) {
  * @param {number} value
  */
 export function setStacks(actor, type, value) {
-  if (!actor || typeof actor !== "object") return;
-  if (!actor.attunement) {
-    actor.attunement = { rules: Object.create(null), stacks: Object.create(null) };
-  }
-  const stacks = actor.attunement.stacks || (actor.attunement.stacks = Object.create(null));
-  if (value <= 0) {
-    delete stacks[type];
-  } else {
-    stacks[type] = value | 0;
-  }
+  if (!actor) return;
+  const attune = actor.attunement || (actor.attunement = { rules: Object.create(null), stacks: Object.create(null) });
+  const stacks = attune.stacks || (attune.stacks = Object.create(null));
+  if (value <= 0) delete stacks[type];
+  else stacks[type] = value | 0;
 }
 
 /**
@@ -38,10 +30,7 @@ export function setStacks(actor, type, value) {
  * @param {string} type
  */
 export function ruleFor(actor, type) {
-  if (!actor || typeof actor !== "object") return undefined;
-  const rules = actor.attunement?.rules;
-  if (!rules || typeof rules !== "object") return undefined;
-  return rules[type];
+  return actor?.attunement?.rules?.[type];
 }
 
 /**
@@ -49,27 +38,25 @@ export function ruleFor(actor, type) {
  * @param {{ packets: Array<{type: string, amount: number}>, attacker: any, target: any }} ctx
  */
 export function applyOutgoingScaling(ctx) {
-  if (!ctx || !ctx.attacker || !Array.isArray(ctx.packets)) return;
-  const { attacker } = ctx;
-  const rules = attacker.attunement?.rules;
-  if (!rules) return;
+  const { attacker, packets } = ctx || {};
+  if (!attacker?.attunement?.rules || !Array.isArray(packets)) return;
 
-  for (const packet of ctx.packets) {
+  const applied = [];
+  for (const packet of packets) {
     if (!packet || typeof packet.type !== "string") continue;
-    const rule = rules[packet.type];
+    const rule = ruleFor(attacker, packet.type);
     if (!rule) continue;
     const stacks = getStacks(attacker, packet.type);
     if (!stacks) continue;
     const dmgPct = rule.perStack?.damagePct || 0;
     if (!dmgPct) continue;
-    const scaled = packet.amount * (1 + dmgPct * stacks);
-    packet.amount = Math.max(0, scaled);
-    attacker.logs?.attack?.push?.({
-      kind: "attune_apply",
-      type: packet.type,
-      stacks,
-      amount: packet.amount,
-    });
+    packet.amount = Math.max(0, packet.amount * (1 + dmgPct * stacks));
+    applied.push({ type: packet.type, stacks, amount: packet.amount });
+  }
+
+  if (applied.length) {
+    attacker.logs?.attack?.push?.({ kind: "attune_apply", packets: applied });
+    attacker.log?.push?.({ kind: "attune_apply", packets: applied });
   }
 }
 
@@ -79,20 +66,19 @@ export function applyOutgoingScaling(ctx) {
  * @param {Set<string>} usedTypes
  */
 export function noteUseGain(attacker, usedTypes) {
-  if (!attacker || !usedTypes?.size) return;
-  const rules = attacker.attunement?.rules;
-  if (!rules) return;
+  if (!attacker?.attunement?.rules || !usedTypes?.size) return;
   for (const type of usedTypes) {
-    const rule = rules[type];
+    const rule = ruleFor(attacker, type);
     if (!rule) continue;
     const gain = rule.onUseGain | 0;
     if (!gain) continue;
     const current = getStacks(attacker, type);
-    const rawCap = rule.maxStacks;
-    const cap = Number.isFinite(rawCap) && rawCap > 0 ? rawCap : Number.POSITIVE_INFINITY;
-    const nextStacks = Math.min(cap, current + gain);
-    setStacks(attacker, type, nextStacks);
-    attacker.logs?.attack?.push?.({ kind: "attune_gain", type, stacks: nextStacks });
+    const rawMax = rule.maxStacks;
+    const cap = Number.isFinite(rawMax) && rawMax > 0 ? rawMax : Number.POSITIVE_INFINITY;
+    const next = Math.min(cap, (current + gain) | 0);
+    setStacks(attacker, type, next);
+    attacker.logs?.attack?.push?.({ kind: "attune_gain", type, stacks: next });
+    attacker.log?.push?.({ kind: "attune_gain", type, stacks: next });
   }
 }
 
@@ -101,19 +87,17 @@ export function noteUseGain(attacker, usedTypes) {
  * @param {any} actor
  */
 export function decayPerTurn(actor) {
-  if (!actor?.attunement?.stacks) return;
-  const stacks = actor.attunement.stacks;
-  const rules = actor.attunement.rules || {};
-  for (const [type, value] of Object.entries(stacks)) {
-    const rule = rules[type];
+  const stacks = actor?.attunement?.stacks;
+  if (!stacks) return;
+  for (const [type, count] of Object.entries(stacks)) {
+    const rule = ruleFor(actor, type);
     if (!rule) {
       delete stacks[type];
       continue;
     }
-    const dec = rule.decayPerTurn | 0;
-    if (!dec) continue;
-    const next = Math.max(0, (value | 0) - dec);
-    setStacks(actor, type, next);
+    const decay = rule.decayPerTurn | 0;
+    if (!decay) continue;
+    setStacks(actor, type, Math.max(0, (count | 0) - decay));
   }
 }
 
@@ -125,13 +109,12 @@ export function decayPerTurn(actor) {
 export function contributeDerived(actor, derived) {
   if (!actor || !derived) return derived;
   const stacks = actor.attunement?.stacks;
-  const rules = actor.attunement?.rules;
-  if (!stacks || !rules) return derived;
+  if (!stacks) return derived;
 
   for (const [type, count] of Object.entries(stacks)) {
     const stackCount = count | 0;
     if (!stackCount) continue;
-    const rule = rules[type];
+    const rule = ruleFor(actor, type);
     if (!rule) continue;
     const resistPct = rule.perStack?.resistPct || 0;
     if (resistPct) {
