@@ -72,8 +72,10 @@ export class Table extends Fixture {
     shape = "rectangular",
     seating = 2,
   } = {}) {
+    const baseMetadata =
+      metadata && typeof metadata === "object" ? { ...metadata } : {};
     const mergedMetadata = {
-      ...metadata,
+      ...baseMetadata,
       shape,
       seating,
       surface: "flat",
@@ -105,8 +107,10 @@ export class Chair extends Fixture {
     footprint = { width: 1, depth: 1 },
     hasBack = true,
   } = {}) {
+    const baseMetadata =
+      metadata && typeof metadata === "object" ? { ...metadata } : {};
     const mergedMetadata = {
-      ...metadata,
+      ...baseMetadata,
       seatingCapacity: 1,
       hasBack: Boolean(hasBack),
     };
@@ -137,10 +141,12 @@ export class StorageChest extends Fixture {
     footprint = { width: 2, depth: 1 },
     capacity = 12,
   } = {}) {
+    const baseMetadata =
+      metadata && typeof metadata === "object" ? { ...metadata } : {};
     const mergedMetadata = {
-      ...metadata,
+      ...baseMetadata,
       capacity,
-      locked: Boolean(metadata?.locked),
+      locked: Boolean(baseMetadata.locked),
     };
     const baseTags = new Set([
       "storage",
@@ -170,8 +176,10 @@ export class Lamp extends Fixture {
     lightRadius = 4,
     fuelType = "oil",
   } = {}) {
+    const baseMetadata =
+      metadata && typeof metadata === "object" ? { ...metadata } : {};
     const mergedMetadata = {
-      ...metadata,
+      ...baseMetadata,
       lightRadius,
       fuelType,
       emitsLight: true,
@@ -203,10 +211,12 @@ export class Rug extends Fixture {
     footprint = { width: 3, depth: 2 },
     pattern = "geometric",
   } = {}) {
+    const baseMetadata =
+      metadata && typeof metadata === "object" ? { ...metadata } : {};
     const mergedMetadata = {
-      ...metadata,
+      ...baseMetadata,
       pattern,
-      comfort: metadata?.comfort ?? 1,
+      comfort: baseMetadata.comfort ?? 1,
     };
     const baseTags = new Set([
       "decor",
