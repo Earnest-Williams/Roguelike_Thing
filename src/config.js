@@ -15,6 +15,12 @@ export const DEBUG_OVERLAY_BREAKDOWN_LIMIT = 8;
 export const DEBUG_OVERLAY_MIN_PERCENT_DISPLAY = 1e-4;
 export const DEBUG_OVERLAY_NUMBER_DIGITS = 2;
 
+// Probability applied when rolling affixes for generated loot.
+export const LOOT_AFFIX_CHANCE = 0.30;
+
+// Upper bound for the random suffix appended to dynamic item IDs.
+export const DYNAMIC_ID_RANDOMIZATION_MODULUS = 1e9;
+
 export const DEV_CONSOLE_DEFAULT_STATUS_DURATION = DEFAULT_STATUS_DURATION_TURNS;
 export const DEV_CONSOLE_DEFAULT_STATUS_STACKS = DEFAULT_STATUS_STACKS;
 export const DEV_CONSOLE_DEFAULT_SIM_ITERATIONS = 40;
