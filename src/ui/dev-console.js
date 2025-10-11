@@ -1,5 +1,15 @@
 // src/ui/dev-console.js
 // @ts-check
+import {
+  DEV_CONSOLE_DEFAULT_SIM_ITERATIONS,
+  DEV_CONSOLE_DEFAULT_STATUS_DURATION,
+  DEV_CONSOLE_DEFAULT_STATUS_STACKS,
+  DEV_CONSOLE_LOOT_TOAST_HIDE_DELAY_MS,
+  DEV_CONSOLE_LOOT_TOAST_TRANSITION_MS,
+  DEV_CONSOLE_LOOT_TOAST_TRANSLATE_Y_PX,
+  DEV_CONSOLE_LOOT_TOAST_VISIBLE_DURATION_MS,
+  DEV_CONSOLE_RAF_FALLBACK_DELAY_MS,
+} from "../config.js";
 import { createActorFromTemplate, createItem } from "../factories/index.js";
 import { pickLoot } from "../factories/loot.js";
 import { applyStatuses } from "../combat/status.js";
@@ -42,7 +52,9 @@ export function attachDevConsole(ctx) {
           const it = createItem(id); ctx.equipToSlot(slot, it); log(`equip ${id} -> ${slot}`); break;
         }
         case "/status": {
-          const id = args[0]; const dur = +args[1]||5; const stacks = +args[2]||1;
+          const id = args[0];
+          const dur = +args[1] || DEV_CONSOLE_DEFAULT_STATUS_DURATION;
+          const stacks = +args[2] || DEV_CONSOLE_DEFAULT_STATUS_STACKS;
           applyStatuses(
             { statusAttempts: [{ id, baseDuration: dur, stacks }] },
             ctx.playerActor,
@@ -76,7 +88,7 @@ export function attachDevConsole(ctx) {
           log(`attack: ${r.ok} dmg=${r.outcome?.total||0}`); break;
         }
         case "/sim": {
-          const N = +args[0]||40;
+          const N = +args[0] || DEV_CONSOLE_DEFAULT_SIM_ITERATIONS;
           import("../sim/sim.js").then(({ simulate })=>{
             const out = simulate({ a:"brigand", b:"dummy", N, seed:20251010 });
             log(JSON.stringify(out));
@@ -149,19 +161,22 @@ function showLootToast(drop) {
   toast.style.fontSize = "12px";
   toast.style.boxShadow = "0 8px 24px rgba(15,23,42,0.35)";
   toast.style.opacity = "0";
-  toast.style.transform = "translateY(8px)";
-  toast.style.transition = "opacity 150ms ease-out, transform 150ms ease-out";
+  toast.style.transform = `translateY(${DEV_CONSOLE_LOOT_TOAST_TRANSLATE_Y_PX}px)`;
+  toast.style.transition = `opacity ${DEV_CONSOLE_LOOT_TOAST_TRANSITION_MS}ms ease-out, transform ${DEV_CONSOLE_LOOT_TOAST_TRANSITION_MS}ms ease-out`;
   container.appendChild(toast);
-  const raf = typeof requestAnimationFrame === "function" ? requestAnimationFrame : (fn) => setTimeout(fn, 16);
+  const raf =
+    typeof requestAnimationFrame === "function"
+      ? requestAnimationFrame
+      : (fn) => setTimeout(fn, DEV_CONSOLE_RAF_FALLBACK_DELAY_MS);
   raf(() => {
     toast.style.opacity = "1";
     toast.style.transform = "translateY(0)";
   });
   setTimeout(() => {
     toast.style.opacity = "0";
-    toast.style.transform = "translateY(8px)";
+    toast.style.transform = `translateY(${DEV_CONSOLE_LOOT_TOAST_TRANSLATE_Y_PX}px)`;
     setTimeout(() => {
       if (toast.parentElement === container) toast.remove();
-    }, 200);
-  }, 2600);
+    }, DEV_CONSOLE_LOOT_TOAST_HIDE_DELAY_MS);
+  }, DEV_CONSOLE_LOOT_TOAST_VISIBLE_DURATION_MS);
 }

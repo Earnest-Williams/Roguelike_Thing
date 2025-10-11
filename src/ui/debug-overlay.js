@@ -1,5 +1,11 @@
 // src/ui/debug-overlay.js
 // @ts-check
+import {
+  DEBUG_OVERLAY_BREAKDOWN_LIMIT,
+  DEBUG_OVERLAY_LOG_LIMIT,
+  DEBUG_OVERLAY_MIN_PERCENT_DISPLAY,
+  DEBUG_OVERLAY_NUMBER_DIGITS,
+} from "../config.js";
 import { subscribe, latest, EVENT } from "./event-log.js";
 
 export class DebugOverlay {
@@ -122,10 +128,10 @@ export class DebugOverlay {
         `  ${p.who} → ${p.vs} [${p.profile?.type ?? "?"}] = ${p.damage} (${p.mode})`,
       );
       if (Array.isArray(p.breakdown) && p.breakdown.length) {
-        for (const step of p.breakdown.slice(0, 8)) {
+        for (const step of p.breakdown.slice(0, DEBUG_OVERLAY_BREAKDOWN_LIMIT)) {
           lines.push(`    ${formatBreakdownStep(step)}`);
         }
-        if (p.breakdown.length > 8) {
+        if (p.breakdown.length > DEBUG_OVERLAY_BREAKDOWN_LIMIT) {
           lines.push("    …");
         }
       }
@@ -137,7 +143,7 @@ export class DebugOverlay {
 
   renderLog() {
     if (!this.logEl) return;
-    const entries = latest(60)
+    const entries = latest(DEBUG_OVERLAY_LOG_LIMIT)
       .slice()
       .reverse()
       .filter((e) => this.filterSet.has(e.type));
@@ -184,7 +190,7 @@ function fmtPairs(entries) {
   for (const [k, raw] of entries) {
     const num = Number(raw);
     if (!Number.isFinite(num)) continue;
-    if (Math.abs(num) < 1e-4) continue;
+    if (Math.abs(num) < DEBUG_OVERLAY_MIN_PERCENT_DISPLAY) continue;
     out.push(`${k}:${Math.round(num * 100)}%`);
   }
   return out.length ? out.join(" ") : "-";
@@ -252,12 +258,12 @@ function formatBreakdownStep(step) {
   }
 }
 
-function fmtNumber(value, digits = 2) {
+function fmtNumber(value, digits = DEBUG_OVERLAY_NUMBER_DIGITS) {
   if (!Number.isFinite(value)) return "0";
   return Number(value).toFixed(digits);
 }
 
-function fmtDelta(value, digits = 2) {
+function fmtDelta(value, digits = DEBUG_OVERLAY_NUMBER_DIGITS) {
   if (!Number.isFinite(value)) return "0";
   const prefix = value >= 0 ? "+" : "";
   return `${prefix}${fmtNumber(value, digits)}`;

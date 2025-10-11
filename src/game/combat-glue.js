@@ -4,6 +4,7 @@ import { getAttackModesForItem } from "../../js/item-system.js";
 import { resolveAttack } from "../combat/attack.js";
 import { EVENT, emit } from "../ui/event-log.js";
 import "../combat/status-registry.js";
+import { COMBAT_ATTACK_TYPE_HINT_DURATION_MS } from "../config.js";
 
 /**
  * Roll average damage from dice profile at Phase 3 (deterministic feel).
@@ -173,7 +174,10 @@ export function performEquippedAttack(attacker, defender, weaponItem, distTiles,
     typeof performance !== "undefined" && typeof performance.now === "function"
       ? performance.now()
       : Date.now();
-  emit("attack_type_hint", { type: profile.type || "physical", until: now + 250 });
+  emit("attack_type_hint", {
+    type: profile.type || "physical",
+    until: now + COMBAT_ATTACK_TYPE_HINT_DURATION_MS,
+  });
 
   return { ...out, ok: true, outcome: out, profile, mode, damageRoll, attackContext: ctx };
 }
