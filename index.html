@@ -1897,13 +1897,15 @@
             context?.gameCtx ||
             (context?.mobManager ? { mobManager: context.mobManager } : context) ||
             null;
-          const { attackResult } = finalizeAttackOutcome({
+          const attackOutcome = finalizeAttackOutcome({
             evaluation,
             attackCtx,
             baseRoll,
             target,
             onTargetDefeated: () => handleDeath(deathCtx, target, deathCtx?.ui),
           });
+          const { attackResult, evaluation: updatedEvaluation } = attackOutcome;
+          evaluation = updatedEvaluation ?? evaluation;
           if (typeof context.onAttack === "function") {
             context.onAttack({
               attacker,
