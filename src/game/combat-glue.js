@@ -5,7 +5,11 @@ import { resolveAttack } from "../combat/attack.js";
 import { EVENT, emit } from "../ui/event-log.js";
 import { Sound } from "../ui/sound.js";
 import "../combat/status-registry.js";
-import { COMBAT_ATTACK_TYPE_HINT_DURATION_MS } from "../config.js";
+import {
+  COMBAT_ATTACK_TYPE_HINT_DURATION_MS,
+  COMBAT_DEFAULT_MELEE_RANGE_TILES,
+  COMBAT_FALLBACK_ATTACK_BASE_DAMAGE,
+} from "../config.js";
 
 /**
  * Roll average damage from dice profile at Phase 3 (deterministic feel).
@@ -48,7 +52,12 @@ function rollDamage(dice) {
  * @param {import("../../js/item-system.js").Item} weaponItem
  * @param {number} [distTiles=1]
  */
-export function pickAttackMode(attacker, defender, weaponItem, distTiles = 1) {
+export function pickAttackMode(
+  attacker,
+  defender,
+  weaponItem,
+  distTiles = COMBAT_DEFAULT_MELEE_RANGE_TILES,
+) {
   const modes = getAttackModesForItem(weaponItem); // [{kind, profile}]
   if (!modes.length) return null;
 
@@ -84,7 +93,7 @@ export function buildAttackProfileFromMode(attacker, mode) {
   const base =
     p.damage && typeof p.damage.diceCount === "number"
       ? avgFromDice(p.damage)
-      : Math.max(1, p.base || 5);
+      : Math.max(1, p.base || COMBAT_FALLBACK_ATTACK_BASE_DAMAGE);
 
   // crude mapping: melee defaults to physical, others inherit if provided
   const type = (p.type || p.damageType || "physical").toString();
