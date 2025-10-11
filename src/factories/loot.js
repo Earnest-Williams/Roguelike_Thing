@@ -4,6 +4,10 @@ import { LOOT_TABLES } from "../content/loot.js";
 import { BASE_ITEMS } from "../content/items.js";
 import { applyAffixes } from "../content/affixes.js";
 import { registerItem, upsertItem, makeItem } from "../../item-system.js";
+import {
+  LOOT_AFFIX_CHANCE,
+  DYNAMIC_ID_RANDOMIZATION_MODULUS,
+} from "../config.js";
 
 export function randInt(rng, lo, hi) {
   return lo + Math.floor(rng() * (hi - lo + 1));
@@ -22,12 +26,15 @@ export function pickLoot(tableId, rng = Math.random) {
 
 function resolveEntry(entry, rng) {
   if (entry.itemId) {
-    // 30% chance to affix weapons/armors
+    // Chance to affix weapons/armors is centrally configured.
     const base = BASE_ITEMS[entry.itemId];
     if (!base) return null;
-    const def = rng() < 0.30 ? applyAffixes(base, rng) : base;
-    // ephemeral registration with unique id
-    const id = def.id + "#" + Math.floor(rng() * 1e9).toString(36);
+    const def = rng() < LOOT_AFFIX_CHANCE ? applyAffixes(base, rng) : base;
+    // Ephemeral registration with unique id using the configured modulus.
+    const id =
+      def.id +
+      "#" +
+      Math.floor(rng() * DYNAMIC_ID_RANDOMIZATION_MODULUS).toString(36);
     const clone = { ...def, id };
     try {
       registerItem(clone);

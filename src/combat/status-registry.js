@@ -1,6 +1,14 @@
 // src/combat/status-registry.js
 // @ts-check
 
+import {
+  STATUS_BURN_BASE_DAMAGE,
+  STATUS_BURN_MAX_STACKS,
+  STATUS_HASTE_ACTION_SPEED_BONUS_PER_STACK,
+  STATUS_SLOWED_ACTION_SPEED_PENALTY_PER_STACK,
+  STATUS_SLOWED_MOVE_AP_DELTA,
+  STATUS_STUNNED_ACTION_SPEED_PENALTY_PER_STACK,
+} from "../config.js";
 import { defineStatus } from "./status.js";
 
 function ensureResources(actor) {
@@ -30,11 +38,11 @@ function loseHP(actor, amount) {
 defineStatus({
   id: "burn",
   stacking: "add_stacks",
-  maxStacks: 10,
+  maxStacks: STATUS_BURN_MAX_STACKS,
   tickEvery: 1,
   onTick(actor, instance) {
     const stacks = Math.max(1, instance?.stacks ?? 1);
-    loseHP(actor, 1 + stacks);
+    loseHP(actor, STATUS_BURN_BASE_DAMAGE + stacks);
   },
 });
 
@@ -62,8 +70,8 @@ defineStatus({
   derive(actor, instance) {
     const stacks = Math.max(1, instance?.stacks ?? 1);
     const sd = actor.statusDerived || (actor.statusDerived = {});
-    sd.actionSpeedPct = (sd.actionSpeedPct || 0) + 0.1 * stacks;
-    sd.moveAPDelta = (sd.moveAPDelta || 0) + 0.1;
+    sd.actionSpeedPct = (sd.actionSpeedPct || 0) + STATUS_SLOWED_ACTION_SPEED_PENALTY_PER_STACK * stacks;
+    sd.moveAPDelta = (sd.moveAPDelta || 0) + STATUS_SLOWED_MOVE_AP_DELTA;
   },
 });
 
@@ -75,7 +83,7 @@ defineStatus({
   derive(actor, instance) {
     const stacks = Math.max(1, instance?.stacks ?? 1);
     const sd = actor.statusDerived || (actor.statusDerived = {});
-    sd.actionSpeedPct = (sd.actionSpeedPct || 0) + 1.0 * stacks;
+    sd.actionSpeedPct = (sd.actionSpeedPct || 0) + STATUS_STUNNED_ACTION_SPEED_PENALTY_PER_STACK * stacks;
   },
 });
 
@@ -87,6 +95,6 @@ defineStatus({
   derive(actor, instance) {
     const stacks = Math.max(1, instance?.stacks ?? 1);
     const sd = actor.statusDerived || (actor.statusDerived = {});
-    sd.actionSpeedPct = (sd.actionSpeedPct || 0) - 0.15 * stacks;
+    sd.actionSpeedPct = (sd.actionSpeedPct || 0) - STATUS_HASTE_ACTION_SPEED_BONUS_PER_STACK * stacks;
   },
 });

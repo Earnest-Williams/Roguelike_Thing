@@ -3,7 +3,7 @@ export const DEFAULT_STATUS_STACKS = 1;
 export const MIN_STATUS_STACKS = 1;
 export const STATUS_TICK_DELTA_TURNS = 1;
 
-export const BURN_MAX_STACKS = 5;
+export const BURN_MAX_STACKS = 10;
 export const HASTE_MAX_STACKS = 1;
 export const FATIGUE_MAX_STACKS = 5;
 export const CHILLED_MAX_STACKS = 3;
