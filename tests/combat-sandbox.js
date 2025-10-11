@@ -48,7 +48,7 @@ function step(attacker, defender) {
     attack: { type: "fire", base: 8 },
   });
   const defenderHp = defender.res?.hp ?? defender.resources?.hp ?? defender.hp ?? 0;
-  const killed = defenderHp <= 0;
+  const killed = (r.killed ?? false) || defenderHp <= 0;
   if (killed) applyStatus(attacker, "haste", 1, 2);
   endTurn(attacker);
   return { ...r, killed };
@@ -58,7 +58,9 @@ for (let i=0; i<10 && A.hp>0 && B.hp>0; i++) {
   const r1 = step(A, B);
   if (B.hp <= 0) break;
   const r2 = step(B, A);
-  console.log(`Round ${i+1}: A→B ${r1.totalDamage} (B:${B.hp}) | B→A ${r2.totalDamage} (A:${A.hp})`);
+  const dmgAB = r1.totalDamage ?? r1.dmg ?? 0;
+  const dmgBA = r2.totalDamage ?? r2.dmg ?? 0;
+  console.log(`Round ${i+1}: A→B ${dmgAB} (B:${B.hp}) | B→A ${dmgBA} (A:${A.hp})`);
 }
 
 console.log("Final:", { A: A.hp, B: B.hp });
