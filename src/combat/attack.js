@@ -88,6 +88,15 @@ export function resolveAttack(ctx) {
     }
   }
 
+  // 3.5) Global outgoing damage multiplier (applies uniformly to all packets)
+  const dmgMultRaw = attacker.modCache?.dmgMult;
+  const dmgMult = Number.isFinite(dmgMultRaw) ? Math.max(0, dmgMultRaw) : 1;
+  if (dmgMult !== 1) {
+    for (const type of Object.keys(packets)) {
+      packets[type] = Math.floor(packets[type] * dmgMult);
+    }
+  }
+
   // 4) Attunement usage tracking (step 14 in the combat flow)
   const attunementDefs = attacker.modCache?.attunement;
   if (attunementDefs && ctx.attacker) {
