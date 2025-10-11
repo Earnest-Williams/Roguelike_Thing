@@ -1,5 +1,6 @@
 // src/combat/attack.js
 // @ts-check
+import { COMBAT_RESIST_MAX, COMBAT_RESIST_MIN, POLARITY_CLAMP, POLARITY_SCALAR } from "../config.js";
 import { gainAttunement } from "./attunement.js";
 import { applyStatuses } from "./status.js";
 
@@ -131,7 +132,11 @@ export function resolveAttack(ctx) {
     if (out) value = Math.floor(value * (1 + out));
     if (inn) value = Math.floor(value * (1 + inn));
     value = Math.floor(value * (1 + polOff) * (1 - polDef));
-    const resist = clamp((defRes[type] || 0) + (defSD.resistDelta?.[type] || 0), -0.50, 0.80);
+    const resist = clamp(
+      (defRes[type] || 0) + (defSD.resistDelta?.[type] || 0),
+      COMBAT_RESIST_MIN,
+      COMBAT_RESIST_MAX,
+    );
     if (resist) value = Math.floor(value * (1 - resist));
     packets[type] = value;
   }
@@ -192,7 +197,7 @@ export function polarityOnHitScalar(att, def) {
   if (!oppositions) return 0;
   let bias = 0;
   for (const o of oppositions) bias += (def?.[o] || 0);
-  return clamp(bias * 0.25, -0.5, 0.5);
+  return clamp(bias * POLARITY_SCALAR, POLARITY_CLAMP.min, POLARITY_CLAMP.max);
 }
 
 export function polarityDefScalar(def, att) {
@@ -201,5 +206,5 @@ export function polarityDefScalar(def, att) {
   if (!oppositions) return 0;
   let bias = 0;
   for (const o of oppositions) bias += (att?.[o] || 0);
-  return clamp(bias * 0.25, -0.5, 0.5);
+  return clamp(bias * POLARITY_SCALAR, POLARITY_CLAMP.min, POLARITY_CLAMP.max);
 }
