@@ -1,124 +1,273 @@
-const REGISTRY = new Map(); // id -> StatusDef
+// src/combat/status.js
+// @ts-check
+
+const REGISTRY = new Map();
 
 /**
- * Registers a new status definition.
- * @param {Object} def - The status definition object.
- * @param {string} def.id - Unique identifier for the status (required).
- * @param {string} [def.stacking="independent"] - Stacking behavior: "refresh", "add_stacks", or "independent".
- * @param {number} [def.maxStacks=Infinity] - Maximum number of stacks (used with "add_stacks" stacking).
- * @param {number} [def.tickEvery] - Number of turns between onTick triggers (optional).
- * @param {function} [def.onApply] - Function called when the status is applied. Receives an object: { target, source, stacks, turn }.
- * @param {function} [def.onTick] - Function called on each tick. Receives an object: { target, stacks, potency, turn }.
- * @param {function} [def.onExpire] - Function called when the status expires. Receives an object: { target, stacks, potency, turn }.
- * @param {...any} [def.*] - Additional custom properties as needed.
+ * Registers a status definition.
+ * @param {StatusDef} def
  */
-export function registerStatus(def) {
+export function defineStatus(def) {
   if (!def?.id) throw new Error("Status must have an id");
-  REGISTRY.set(def.id, def);
+  const normalized = {
+    stacking: "independent",
+    maxStacks: Infinity,
+    ...def,
+  };
+  REGISTRY.set(normalized.id, normalized);
+  return normalized;
 }
 
+export const registerStatus = defineStatus;
+
+/**
+ * Attempts to apply multiple statuses using the context payload.
+ * @param {{ statusAttempts?: Array<StatusAttempt> }} ctx
+ * @param {import("./actor.js").Actor|undefined} attacker
+ * @param {import("./actor.js").Actor} defender
+ * @param {number} [turn]
+ */
 export function applyStatuses(ctx, attacker, defender, turn) {
-  const { statusAttempts = [] } = ctx || {};
-  const applied = [];
+  const attempts = ctx?.statusAttempts || [];
+  if (!defender || !attempts.length) return [];
+
   defender.statuses ||= [];
-  for (const at of statusAttempts) {
-    const def = REGISTRY.get(at.id);
+  const applied = [];
+  const currentTurn = typeof turn === "number" ? turn : defender.turn || 0;
+
+  for (const attempt of attempts) {
+    if (!attempt?.id) continue;
+    const def = REGISTRY.get(attempt.id);
     if (!def) continue;
 
-    // Compute chance and duration (Brand Plan: attacker/defender bonuses plug here)
-    const baseChance = Math.max(0, Math.min(1, at.baseChance ?? 1));
-    const rolls = Math.random(); // swap with seeded RNG if desired
-    if (rolls > baseChance) continue;
+    const baseChance = clamp(attempt.baseChance ?? 1, 0, 1);
+    if (Math.random() > baseChance) continue;
 
-    const stacks = Math.max(1, Math.floor(at.stacks ?? 1));
-    const duration = Math.max(1, Math.floor(at.baseDuration ?? 1));
-    const endsAtTurn = turn + duration;
-    const instance = { id: at.id, stacks, endsAtTurn, nextTickAt: def.tickEvery ? turn + def.tickEvery : undefined, source: attacker?.id };
+    const stacks = clampStacks(Math.floor(attempt.stacks ?? 1), def);
+    const duration = Math.max(1, Math.floor(attempt.baseDuration ?? 1));
+    const endsAtTurn = currentTurn + duration;
 
-    // stacking behaviour
-    if (def.stacking === "refresh") {
-      const existing = defender.statuses.find(s => s.id === at.id);
-      if (existing) {
-        existing.endsAtTurn = Math.max(existing.endsAtTurn, endsAtTurn);
-        existing.stacks = Math.max(existing.stacks, stacks);
-      } else {
-        defender.statuses.push(instance);
+    let instance = findInstance(defender.statuses, attempt.id);
+    if (!instance || def.stacking === "independent") {
+      instance = {
+        id: attempt.id,
+        stacks,
+        endsAtTurn,
+        nextTickAt: def.tickEvery ? currentTurn + def.tickEvery : undefined,
+        source: attacker?.id,
+      };
+      defender.statuses.push(instance);
+    } else if (def.stacking === "refresh") {
+      instance.endsAtTurn = Math.max(instance.endsAtTurn, endsAtTurn);
+      instance.stacks = clampStacks(Math.max(instance.stacks, stacks), def);
+      if (def.tickEvery && typeof instance.nextTickAt !== "number") {
+        instance.nextTickAt = currentTurn + def.tickEvery;
       }
     } else if (def.stacking === "add_stacks") {
-      const existing = defender.statuses.find(s => s.id === at.id);
-      if (existing) {
-        existing.stacks = Math.min(def.maxStacks ?? Infinity, existing.stacks + stacks);
-        existing.endsAtTurn = Math.max(existing.endsAtTurn, endsAtTurn);
-      } else {
-        defender.statuses.push(instance);
+      instance.stacks = clampStacks(instance.stacks + stacks, def);
+      instance.endsAtTurn = Math.max(instance.endsAtTurn, endsAtTurn);
+      if (def.tickEvery && typeof instance.nextTickAt !== "number") {
+        instance.nextTickAt = currentTurn + def.tickEvery;
       }
-    } else { // "independent"
-      defender.statuses.push(instance);
     }
 
-    if (typeof def.onApply === "function") {
-      const ex = defender.statuses.find(s => s.id === at.id) || instance;
-      const payload = def.onApply({ target: defender, source: attacker, stacks: ex.stacks, turn });
-      if (payload && typeof payload.potency !== "undefined") ex.potency = payload.potency;
+    const result = callHook(def.onApply, defender, instance, { turn: currentTurn, source: attacker });
+    if (result && typeof result === "object" && Object.prototype.hasOwnProperty.call(result, "potency")) {
+      instance.potency = result.potency;
     }
-    applied.push(at.id);
+    applied.push(attempt.id);
   }
-  // rebuild derived after application
+
   defender.statusDerived = rebuildStatusDerived(defender);
   return applied;
 }
 
+/**
+ * Applies a single status directly.
+ * @param {import("./actor.js").Actor} target
+ * @param {string} id
+ * @param {number} [stacks]
+ * @param {number} [duration]
+ * @param {import("./actor.js").Actor} [source]
+ * @param {number} [turn]
+ */
+export function applyStatus(target, id, stacks = 1, duration = 1, source, turn) {
+  if (!target || !id) return [];
+  const ctx = {
+    statusAttempts: [{ id, stacks, baseChance: 1, baseDuration: duration }],
+  };
+  const useTurn = typeof turn === "number" ? turn : target.turn || 0;
+  return applyStatuses(ctx, source, target, useTurn);
+}
+
+/**
+ * Advances active statuses at the start of a turn.
+ * @param {import("./actor.js").Actor} actor
+ * @param {number} turn
+ */
 export function tickStatusesAtTurnStart(actor, turn) {
-  if (!actor?.statuses?.length) {
+  if (!actor) return;
+  if (!Array.isArray(actor.statuses) || actor.statuses.length === 0) {
     actor.statusDerived = rebuildStatusDerived(actor);
     return;
   }
+
   const keep = [];
-  for (const s of actor.statuses) {
-    const def = REGISTRY.get(s.id);
+  for (const instance of actor.statuses) {
+    const def = REGISTRY.get(instance.id);
     if (!def) continue;
-    // ticks
+
     if (def.tickEvery) {
-      while (typeof s.nextTickAt === "number" && turn >= s.nextTickAt) {
-        def.onTick?.({ target: actor, stacks: s.stacks, potency: s.potency, turn });
-        s.nextTickAt += def.tickEvery;
+      while (typeof instance.nextTickAt === "number" && turn >= instance.nextTickAt) {
+        callHook(def.onTick, actor, instance, { turn });
+        instance.nextTickAt += def.tickEvery;
       }
     }
-    // expiry
-    if (turn < s.endsAtTurn) keep.push(s);
-    else def.onExpire?.({ target: actor, stacks: s.stacks, potency: s.potency, turn });
+
+    if (turn < instance.endsAtTurn) {
+      keep.push(instance);
+    } else {
+      callHook(def.onExpire, actor, instance, { turn });
+    }
   }
+
   actor.statuses = keep;
   actor.statusDerived = rebuildStatusDerived(actor);
 }
 
+/**
+ * Rebuilds derived aggregates based on current statuses.
+ * @param {import("./actor.js").Actor} actor
+ */
 export function rebuildStatusDerived(actor) {
   const out = {
     moveAPDelta: 0,
     actionSpeedPct: 0,
+    cooldownMult: 1,
     accuracyFlat: 0,
     critChancePct: 0,
+    regenFlat: { hp: 0, stamina: 0, mana: 0 },
+    regenPct: { hp: 0, stamina: 0, mana: 0 },
+    costMult: { stamina: 1, mana: 1 },
     damageDealtMult: Object.create(null),
     damageTakenMult: Object.create(null),
     resistDelta: Object.create(null),
+    regen: { hp: 0, stamina: 0, mana: 0 },
   };
-  for (const s of actor.statuses || []) {
-    const def = REGISTRY.get(s.id);
+
+  if (!actor) return out;
+  actor.statusDerived = out;
+
+  for (const instance of actor.statuses || []) {
+    const def = REGISTRY.get(instance.id);
     if (!def?.derive) continue;
-    const d = def.derive({ target: actor, stacks: s.stacks, potency: s.potency });
-    if (!d) continue;
-    out.moveAPDelta += d.moveAPDelta ?? 0;
-    out.actionSpeedPct += d.actionSpeedPct ?? 0;
-    out.accuracyFlat += d.accuracyFlat ?? 0;
-    out.critChancePct += d.critChancePct ?? 0;
-    mergeMap(out.damageDealtMult, d.damageDealtMult);
-    mergeMap(out.damageTakenMult, d.damageTakenMult);
-    mergeMap(out.resistDelta, d.resistDelta);
+
+    const payload = { target: actor, stacks: instance.stacks, potency: instance.potency };
+    const res = def.derive.length >= 2
+      ? def.derive(actor, instance)
+      : def.derive(payload);
+
+    if (res && typeof res === "object") mergeDerived(out, res);
   }
+
+  out.regen.hp = out.regenFlat.hp;
+  out.regen.stamina = out.regenFlat.stamina;
+  out.regen.mana = out.regenFlat.mana;
   return out;
 }
 
-function mergeMap(dst, src) {
+/**
+ * @typedef {Object} StatusAttempt
+ * @property {string} id
+ * @property {number} [baseChance]
+ * @property {number} [baseDuration]
+ * @property {number} [stacks]
+ */
+
+/**
+ * @typedef {Object} StatusInstance
+ * @property {string} id
+ * @property {number} stacks
+ * @property {number} endsAtTurn
+ * @property {number} [nextTickAt]
+ * @property {number} [potency]
+ * @property {string} [source]
+ */
+
+/**
+ * @typedef {Object} StatusDef
+ * @property {string} id
+ * @property {"refresh"|"add_stacks"|"independent"} [stacking]
+ * @property {number} [maxStacks]
+ * @property {number} [tickEvery]
+ * @property {(actor: import("./actor.js").Actor, instance: StatusInstance, extra?: any) => any} [onApply]
+ * @property {(actor: import("./actor.js").Actor, instance: StatusInstance, extra?: any) => any} [onTick]
+ * @property {(actor: import("./actor.js").Actor, instance: StatusInstance, extra?: any) => any} [onExpire]
+ * @property {(actor: import("./actor.js").Actor, instance: StatusInstance) => any} [derive]
+ */
+
+function clampStacks(stacks, def) {
+  const value = Number.isFinite(stacks) ? stacks : 1;
+  const max = Number.isFinite(def.maxStacks) ? def.maxStacks : Infinity;
+  return Math.max(1, Math.min(max, value));
+}
+
+function findInstance(instances, id) {
+  return instances.find(s => s.id === id) || null;
+}
+
+function mergeDerived(dst, src) {
   if (!src) return;
-  for (const k of Object.keys(src)) dst[k] = (dst[k] || 0) + (src[k] || 0);
+  if (typeof src.moveAPDelta === "number") dst.moveAPDelta += src.moveAPDelta;
+  if (typeof src.actionSpeedPct === "number") dst.actionSpeedPct += src.actionSpeedPct;
+  if (typeof src.cooldownMult === "number") dst.cooldownMult *= src.cooldownMult;
+  if (typeof src.accuracyFlat === "number") dst.accuracyFlat += src.accuracyFlat;
+  if (typeof src.critChancePct === "number") dst.critChancePct += src.critChancePct;
+  if (src.damageDealtMult) mergeMap(dst.damageDealtMult, src.damageDealtMult);
+  if (src.damageTakenMult) mergeMap(dst.damageTakenMult, src.damageTakenMult);
+  if (src.resistDelta) mergeMap(dst.resistDelta, src.resistDelta);
+  if (src.regen) addRecords(dst.regenFlat, src.regen);
+  if (src.regenFlat) addRecords(dst.regenFlat, src.regenFlat);
+  if (src.regenPct) addRecords(dst.regenPct, src.regenPct);
+  if (src.costMult) multiplyRecords(dst.costMult, src.costMult);
+}
+
+function mergeMap(dst, src) {
+  for (const key of Object.keys(src)) {
+    dst[key] = (dst[key] || 0) + (src[key] || 0);
+  }
+}
+
+function addRecords(dst, src) {
+  for (const key of Object.keys(src)) {
+    dst[key] = (dst[key] || 0) + (src[key] || 0);
+  }
+}
+
+function multiplyRecords(dst, src) {
+  for (const key of Object.keys(src)) {
+    const value = Number.isFinite(src[key]) ? src[key] : 1;
+    dst[key] = (dst[key] || 1) * value;
+  }
+}
+
+function callHook(fn, actor, instance, extra) {
+  if (typeof fn !== "function") return undefined;
+  if (fn.length >= 2) return fn(actor, instance, extra);
+  return fn({
+    target: actor,
+    instance,
+    stacks: instance?.stacks ?? 0,
+    potency: instance?.potency,
+    turn: extra?.turn,
+    source: extra?.source,
+  });
+}
+
+function clamp(value, lo, hi) {
+  return Math.max(lo, Math.min(hi, value));
+}
+
+export function getStatusDefinition(id) {
+  return REGISTRY.get(id);
 }

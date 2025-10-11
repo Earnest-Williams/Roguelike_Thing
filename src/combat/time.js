@@ -4,7 +4,6 @@
 import {
   BASE_AP_GAIN_PER_TURN,
   COOLDOWN_MIN_TURNS,
-  COOLDOWN_PROGRESS_PER_TURN,
   MIN_AP_COST,
 } from "../../constants.js";
 
@@ -27,8 +26,14 @@ export function gainAP(actor) {
  * @param {number} baseCostAP
  */
 export function apCost(actor, baseCostAP) {
-  const mult = actor.totalActionCostMult();
-  return Math.max(MIN_AP_COST, Math.round(baseCostAP * mult));
+  const base = Number(baseCostAP) || 0;
+  const temporal = actor?.modCache?.temporal || {};
+  const sd = actor?.statusDerived || {};
+  const add = (temporal.moveAPDelta || 0) + (sd.moveAPDelta || 0);
+  const mult = 1 + (temporal.actionSpeedPct || 0) + (sd.actionSpeedPct || 0);
+  const raw = (base + add) * mult;
+  const cost = Number.isFinite(raw) ? raw : base;
+  return Math.max(MIN_AP_COST, Math.floor(cost));
 }
 
 /**
@@ -48,13 +53,10 @@ export function spendAP(actor, costAP) {
  * @param {import("./actor.js").Actor} actor
  */
 export function tickCooldowns(actor) {
-  if (!actor) return;
-  const mult = actor.totalCooldownMult(); // >1 means slower cooldowns
-  for (const key of Object.keys(actor.cooldowns)) {
-    let remain = actor.cooldowns[key];
-    remain -= COOLDOWN_PROGRESS_PER_TURN / mult;
-    actor.cooldowns[key] = Math.max(COOLDOWN_MIN_TURNS, remain);
-    if (actor.cooldowns[key] === COOLDOWN_MIN_TURNS) delete actor.cooldowns[key];
+  if (!actor || !(actor.cooldowns instanceof Map)) return;
+  const turn = actor.turn || 0;
+  for (const [key, readyAt] of actor.cooldowns.entries()) {
+    if (turn >= readyAt) actor.cooldowns.delete(key);
   }
 }
 
@@ -65,9 +67,14 @@ export function tickCooldowns(actor) {
  * @param {number} baseTurns
  */
 export function startCooldown(actor, key, baseTurns) {
-  const mult = actor.totalCooldownMult();
-  const current = actor.cooldowns[key] || 0;
-  actor.cooldowns[key] = Math.max(current, baseTurns * mult);
+  if (!actor || !key) return;
+  const temporal = actor.modCache?.temporal || { cooldownMult: 1 };
+  const sd = actor.statusDerived || {};
+  const raw = Number(baseTurns) * (temporal.cooldownMult || 1) * (sd.cooldownMult || 1);
+  const turns = Math.max(COOLDOWN_MIN_TURNS, Math.round(Number.isFinite(raw) ? raw : Number(baseTurns) || 0));
+  if (!actor.cooldowns || !(actor.cooldowns instanceof Map)) actor.cooldowns = new Map();
+  const currentTurn = actor.turn || 0;
+  actor.cooldowns.set(key, currentTurn + turns);
 }
 
 /**
@@ -76,5 +83,12 @@ export function startCooldown(actor, key, baseTurns) {
  * @param {string} key
  */
 export function isReady(actor, key) {
-  return !actor.cooldowns[key];
+  if (!actor) return true;
+  if (!actor.cooldowns || !(actor.cooldowns instanceof Map)) {
+    return true;
+  }
+  const readyAt = actor.cooldowns.get(key);
+  if (readyAt === undefined) return true;
+  const turn = actor.turn || 0;
+  return turn >= readyAt;
 }

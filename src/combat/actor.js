@@ -183,8 +183,11 @@ export class Actor {
     /** @type {number} */
     this.baseActionAP = DEFAULT_BASE_ACTION_AP;
 
-    /** @type {Record<string, number>} */
-    this.cooldowns = Object.create(null);
+    /** @type {number} */
+    this.turn = 0;
+
+    /** @type {Map<string, number>} */
+    this.cooldowns = new Map();
   }
 
   /**
@@ -224,14 +227,17 @@ export class Actor {
    * Lower is faster (<1). Use when computing AP cost.
    */
   totalActionCostMult() {
-    const pct = this.statusDerived?.actionSpeedPct ?? 0;
+    const sdPct = this.statusDerived?.actionSpeedPct ?? 0;
+    const temporalPct = this.modCache?.temporal?.actionSpeedPct ?? 0;
+    const pct = sdPct + temporalPct;
     const mult = this.modCache.speedMult * (1 + pct);
     return Math.max(MIN_TOTAL_ACTION_COST_MULTIPLIER, mult);
   }
 
   totalCooldownMult() {
-    const pct = this.statusDerived?.actionSpeedPct ?? 0;
-    return Math.max(MIN_TOTAL_COOLDOWN_MULTIPLIER, 1 + pct / 100);
+    const temporal = this.modCache?.temporal?.cooldownMult ?? 1;
+    const derived = this.statusDerived?.cooldownMult ?? 1;
+    return Math.max(MIN_TOTAL_COOLDOWN_MULTIPLIER, temporal * derived);
   }
 
   /**
