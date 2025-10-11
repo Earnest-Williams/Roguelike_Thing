@@ -1,0 +1,49 @@
+// src/combat/save.js
+// @ts-check
+
+export function serializeActor(actor) {
+  if (!actor) return null;
+  const statusBlob = Array.isArray(actor.statuses)
+    ? actor.statuses.map(s => ({
+        id: s.id,
+        stacks: s.stacks,
+        potency: s.potency,
+        endsAt: s.endsAt,
+        nextTickAt: s.nextTickAt,
+      }))
+    : [];
+  return {
+    hp: actor.hp,
+    ap: actor.ap,
+    statuses: statusBlob,
+    attunement: { stacks: { ...(actor.attunement?.stacks || {}) } },
+    resources: { pools: clonePools(actor.resources?.pools) },
+    cooldowns: { ...(actor.cooldowns || {}) },
+    polarity: actor.polarity,
+  };
+}
+
+export function hydrateActor(actor, blob) {
+  if (!actor || !blob) return actor;
+  actor.hp = blob.hp;
+  actor.ap = blob.ap;
+  actor.polarity = blob.polarity;
+  actor.statuses = Array.isArray(blob.statuses) ? blob.statuses.map(s => ({ ...s })) : [];
+  actor.attunement = actor.attunement || {};
+  actor.attunement.stacks = { ...(blob.attunement?.stacks || {}) };
+  actor.resources = actor.resources || { pools: Object.create(null) };
+  actor.resources.pools = clonePools(blob.resources?.pools);
+  actor.cooldowns = { ...(blob.cooldowns || {}) };
+  return actor;
+}
+
+function clonePools(pools) {
+  const out = Object.create(null);
+  if (!pools) return out;
+  for (const [key, value] of Object.entries(pools)) {
+    if (!value || typeof value !== "object") continue;
+    out[key] = { ...value };
+  }
+  return out;
+}
+

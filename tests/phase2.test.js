@@ -1,7 +1,7 @@
 // tests/phase2.test.js
 // @ts-check
 import { Actor } from "../src/combat/actor.js";
-import { applyStatus } from "../src/combat/status.js";
+import { addStatus, rebuildDerived } from "../src/combat/status.js";
 import { runTurn } from "../src/combat/loop.js";
 import { simplePlanner } from "../src/combat/loop.sample-planner.js";
 import { foldModsFromEquipment } from "../src/combat/mod-folding.js";
@@ -25,8 +25,9 @@ const b = new Actor({
 });
 foldModsFromEquipment(b);
 
-// Apply adrenaline to hero (faster actions + cooldowns)
-applyStatus(a, "adrenaline", 3, 1);
+// Apply haste to hero (faster actions)
+addStatus(a, "haste", { stacks: 3, duration: 1 });
+rebuildDerived(a);
 
 const initialDummyHP = b.res.hp;
 // Run a few turns
@@ -41,10 +42,10 @@ for (let t = 0; t < 3; t++) {
 assert(a.ap <= a.apCap, "AP does not exceed cap");
 assert(b.res.hp < initialDummyHP, "Dummy should take damage during the loop");
 
-assert(a.cooldowns instanceof Map, "Cooldowns should be tracked in a Map");
-const swingReadyAt = a.cooldowns.get("swing");
+assert.equal(typeof a.cooldowns, "object", "Cooldowns should use a plain object map");
+const swingReadyAt = a.cooldowns?.swing;
 assert(
-  swingReadyAt === undefined || swingReadyAt <= a.turn,
+  swingReadyAt === undefined,
   "Cooldown entries should expire once the turn threshold is reached",
 );
 
