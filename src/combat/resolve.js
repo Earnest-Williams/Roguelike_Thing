@@ -82,7 +82,7 @@ function applyBrands(actor, packets, onHitStatuses) {
         if (b.flat) amt += b.flat;
         if (b.pct) amt = Math.floor(amt * (1 + b.pct));
       }
-      if (b.onHitStatuses) onHitStatuses.push(...b.onHitStatuses);
+      if (Array.isArray(b.onHitStatuses)) onHitStatuses.push(...b.onHitStatuses);
     }
     return { ...pkt, amount: amt };
   });
