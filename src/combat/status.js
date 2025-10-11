@@ -387,7 +387,7 @@ export function applyOneStatusAttempt({ attacker, defender, attempt, turn, rng }
   duration *= 1 + inflictMult;
   duration *= 1 + recvMult;
   if (attacker && attacker === defender) {
-    const buffMult = Number(aInt.buffDurMult ?? defender?.modCache?.status?.buffDurMult ?? 1) || 1;
+    const buffMult = Number(aInt.buffDurMult ?? 1) || 1;
     duration *= buffMult;
   }
   duration = Math.max(0, Math.floor(duration));
