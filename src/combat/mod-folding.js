@@ -46,19 +46,6 @@ function mergeRecord(into, add) {
 }
 
 /**
- * Adds numeric properties from `add` into `into`.
- * @param {Record<string, number>} into
- * @param {Record<string, number>|undefined|null} add
- */
-function add(into, add) {
-  if (!add) return;
-  for (const key of Object.keys(add)) {
-    const amount = Number(add[key]) || 0;
-    into[key] = (into[key] || 0) + amount;
-  }
-}
-
-/**
  * Merge polarity bias style maps additively.
  * @param {Record<string, number>} into
  * @param {Record<string, number>|undefined|null} add
@@ -112,16 +99,33 @@ function applyTemporalPayload(cache, payload) {
     }
   };
 
-  addNumber("actionSpeedPct", "actionSpeedPct", "actionSpeedPercent", "speedPct", "speedPercent");
-  addNumber("moveAPDelta", "moveAPDelta", "moveApDelta", "moveApFlat", "moveAPFlat");
-  addNumber("moveAPPct", "moveAPPct", "moveApPct", "moveApPercent", "moveAPPercent");
-  multNumber("moveAPMult", "moveAPMult", "moveApMult", "moveApMultiplier");
+  addNumber(
+    "actionSpeedPct",
+    "actionSpeedPct",
+    "actionSpeedPercent",
+    "speedPct",
+    "speedPercent",
+    "globalSpeedPct",
+    "globalSpeedPercent",
+  );
+  addNumber("moveAPDelta", "moveAPDelta", "moveApDelta", "moveApFlat", "moveAPFlat", "moveApBonus");
+  addNumber(
+    "moveAPPct",
+    "moveAPPct",
+    "moveApPct",
+    "moveApPercent",
+    "moveAPPercent",
+    "moveSpeedPct",
+    "moveSpeedPercent",
+  );
+  multNumber("moveAPMult", "moveAPMult", "moveApMult", "moveApMultiplier", "moveSpeedMult");
   addNumber(
     "baseActionAPDelta",
     "baseActionAPDelta",
     "baseActionApDelta",
     "baseActionApFlat",
     "baseActionAPFlat",
+    "baseActionApBonus",
   );
   addNumber(
     "baseActionAPPct",
@@ -129,27 +133,74 @@ function applyTemporalPayload(cache, payload) {
     "baseActionApPct",
     "baseActionApPercent",
     "baseActionAPPercent",
+    "baseActionSpeedPct",
+    "baseActionSpeedPercent",
   );
   multNumber(
     "baseActionAPMult",
     "baseActionAPMult",
     "baseActionApMult",
     "baseActionApMultiplier",
+    "baseActionSpeedMult",
   );
-  addNumber("apGainFlat", "apGainFlat", "apRegenFlat", "apGainPerTurn", "apRegenPerTurn");
-  addNumber("apGainPct", "apGainPct", "apGainPercent", "apRegenPct", "apRegenPercent");
+  addNumber(
+    "apGainFlat",
+    "apGainFlat",
+    "apRegenFlat",
+    "apGainPerTurn",
+    "apRegenPerTurn",
+    "apGainFlatPerTurn",
+    "apRegenFlatPerTurn",
+  );
+  addNumber(
+    "apGainPct",
+    "apGainPct",
+    "apGainPercent",
+    "apRegenPct",
+    "apRegenPercent",
+    "apGainPerTurnPct",
+    "apRegenPerTurnPct",
+  );
   multNumber("apGainMult", "apGainMult", "apGainMultiplier", "apRegenMult", "apRegenMultiplier");
-  addNumber("apCapFlat", "apCapFlat", "apCapDelta", "apCapAdd");
-  addNumber("apCapPct", "apCapPct", "apCapPercent");
-  multNumber("apCapMult", "apCapMult", "apCapMultiplier");
-  addNumber("initiativeFlat", "initiativeFlat", "initFlat", "initiativeDelta");
-  addNumber("initiativePct", "initiativePct", "initPct", "initiativePercent");
-  multNumber("initiativeMult", "initiativeMult", "initMult", "initiativeMultiplier");
-  const cooldownMult = Number(payload.cooldownMult);
+  addNumber("apCapFlat", "apCapFlat", "apCapDelta", "apCapAdd", "apMaxFlat", "apMaxDelta");
+  addNumber("apCapPct", "apCapPct", "apCapPercent", "apMaxPct", "apMaxPercent");
+  multNumber("apCapMult", "apCapMult", "apCapMultiplier", "apMaxMultiplier");
+  addNumber(
+    "initiativeFlat",
+    "initiativeFlat",
+    "initFlat",
+    "initiativeDelta",
+    "initiativeBonus",
+    "initBonus",
+  );
+  addNumber(
+    "initiativePct",
+    "initiativePct",
+    "initPct",
+    "initiativePercent",
+    "initPercent",
+  );
+  multNumber(
+    "initiativeMult",
+    "initiativeMult",
+    "initMult",
+    "initiativeMultiplier",
+    "initMultiplier",
+  );
+  const cooldownMult = Number(
+    payload.cooldownMult ??
+    payload.cooldownMultiplier ??
+    payload.globalCooldownMult ??
+    payload.globalCooldownMultiplier,
+  );
   if (Number.isFinite(cooldownMult)) {
     temporal.cooldownMult *= cooldownMult;
   }
-  const cooldownPerTag = payload.cooldownPerTag ?? payload.cooldownMultByTag;
+  const cooldownPerTag =
+    payload.cooldownPerTag ??
+    payload.cooldownMultByTag ??
+    payload.cooldownMultiplierByTag ??
+    payload.cooldownByTag;
   if (cooldownPerTag instanceof Map) {
     for (const [tag, mult] of cooldownPerTag.entries()) {
       if (!tag) continue;
@@ -188,66 +239,150 @@ function applyTemporalPayload(cache, payload) {
 function applyResourcePayload(cache, payload) {
   if (!payload) return;
   const resource = cache.resource;
-  if (payload.maxFlat && typeof payload.maxFlat === "object") {
-    add(resource.maxFlat, payload.maxFlat);
-  }
-  add(resource.maxFlat, {
-    hp: payload.maxHpFlat ?? payload.maxHPFlat ?? 0,
-    stamina: payload.maxStaminaFlat ?? 0,
-    mana: payload.maxManaFlat ?? 0,
-  });
-  if (payload.maxPct && typeof payload.maxPct === "object") {
-    add(resource.maxPct, payload.maxPct);
-  }
-  add(resource.maxPct, {
-    hp: payload.maxHpPct ?? payload.maxHPPct ?? 0,
-    stamina: payload.maxStaminaPct ?? 0,
-    mana: payload.maxManaPct ?? 0,
-  });
-  if (payload.regenFlat && typeof payload.regenFlat === "object") {
-    add(resource.regenFlat, payload.regenFlat);
-  }
-  add(resource.regenFlat, {
-    hp: payload.hpRegenPerTurn ?? payload.hpRegen ?? 0,
-    stamina: payload.staminaRegenPerTurn ?? payload.staminaRegen ?? 0,
-    mana: payload.manaRegenPerTurn ?? payload.manaRegen ?? 0,
-  });
-  if (payload.regenPct && typeof payload.regenPct === "object") {
-    add(resource.regenPct, payload.regenPct);
-  }
-  add(resource.regenPct, {
-    hp: payload.hpRegenPct ?? payload.hpRegenPercent ?? 0,
-    stamina: payload.staminaRegenPct ?? payload.staminaRegenPercent ?? 0,
-    mana: payload.manaRegenPct ?? payload.manaRegenPercent ?? 0,
-  });
-  if (payload.startFlat && typeof payload.startFlat === "object") {
-    add(resource.startFlat, payload.startFlat);
-  }
-  add(resource.startFlat, {
-    hp: payload.startHpFlat ?? payload.startHPFlat ?? payload.startHp ?? 0,
-    stamina: payload.startStaminaFlat ?? payload.startStamina ?? 0,
-    mana: payload.startManaFlat ?? payload.startMana ?? 0,
-  });
-  if (payload.startPct && typeof payload.startPct === "object") {
-    add(resource.startPct, payload.startPct);
-  }
-  add(resource.startPct, {
-    hp: payload.startHpPct ?? payload.startHPPct ?? payload.startHpPercent ?? 0,
-    stamina: payload.startStaminaPct ?? payload.startStaminaPercent ?? 0,
-    mana: payload.startManaPct ?? payload.startManaPercent ?? 0,
-  });
-  if (payload.gainFlat && typeof payload.gainFlat === "object") {
-    add(resource.gainFlat, payload.gainFlat);
-  }
-  if (payload.gainPct && typeof payload.gainPct === "object") {
-    add(resource.gainPct, payload.gainPct);
-  }
-  if (payload.leechFlat && typeof payload.leechFlat === "object") {
-    add(resource.leechFlat, payload.leechFlat);
-  }
-  if (payload.leechPct && typeof payload.leechPct === "object") {
-    add(resource.leechPct, payload.leechPct);
-  }
+  const merge = (bucket, value) => {
+    if (!value) return;
+    mergeRecord(bucket, value);
+  };
+  const addResource = (bucket, key, ...aliases) => {
+    for (const alias of aliases) {
+      if (payload[alias] === undefined) continue;
+      const value = Number(payload[alias]);
+      if (!Number.isFinite(value)) continue;
+      bucket[key] = (bucket[key] || 0) + value;
+    }
+  };
+
+  merge(resource.maxFlat, payload.maxFlat);
+  addResource(
+    resource.maxFlat,
+    "hp",
+    "maxHpFlat",
+    "maxHPFlat",
+    "hpMaxFlat",
+    "maxHpDelta",
+    "maxHpAdd",
+  );
+  addResource(resource.maxFlat, "stamina", "maxStaminaFlat", "staminaMaxFlat", "maxStaminaDelta");
+  addResource(resource.maxFlat, "mana", "maxManaFlat", "manaMaxFlat", "maxManaDelta");
+
+  merge(resource.maxPct, payload.maxPct);
+  addResource(resource.maxPct, "hp", "maxHpPct", "maxHPPct", "hpMaxPct", "maxHpPercent");
+  addResource(resource.maxPct, "stamina", "maxStaminaPct", "staminaMaxPct", "maxStaminaPercent");
+  addResource(resource.maxPct, "mana", "maxManaPct", "manaMaxPct", "maxManaPercent");
+
+  merge(resource.regenFlat, payload.regenFlat);
+  addResource(
+    resource.regenFlat,
+    "hp",
+    "hpRegenPerTurn",
+    "hpRegen",
+    "hpRegenFlat",
+    "hpRegenFlatPerTurn",
+  );
+  addResource(
+    resource.regenFlat,
+    "stamina",
+    "staminaRegenPerTurn",
+    "staminaRegen",
+    "staminaRegenFlat",
+    "staminaRegenFlatPerTurn",
+  );
+  addResource(
+    resource.regenFlat,
+    "mana",
+    "manaRegenPerTurn",
+    "manaRegen",
+    "manaRegenFlat",
+    "manaRegenFlatPerTurn",
+  );
+
+  merge(resource.regenPct, payload.regenPct);
+  addResource(resource.regenPct, "hp", "hpRegenPct", "hpRegenPercent");
+  addResource(resource.regenPct, "stamina", "staminaRegenPct", "staminaRegenPercent");
+  addResource(resource.regenPct, "mana", "manaRegenPct", "manaRegenPercent");
+
+  merge(resource.startFlat, payload.startFlat);
+  addResource(
+    resource.startFlat,
+    "hp",
+    "startHpFlat",
+    "startHPFlat",
+    "startHp",
+    "startHpDelta",
+    "startHpAdd",
+  );
+  addResource(
+    resource.startFlat,
+    "stamina",
+    "startStaminaFlat",
+    "startStamina",
+    "startStaminaDelta",
+  );
+  addResource(
+    resource.startFlat,
+    "mana",
+    "startManaFlat",
+    "startMana",
+    "startManaDelta",
+  );
+
+  merge(resource.startPct, payload.startPct);
+  addResource(resource.startPct, "hp", "startHpPct", "startHPPct", "startHpPercent");
+  addResource(
+    resource.startPct,
+    "stamina",
+    "startStaminaPct",
+    "startStaminaPercent",
+  );
+  addResource(resource.startPct, "mana", "startManaPct", "startManaPercent");
+
+  merge(resource.gainFlat, payload.gainFlat ?? payload.onGainFlat);
+  addResource(
+    resource.gainFlat,
+    "hp",
+    "hpGainFlat",
+    "hpGain",
+    "hpOnHitGain",
+    "hpGainPerHit",
+    "hpGainOnHit",
+  );
+  addResource(
+    resource.gainFlat,
+    "stamina",
+    "staminaGainFlat",
+    "staminaGain",
+    "staminaOnHitGain",
+    "staminaGainPerHit",
+  );
+  addResource(
+    resource.gainFlat,
+    "mana",
+    "manaGainFlat",
+    "manaGain",
+    "manaOnHitGain",
+    "manaGainPerHit",
+  );
+
+  merge(resource.gainPct, payload.gainPct ?? payload.onGainPct);
+  addResource(resource.gainPct, "hp", "hpGainPct", "hpGainPercent", "hpOnHitGainPct");
+  addResource(resource.gainPct, "stamina", "staminaGainPct", "staminaGainPercent");
+  addResource(resource.gainPct, "mana", "manaGainPct", "manaGainPercent");
+
+  merge(resource.leechFlat, payload.leechFlat);
+  addResource(resource.leechFlat, "hp", "hpLeechFlat", "hpLeech");
+  addResource(resource.leechFlat, "stamina", "staminaLeechFlat", "staminaLeech");
+  addResource(resource.leechFlat, "mana", "manaLeechFlat", "manaLeech");
+
+  merge(resource.leechPct, payload.leechPct);
+  addResource(resource.leechPct, "hp", "hpLeechPct", "hpLeechPercent");
+  addResource(resource.leechPct, "stamina", "staminaLeechPct", "staminaLeechPercent");
+  addResource(resource.leechPct, "mana", "manaLeechPct", "manaLeechPercent");
+
+  merge(resource.costFlat, payload.costFlat ?? payload.costAdd);
+  addResource(resource.costFlat, "hp", "hpCostFlat", "hpCost", "hpCostAdd");
+  addResource(resource.costFlat, "stamina", "staminaCostFlat", "staminaCost", "staminaCostAdd");
+  addResource(resource.costFlat, "mana", "manaCostFlat", "manaCost", "manaCostAdd");
+
   multiply(resource.costMult, payload.costMult);
   const staminaCostMult = Number(payload.staminaCostMult ?? payload.staminaCostMultiplier);
   if (Number.isFinite(staminaCostMult)) {
@@ -260,9 +395,6 @@ function applyResourcePayload(cache, payload) {
   const hpCostMult = Number(payload.hpCostMult ?? payload.hpCostMultiplier);
   if (Number.isFinite(hpCostMult)) {
     resource.costMult.hp = (resource.costMult.hp ?? 1) * hpCostMult;
-  }
-  if (payload.costFlat && typeof payload.costFlat === "object") {
-    add(resource.costFlat, payload.costFlat);
   }
   const applyCostPerTag = (tag, value) => {
     if (!tag) return;
@@ -284,7 +416,11 @@ function applyResourcePayload(cache, payload) {
     }
     resource.costPerTag.set(key, prev);
   };
-  const costPerTag = payload.costPerTag ?? payload.costMultByTag ?? payload.costMultiplierByTag;
+  const costPerTag =
+    payload.costPerTag ??
+    payload.costMultByTag ??
+    payload.costMultiplierByTag ??
+    payload.costByTag;
   if (costPerTag instanceof Map) {
     for (const [tag, value] of costPerTag.entries()) {
       applyCostPerTag(tag, value);
