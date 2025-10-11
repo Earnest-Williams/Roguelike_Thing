@@ -90,6 +90,11 @@ function foldAttunements(actor, cache) {
   if (!pool) return applied;
 
   const thresholds = ATTUNE.thresholds || {};
+  const topTierResistBonus = Number(ATTUNE.topTierResistBonus) || 0;
+  const topTierThreshold = Object.keys(thresholds)
+    .map((th) => Number(th))
+    .filter((value) => Number.isFinite(value))
+    .reduce((max, value) => Math.max(max, value), Number.NEGATIVE_INFINITY);
 
   for (const [type, xpRaw] of Object.entries(pool)) {
     const xp = Number(xpRaw);
@@ -97,16 +102,24 @@ function foldAttunements(actor, cache) {
 
     let bonus = 0;
     for (const [th, pct] of Object.entries(thresholds)) {
-      if (xp >= Number(th)) bonus = Math.max(bonus, pct);
+      const threshold = Number(th);
+      const pctValue = Number(pct);
+      if (!Number.isFinite(threshold) || !Number.isFinite(pctValue)) continue;
+      if (xp >= threshold) bonus = Math.max(bonus, pctValue);
     }
     if (bonus > 0) {
       cache.offense.affinities[type] = (cache.offense.affinities[type] || 0) + bonus;
       applied.offenseAffinities[type] = (applied.offenseAffinities[type] || 0) + bonus;
 
-      if (xp >= 16) {
-        const resistAdd = 0.03;
-        cache.defense.resists[type] = (cache.defense.resists[type] || 0) + resistAdd;
-        applied.defenseResists[type] = (applied.defenseResists[type] || 0) + resistAdd;
+      if (
+        topTierResistBonus > 0 &&
+        Number.isFinite(topTierThreshold) &&
+        xp >= topTierThreshold
+      ) {
+        cache.defense.resists[type] =
+          (cache.defense.resists[type] || 0) + topTierResistBonus;
+        applied.defenseResists[type] =
+          (applied.defenseResists[type] || 0) + topTierResistBonus;
       }
     }
   }
