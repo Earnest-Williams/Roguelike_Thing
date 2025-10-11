@@ -72,6 +72,129 @@ function mergePolarity(into, add) {
 }
 
 /**
+ * Multiplies numeric properties from `mults` into `into`.
+ * @param {Record<string, number>} into
+ * @param {Record<string, number>|undefined|null} mults
+ */
+function multiply(into, mults) {
+  if (!mults) return;
+  for (const key of Object.keys(mults)) {
+    const value = Number(mults[key]);
+    if (!Number.isFinite(value)) continue;
+    into[key] = (into[key] ?? 1) * value;
+  }
+}
+
+/**
+ * Applies a temporal payload to the provided mod cache.
+ * @param {import("./actor.js").Actor['modCache']} cache
+ * @param {any} payload
+ */
+function applyTemporalPayload(cache, payload) {
+  if (!payload) return;
+  const temporal = cache.temporal;
+  temporal.actionSpeedPct += Number(payload.actionSpeedPct ?? 0) || 0;
+  temporal.moveAPDelta += Number(payload.moveAPDelta ?? payload.moveApDelta ?? 0) || 0;
+  const cooldownMult = Number(payload.cooldownMult);
+  if (Number.isFinite(cooldownMult)) {
+    temporal.cooldownMult *= cooldownMult;
+  }
+  const cooldownPerTag = payload.cooldownPerTag ?? payload.cooldownMultByTag;
+  if (cooldownPerTag instanceof Map) {
+    for (const [tag, mult] of cooldownPerTag.entries()) {
+      if (!tag) continue;
+      const prev = temporal.cooldownPerTag.get(tag) || 1;
+      temporal.cooldownPerTag.set(tag, prev * (Number(mult) || 1));
+    }
+  } else if (Array.isArray(cooldownPerTag)) {
+    for (const entry of cooldownPerTag) {
+      if (!entry) continue;
+      const tag = entry.tag ?? entry.type ?? entry.id;
+      if (!tag) continue;
+      const prev = temporal.cooldownPerTag.get(tag) || 1;
+      const value = Number(entry.mult ?? entry.value ?? entry.amount ?? entry.pct ?? entry.percent ?? entry.multiplier ?? 0) || 1;
+      temporal.cooldownPerTag.set(tag, prev * value);
+    }
+  } else if (cooldownPerTag && typeof cooldownPerTag === "object") {
+    for (const tag of Object.keys(cooldownPerTag)) {
+      const prev = temporal.cooldownPerTag.get(tag) || 1;
+      const value = Number(cooldownPerTag[tag]) || 1;
+      temporal.cooldownPerTag.set(tag, prev * value);
+    }
+  }
+  if (payload.echo !== undefined && payload.echo !== null) {
+    temporal.echo = payload.echo;
+  }
+  if (payload.onKillHaste) {
+    temporal.onKillHaste = payload.onKillHaste;
+  }
+}
+
+/**
+ * Applies a resource payload to the provided mod cache.
+ * @param {import("./actor.js").Actor['modCache']} cache
+ * @param {any} payload
+ */
+function applyResourcePayload(cache, payload) {
+  if (!payload) return;
+  const resource = cache.resource;
+  if (payload.maxFlat && typeof payload.maxFlat === "object") {
+    add(resource.maxFlat, payload.maxFlat);
+  }
+  add(resource.maxFlat, {
+    hp: payload.maxHpFlat ?? payload.maxHPFlat ?? 0,
+    stamina: payload.maxStaminaFlat ?? 0,
+    mana: payload.maxManaFlat ?? 0,
+  });
+  if (payload.maxPct && typeof payload.maxPct === "object") {
+    add(resource.maxPct, payload.maxPct);
+  }
+  add(resource.maxPct, {
+    hp: payload.maxHpPct ?? payload.maxHPPct ?? 0,
+    stamina: payload.maxStaminaPct ?? 0,
+    mana: payload.maxManaPct ?? 0,
+  });
+  if (payload.regenFlat && typeof payload.regenFlat === "object") {
+    add(resource.regenFlat, payload.regenFlat);
+  }
+  add(resource.regenFlat, {
+    hp: payload.hpRegenPerTurn ?? payload.hpRegen ?? 0,
+    stamina: payload.staminaRegenPerTurn ?? payload.staminaRegen ?? 0,
+    mana: payload.manaRegenPerTurn ?? payload.manaRegen ?? 0,
+  });
+  if (payload.regenPct && typeof payload.regenPct === "object") {
+    add(resource.regenPct, payload.regenPct);
+  }
+  add(resource.regenPct, {
+    hp: payload.hpRegenPct ?? payload.hpRegenPercent ?? 0,
+    stamina: payload.staminaRegenPct ?? payload.staminaRegenPercent ?? 0,
+    mana: payload.manaRegenPct ?? payload.manaRegenPercent ?? 0,
+  });
+  multiply(resource.costMult, payload.costMult);
+  const staminaCostMult = Number(payload.staminaCostMult ?? payload.staminaCostMultiplier);
+  if (Number.isFinite(staminaCostMult)) {
+    resource.costMult.stamina = (resource.costMult.stamina ?? 1) * staminaCostMult;
+  }
+  const manaCostMult = Number(payload.manaCostMult ?? payload.manaCostMultiplier);
+  if (Number.isFinite(manaCostMult)) {
+    resource.costMult.mana = (resource.costMult.mana ?? 1) * manaCostMult;
+  }
+  const hpCostMult = Number(payload.hpCostMult ?? payload.hpCostMultiplier);
+  if (Number.isFinite(hpCostMult)) {
+    resource.costMult.hp = (resource.costMult.hp ?? 1) * hpCostMult;
+  }
+  if (payload.onHitGain && !resource.onHitGain) {
+    resource.onHitGain = payload.onHitGain;
+  }
+  if (payload.onKillGain && !resource.onKillGain) {
+    resource.onKillGain = payload.onKillGain;
+  }
+  if (payload.channeling) {
+    resource.channeling = true;
+  }
+}
+
+/**
  * Aggregates all modifiers from currently equipped items and stores the result
  * on the actor. This builds the canonical mod cache for combat resolution.
  * @param {import("./actor.js").Actor} actor
@@ -293,85 +416,38 @@ export function foldModsFromEquipment(actor) {
 
     // Temporal
     if (item.temporal) {
-      const t = item.temporal;
-      mc.temporal.actionSpeedPct += Number(t.actionSpeedPct) || 0;
-      mc.temporal.moveAPDelta += Number(t.moveAPDelta) || 0;
-      const cooldownMult = Number(t.cooldownMult);
-      if (Number.isFinite(cooldownMult)) {
-        mc.temporal.cooldownMult *= cooldownMult;
-      }
-      if (t.cooldownPerTag instanceof Map) {
-        for (const [tag, mult] of t.cooldownPerTag.entries()) {
-          const prev = mc.temporal.cooldownPerTag.get(tag) || 1;
-          mc.temporal.cooldownPerTag.set(tag, prev * (Number(mult) || 1));
-        }
-      } else if (Array.isArray(t.cooldownPerTag)) {
-        for (const entry of t.cooldownPerTag) {
-          if (!entry) continue;
-          const tag = entry.tag ?? entry.type ?? entry.id;
-          if (!tag) continue;
-          const prev = mc.temporal.cooldownPerTag.get(tag) || 1;
-          mc.temporal.cooldownPerTag.set(tag, prev * (Number(entry.mult ?? entry.value ?? entry.amount ?? entry.pct ?? entry.percent) || 1));
-        }
-      } else if (t.cooldownPerTag && typeof t.cooldownPerTag === "object") {
-        for (const tag of Object.keys(t.cooldownPerTag)) {
-          const prev = mc.temporal.cooldownPerTag.get(tag) || 1;
-          mc.temporal.cooldownPerTag.set(tag, prev * (Number(t.cooldownPerTag[tag]) || 1));
-        }
-      }
-      if (t.echo !== undefined && t.echo !== null) {
-        mc.temporal.echo = t.echo;
-      }
-      if (t.onKillHaste) {
-        mc.temporal.onKillHaste = t.onKillHaste;
-      }
+      applyTemporalPayload(mc, item.temporal);
     }
 
     // Resource
     if (item.resource) {
-      const r = item.resource;
-      add(mc.resource.maxFlat, {
-        stamina: r.maxStaminaFlat ?? r.maxFlat?.stamina ?? 0,
-        mana: r.maxManaFlat ?? r.maxFlat?.mana ?? 0,
-      });
-      add(mc.resource.maxPct, {
-        stamina: r.maxStaminaPct ?? r.maxPct?.stamina ?? 0,
-        mana: r.maxManaPct ?? r.maxPct?.mana ?? 0,
-      });
-      add(mc.resource.regenFlat, {
-        stamina: r.staminaRegenPerTurn ?? r.regenFlat?.stamina ?? 0,
-        mana: r.manaRegenPerTurn ?? r.regenFlat?.mana ?? 0,
-      });
-      add(mc.resource.regenPct, {
-        stamina: r.staminaRegenPct ?? r.regenPct?.stamina ?? 0,
-        mana: r.manaRegenPct ?? r.regenPct?.mana ?? 0,
-      });
-      if (r.costMult) {
-        const staminaMult = Number(r.costMult.stamina);
-        if (Number.isFinite(staminaMult)) {
-          mc.resource.costMult.stamina *= staminaMult;
-        }
-        const manaMult = Number(r.costMult.mana);
-        if (Number.isFinite(manaMult)) {
-          mc.resource.costMult.mana *= manaMult;
-        }
+      applyResourcePayload(mc, item.resource);
+    }
+
+    // Generic mod payloads
+    const rawMods = [];
+    if (Array.isArray(item.mods)) rawMods.push(...item.mods);
+    if (Array.isArray(item.modifiers)) rawMods.push(...item.modifiers);
+    for (const mod of rawMods) {
+      if (!mod || typeof mod !== "object") continue;
+      const temporalPayloads = [];
+      if (mod.kind === "temporal") temporalPayloads.push(mod);
+      if (mod.temporal && typeof mod.temporal === "object") temporalPayloads.push(mod.temporal);
+      if (mod.payload?.temporal && typeof mod.payload.temporal === "object") {
+        temporalPayloads.push(mod.payload.temporal);
       }
-      const staminaCostMult = Number(r.staminaCostMult);
-      if (Number.isFinite(staminaCostMult)) {
-        mc.resource.costMult.stamina *= staminaCostMult;
+      for (const payload of temporalPayloads) {
+        applyTemporalPayload(mc, payload);
       }
-      const manaCostMult = Number(r.manaCostMult);
-      if (Number.isFinite(manaCostMult)) {
-        mc.resource.costMult.mana *= manaCostMult;
+
+      const resourcePayloads = [];
+      if (mod.kind === "resource") resourcePayloads.push(mod);
+      if (mod.resource && typeof mod.resource === "object") resourcePayloads.push(mod.resource);
+      if (mod.payload?.resource && typeof mod.payload.resource === "object") {
+        resourcePayloads.push(mod.payload.resource);
       }
-      if (r.onHitGain && !mc.resource.onHitGain) {
-        mc.resource.onHitGain = r.onHitGain;
-      }
-      if (r.onKillGain && !mc.resource.onKillGain) {
-        mc.resource.onKillGain = r.onKillGain;
-      }
-      if (r.channeling) {
-        mc.resource.channeling = true;
+      for (const payload of resourcePayloads) {
+        applyResourcePayload(mc, payload);
       }
     }
   }
