@@ -34,7 +34,7 @@ const B = mkActor("Slime", 50, modsSlime);
 function step(attacker, defender) {
   startTurn(attacker);
   const r = resolveAttack({ attacker, defender, attack: { type:"fire", base: 8 } });
-  const killed = defender.hp <= 0;
+  const killed = r.killed ?? (defender.hp <= 0);
   if (killed) applyStatus(attacker, { id:"haste", baseDuration:2, stacks:1 });
   endTurn(attacker);
   return { ...r, killed };
@@ -44,7 +44,9 @@ for (let i=0; i<10 && A.hp>0 && B.hp>0; i++) {
   const r1 = step(A, B);
   if (B.hp <= 0) break;
   const r2 = step(B, A);
-  console.log(`Round ${i+1}: A→B ${r1.totalDamage} (B:${B.hp}) | B→A ${r2.totalDamage} (A:${A.hp})`);
+  const dmgAB = r1.dmg ?? r1.totalDamage ?? 0;
+  const dmgBA = r2.dmg ?? r2.totalDamage ?? 0;
+  console.log(`Round ${i+1}: A→B ${dmgAB} (B:${B.hp}) | B→A ${dmgBA} (A:${A.hp})`);
 }
 
 console.log("Final:", { A: A.hp, B: B.hp });
