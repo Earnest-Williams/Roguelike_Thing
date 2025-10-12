@@ -2,7 +2,7 @@
 // @ts-check
 import { logAttackStep } from "./debug-log.js";
 import { applyStatuses } from "./status.js";
-import { applyOutgoingScaling, noteUseGain } from "./attunement.js";
+import { applyOutgoingScaling, gainAttunement } from "./attunement.js";
 import { polarityOnHitScalar, polarityDefScalar } from "./polarity.js";
 
 export function resolveAttack(ctx) {
@@ -17,7 +17,6 @@ export function resolveAttack(ctx) {
   log({ step: "brands", packets });
 
   applyOutgoingScaling({ attacker, packets, target: defender });
-  noteUseGain(attacker, new Set(packets.map((p) => p.type)));
   log({ step: "attunement", packets });
 
   packets = applyAffinities(attacker, packets);
@@ -34,6 +33,13 @@ export function resolveAttack(ctx) {
   const totalDamage = Object.values(collapsed).reduce((a, b) => a + b, 0);
   if (defender?.res) {
     defender.res.hp = Math.max(0, defender.res.hp - totalDamage);
+  }
+
+  if (attacker) {
+    for (const [type, amt] of Object.entries(collapsed)) {
+      if (!amt || amt <= 0) continue;
+      gainAttunement(attacker, type);
+    }
   }
 
   const attempts = [...onHitStatuses, ...(ctx.statusAttempts || [])];

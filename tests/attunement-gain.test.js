@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   applyOutgoingScaling,
   noteUseGain,
-  decayPerTurn,
+  decayAttunements,
   contributeDerived,
 } from "../src/combat/attunement.js";
 
@@ -12,11 +12,13 @@ function fakeActorWithRule(type, patch = {}) {
   const rule = { ...baseRule, ...patch, perStack: { ...baseRule.perStack, ...(patch.perStack || {}) } };
   const attackLog = [];
   const timeline = [];
+  const rules = { [type]: rule };
   return {
     attunement: {
-      rules: { [type]: rule },
+      rules,
       stacks: Object.create(null),
     },
+    modCache: { attunementRules: rules },
     logs: {
       attack: {
         push(entry) {
@@ -76,11 +78,11 @@ function fakeActorWithRule(type, patch = {}) {
 (function testDecayReducesStacks() {
   const actor = fakeActorWithRule("shock", { decayPerTurn: 2, maxStacks: 9 });
   actor.attunement.stacks.shock = 3;
-  decayPerTurn(actor);
+  decayAttunements(actor);
   assert.equal(actor.attunement.stacks.shock, 1);
-  decayPerTurn(actor);
+  decayAttunements(actor);
   assert.ok(!actor.attunement.stacks.shock, "stacks should decay to zero");
-  console.log("✓ decayPerTurn reduces stacks and prunes empties");
+  console.log("✓ decayAttunements reduces stacks and prunes empties");
 })();
 
 (function testContributeDerivedAddsPassiveBonuses() {
