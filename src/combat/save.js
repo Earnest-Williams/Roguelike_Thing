@@ -19,7 +19,7 @@ export function serializeActor(actor) {
     statuses: statusBlob,
     attunement: { stacks: { ...(actor.attunement?.stacks || {}) } },
     resources: { pools: clonePools(actor.resources?.pools) },
-    cooldowns: { ...(actor.cooldowns || {}) },
+    cooldowns: serializeCooldowns(actor.cooldowns),
     polarity: actor?.polarity ? { ...actor.polarity } : undefined,
   };
 }
@@ -40,7 +40,7 @@ export function hydrateActor(actor, blob) {
   actor.attunement.stacks = { ...(blob.attunement?.stacks || {}) };
   actor.resources = actor.resources || { pools: Object.create(null) };
   actor.resources.pools = clonePools(blob.resources?.pools);
-  actor.cooldowns = { ...(blob.cooldowns || {}) };
+  actor.cooldowns = hydrateCooldowns(blob.cooldowns);
   return actor;
 }
 
@@ -52,5 +52,21 @@ function clonePools(pools) {
     out[key] = { ...value };
   }
   return out;
+}
+
+function serializeCooldowns(cooldowns) {
+  if (!cooldowns) return {};
+  if (cooldowns instanceof Map) {
+    return Object.fromEntries(cooldowns.entries());
+  }
+  if (typeof cooldowns === "object") {
+    return { ...cooldowns };
+  }
+  return {};
+}
+
+function hydrateCooldowns(cooldowns) {
+  if (!cooldowns || typeof cooldowns !== "object") return new Map();
+  return new Map(Object.entries(cooldowns));
 }
 

@@ -90,7 +90,7 @@ registerStatus({
 });
 
 registerStatus({
-  id: "haste_bonus",
+  id: "haste",
   stacking: "refresh",
   duration: 4,
   derive(ctx, d) {

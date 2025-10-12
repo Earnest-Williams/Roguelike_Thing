@@ -14,4 +14,20 @@ export const items = {
     polarity: { defenseBias: { all: 0.15 } },
     resists: { fire: 0.1 },
   },
+  conversion_ring: {
+    slot: "ring",
+    offense: {
+      conversions: [
+        { from: "physical", to: "fire", ratio: 0.5, percent: 0.5, includeBaseOnly: true },
+      ],
+    },
+  },
+  affinity_ring_fire: {
+    slot: "ring",
+    offense: { affinities: { fire: 0.15 } },
+  },
+  resist_cloak_cold: {
+    slot: "cloak",
+    defense: { resists: { cold: 0.25 } },
+  },
 };

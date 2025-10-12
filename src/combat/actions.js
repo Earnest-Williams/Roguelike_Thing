@@ -93,7 +93,7 @@ export function tryAttack(attacker, defender, opts = {}) {
     defender.res.hp = Math.max(HEALTH_FLOOR, defender.res.hp);
   }
 
-  startCooldown(attacker, key, action.baseCooldown);
+  startCooldown(attacker, key, action.baseCooldown, action.tags);
 
   return true;
 }
@@ -144,7 +144,7 @@ export function tryAttackEquipped(
   attacker._turnDidAttack = true;
   noteAttacked(attacker);
 
-  startCooldown(attacker, key, action.baseCooldown);
+  startCooldown(attacker, key, action.baseCooldown, action.tags);
 
   return true;
 }

@@ -328,3 +328,14 @@ export function mountDevPanel(root, actor) {
     area.textContent = JSON.stringify(data, null, 2);
   }, 250);
 }
+
+export function presentDebug(actor) {
+  const turns = actor?._debug?.turns;
+  if (!Array.isArray(turns) || turns.length === 0) return "";
+  const latest = turns[turns.length - 1];
+  try {
+    return JSON.stringify(latest, null, 2);
+  } catch (err) {
+    return "";
+  }
+}

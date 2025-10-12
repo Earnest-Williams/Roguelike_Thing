@@ -5,10 +5,12 @@ import "./temporal-cooldown-tags.test.js";
 import "./attunement-gain.test.js";
 import "./attunement.test.js";
 import "./temporal-echo-haste.test.js";
+import "./echo-and-haste.test.js";
 import "./channeling-regen.test.js";
 import "./affixes-items.test.js";
 import "./items-brand-catalog.test.js";
 import "./fov.test.js";
+import "./ap-cost-formula.test.js";
 
 import { strict as assert } from "node:assert";
 import { foldModsFromEquipment, foldMods } from "../src/combat/mod-folding.js";
@@ -93,11 +95,11 @@ function testCooldownLifecycle() {
 }
 
 function testTemporalMath() {
-  const actor = { temporal: { actionSpeedPct: 0.5 } };
+  const actor = { modCache: { temporal: { actionSpeedPct: -0.5 } }, statusDerived: {} };
   const { costAP } = finalAPForAction(actor, 10, []);
-  assert.equal(costAP, 5, "action speed should reduce AP cost");
+  assert.equal(costAP, 5, "negative actionSpeedPct should reduce AP cost");
 
-  const cdActor = { temporal: { cooldownPct: -0.25 } };
+  const cdActor = { modCache: { temporal: { cooldownPct: -0.25 } }, statusDerived: {} };
   assert.equal(finalCooldown(cdActor, 8), 6, "cooldown reduction stacks");
 
   console.log("✓ temporal math");
@@ -117,7 +119,13 @@ function testResourceAndSave() {
     baseStats: { str: 8, dex: 8, int: 8, vit: 8, maxHP: 20, maxStamina: 10, maxMana: 5, baseSpeed: 1 },
   });
   hydrateActor(other, blob);
-  assert.deepEqual(Object.entries(other.cooldowns), Object.entries(actor.cooldowns), "cooldowns persist through save/load");
+  const original = actor.cooldowns instanceof Map
+    ? Array.from(actor.cooldowns.entries())
+    : Object.entries(actor.cooldowns || {});
+  const restored = other.cooldowns instanceof Map
+    ? Array.from(other.cooldowns.entries())
+    : Object.entries(other.cooldowns || {});
+  assert.deepEqual(restored, original, "cooldowns persist through save/load");
   console.log("✓ save/hydrate actor state");
 }
 

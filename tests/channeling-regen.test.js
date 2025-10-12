@@ -1,7 +1,6 @@
 import { strict as assert } from "node:assert";
 import { Actor } from "../src/combat/actor.js";
 import { startTurn, endTurn } from "../src/combat/loop.js";
-import { tickResources } from "../src/combat/resources.js";
 import { hasStatus } from "../src/combat/status.js";
 import "../src/combat/status-registry.js";
 
@@ -38,7 +37,6 @@ function approxEqual(actual, expected, message) {
 
   actor.turn = 1;
   startTurn(actor);
-  tickResources(actor);
   approxEqual(actor.res.stamina, 5, "baseline regen should apply without channeling status");
   approxEqual(actor.res.mana, 3, "baseline mana regen should apply without channeling status");
 
@@ -48,7 +46,6 @@ function approxEqual(actual, expected, message) {
   actor.turn = 2;
   startTurn(actor);
   assert.ok(hasStatus(actor, "channeling"), "channeling persists into the next turn if uninterrupted");
-  tickResources(actor);
   approxEqual(actor.res.stamina, 5 + 1.1, "channeling multiplies stamina regen");
   approxEqual(actor.res.mana, 3 + 1.1, "channeling multiplies mana regen");
 })();
@@ -58,12 +55,10 @@ function approxEqual(actual, expected, message) {
 
   actor.turn = 1;
   startTurn(actor);
-  tickResources(actor);
   endTurn(actor);
 
   actor.turn = 2;
   startTurn(actor);
-  tickResources(actor);
   const staminaBeforeAction = actor.res.stamina;
   actor._turnDidMove = true;
   endTurn(actor);
@@ -71,7 +66,6 @@ function approxEqual(actual, expected, message) {
   actor.turn = 3;
   startTurn(actor);
   assert.ok(!hasStatus(actor, "channeling"), "channeling is removed on the turn after acting");
-  tickResources(actor);
   const staminaAfterBreak = actor.res.stamina;
   approxEqual(
     staminaAfterBreak - staminaBeforeAction,

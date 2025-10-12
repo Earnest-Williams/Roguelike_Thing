@@ -184,9 +184,23 @@ export function applyOutgoingScaling(ctx) {
  * @param {Set<string>} usedTypes
  */
 export function noteUseGain(attacker, usedTypes) {
-  if (!usedTypes?.size) return;
-  for (const type of usedTypes) {
-    gainAttunement(attacker, type);
+  if (!attacker || !usedTypes) return;
+  if (typeof usedTypes === "string") {
+    gainAttunement(attacker, usedTypes);
+    return;
+  }
+  if (Array.isArray(usedTypes)) {
+    for (const type of usedTypes) {
+      if (typeof type !== "string") continue;
+      gainAttunement(attacker, type);
+    }
+    return;
+  }
+  if (usedTypes instanceof Set) {
+    for (const type of usedTypes) {
+      if (typeof type !== "string") continue;
+      gainAttunement(attacker, type);
+    }
   }
 }
 

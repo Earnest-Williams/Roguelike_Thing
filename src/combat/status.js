@@ -519,6 +519,33 @@ export function applyStatus(target, id, stacks = 1, duration = 1, source, turn) 
   return [id];
 }
 
+export function tryApplyHaste(target, duration = 1, opts = {}) {
+  if (!target) return null;
+  const statusId = typeof opts.statusId === "string" ? opts.statusId : "haste";
+  const stacksRaw = Number(opts.stacks ?? 1);
+  const stacks = Number.isFinite(stacksRaw) ? Math.max(1, Math.floor(stacksRaw)) : 1;
+  const durationRaw = Number(duration);
+  const turns = Number.isFinite(durationRaw) ? Math.max(1, Math.floor(durationRaw)) : 1;
+  const payload = {
+    stacks,
+    duration: turns,
+    source: opts.source ?? "haste",
+  };
+  if (Number.isFinite(opts.potency)) {
+    payload.potency = Number(opts.potency);
+  }
+  const entry = addStatus(target, statusId, payload);
+  if (!entry) return null;
+  if (opts.rebuild !== false) {
+    if (typeof target.onTurnStart === "function") {
+      target.onTurnStart(target.turn || 0);
+    } else {
+      target.statusDerived = rebuildDerived(target);
+    }
+  }
+  return { statusId, stacks: entry.stacks, duration: turns, potency: entry.potency };
+}
+
 export function tickStatusesAtTurnStart(actor, turn) {
   tickStatuses(actor, turn);
   if (!actor) return;
