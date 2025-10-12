@@ -15,7 +15,6 @@ import {
   DAMAGE_TYPE,
   DEFAULT_MARTIAL_DAMAGE_TYPE,
   STATUS_IDS,
-  STACKING_RULE,
   SLOT,
   ALL_SLOTS_ORDER,
 } from "./js/constants.js";
@@ -35,7 +34,6 @@ import { CONFIG } from "./src/config.js";
 import { createInitialState } from "./src/game/state.js";
 import {
   createDefaultModCache,
-  createDefaultStatusModCache,
   createEmptyStatusDerivedMods,
 } from "./src/game/utils.js";
 import {
@@ -75,8 +73,10 @@ import {
 import "./src/combat/status-registry.js";
 import {
   STATUS_REGISTRY,
+  applyStatuses,
   getStatusDefinition as getStatusDefinitionCore,
   rebuildStatusDerived as rebuildStatusDerivedCore,
+  tickStatusesAtTurnStart,
 } from "./src/combat/status.js";
 import { setStatusDamageAdapter } from "./src/content/statuses.js";
 
@@ -95,41 +95,6 @@ setStatusDamageAdapter(({ statusId, target, amount, type, turn }) => {
   });
   return ctx?.totalDamage ?? 0;
 });
-
-function getStatus(id) {
-  const def = getStatusDefinitionCore(id);
-  if (!def) {
-    throw new Error(`Unknown status definition: ${id}`);
-  }
-  return def;
-}
-
-function rebuildStatusDerivedCache(actor) {
-  if (!actor) return;
-  actor.statusDerived = rebuildStatusDerivedCore(actor);
-}
-
-function normalizeStackingRule(value) {
-  const raw = typeof value === "string" ? value.toLowerCase() : "";
-  switch (raw) {
-    case "refresh":
-    case STACKING_RULE.REFRESH:
-      return STACKING_RULE.REFRESH;
-    case "add":
-    case "add_stacks":
-    case STACKING_RULE.ADD_STACKS:
-      return STACKING_RULE.ADD_STACKS;
-    case "independent":
-    case STACKING_RULE.INDEPENDENT:
-      return STACKING_RULE.INDEPENDENT;
-    case "max":
-      return "max";
-    case "replace":
-      return "replace";
-    default:
-      return STACKING_RULE.ADD_STACKS;
-  }
-}
 
 function computeActorDelay(actor) {
   if (!actor) return 1;
@@ -165,233 +130,6 @@ function handleDeath(gameCtx, actor) {
   }
 
   return true;
-}
-
-function tickStatusesAtTurnStart(actor, turn, gameCtx = null) {
-  if (!actor) return;
-  if (!Array.isArray(actor.statuses)) {
-    actor.statuses = [];
-  }
-  const hasHpResource =
-    actor?.res && typeof actor.res.hp === "number"
-      ? true
-      : false;
-  const hpBeforeTick = hasHpResource ? actor.res.hp : null;
-  const expired = [];
-  for (const st of actor.statuses) {
-    const def = getStatusDefinitionCore(st.id);
-    if (!def) continue;
-    if (def.tickEvery && st.nextTickAt != null) {
-      while (turn >= st.nextTickAt) {
-        def.onTick?.({
-          target: actor,
-          source: st.source,
-          stacks: st.stacks ?? 1,
-          potency: st.potency,
-          turn: st.nextTickAt,
-        });
-        actor.__log?.statusTick?.(st.id, {
-          turn: st.nextTickAt,
-          stacks: st.stacks ?? 1,
-          potency: st.potency,
-        });
-        st.nextTickAt += def.tickEvery;
-        if (gameCtx && handleDeath(gameCtx, actor)) {
-          return;
-        }
-      }
-    }
-    if (turn >= st.endsAtTurn) {
-      def.onExpire?.({
-        target: actor,
-        source: st.source,
-        stacks: st.stacks ?? 1,
-        potency: st.potency,
-        turn,
-      });
-      actor.__log?.statusExpire?.(st.id, {
-        turn,
-        stacks: st.stacks ?? 1,
-        potency: st.potency,
-      });
-      expired.push(st);
-    }
-  }
-  if (expired.length) {
-    actor.statuses = actor.statuses.filter((s) => !expired.includes(s));
-  }
-  if (gameCtx && actor.__dead) {
-    return;
-  }
-  rebuildStatusDerivedCache(actor);
-  if (hpBeforeTick != null) {
-    const hpAfterTick = actor?.res?.hp;
-    if (
-      typeof hpAfterTick === "number" &&
-      hpAfterTick > hpBeforeTick &&
-      (actor.kind === "player" || (gameCtx?.player && actor === gameCtx.player))
-    ) {
-      Sound.playHeal();
-    }
-  }
-}
-
-function applyStatuses(ctx, S, D, turn) {
-  if (!D) return [];
-  if (!Array.isArray(D.statuses)) {
-    D.statuses = [];
-  }
-  if (!D.modCache) {
-    D.modCache = createDefaultModCache();
-  }
-  if (!S.modCache) {
-    S.modCache = createDefaultModCache();
-  }
-  if (!D.modCache.status) {
-    D.modCache.status = createDefaultStatusModCache();
-  }
-  if (!S.modCache.status) {
-    S.modCache.status = createDefaultStatusModCache();
-  }
-  const applied = [];
-  const attempts = ctx?.statusAttempts ?? [];
-  const defenderStatusMods =
-    D.modCache.status ?? createDefaultStatusModCache();
-
-  const getModNumber = (container, key, fallback = 0) => {
-    if (!container || typeof container !== "object") return fallback;
-    const value = container[key];
-    return typeof value === "number" ? value : fallback;
-  };
-
-  for (const a of attempts) {
-    const def = getStatusDefinitionCore(a.id);
-    if (!def) continue;
-
-    let p = a.baseChance ?? 0;
-    const attackerMods =
-      S.modCache.status ?? createDefaultStatusModCache();
-    p += getModNumber(attackerMods.inflictBonus, a.id);
-    p -= getModNumber(defenderStatusMods.resistBonus, a.id);
-    p = clamp01Normalized(p);
-    if (p <= 0) continue;
-
-    if (
-      defenderStatusMods.freeAction?.ignore instanceof Set &&
-      defenderStatusMods.freeAction.ignore.has(a.id)
-    ) {
-      continue;
-    }
-
-    if (Math.random() >= p) continue;
-
-    const attackerDurMult = getModNumber(
-      attackerMods.inflictDurMult,
-      a.id,
-      1,
-    );
-    const defenderDurMult = getModNumber(
-      defenderStatusMods.recvDurMult,
-      a.id,
-      1,
-    );
-    const baseDur = Math.max(
-      1,
-      Math.ceil(
-        (a.baseDuration ?? 1) * attackerDurMult * defenderDurMult,
-      ),
-    );
-
-    const stackingMode = normalizeStackingRule(def.stacking);
-    if (stackingMode === STACKING_RULE.INDEPENDENT) {
-      const inst = {
-        id: a.id,
-        stacks: 1,
-        potency: undefined,
-        nextTickAt: def.tickEvery ? turn + def.tickEvery : undefined,
-        endsAtTurn: turn + baseDur,
-        source: S?.id,
-      };
-      const appliedData = def.onApply?.({
-        target: D,
-        source: S,
-        stacks: 1,
-        turn,
-      });
-      if (appliedData && appliedData.potency !== undefined) {
-        inst.potency = appliedData.potency;
-      }
-      D.statuses.push(inst);
-      applied.push(inst);
-      D.__log?.statusApply?.(a.id, {
-        chance: p,
-        baseChance: a.baseChance ?? 0,
-        duration: baseDur,
-      });
-    } else {
-      let ex = D.statuses.find((s) => s.id === a.id);
-      if (!ex) {
-        const stacks = a.stacks ?? 1;
-        ex = {
-          id: a.id,
-          stacks,
-          potency: undefined,
-          nextTickAt: def.tickEvery ? turn + def.tickEvery : undefined,
-          endsAtTurn: turn + baseDur,
-          source: S?.id,
-        };
-        const appliedData = def.onApply?.({
-          target: D,
-          source: S,
-          stacks,
-          turn,
-        });
-        if (appliedData && appliedData.potency !== undefined) {
-          ex.potency = appliedData.potency;
-        }
-        D.statuses.push(ex);
-        applied.push(ex);
-        D.__log?.statusApply?.(a.id, {
-          chance: p,
-          baseChance: a.baseChance ?? 0,
-          duration: baseDur,
-          stacks,
-        });
-      } else {
-        if (stackingMode === STACKING_RULE.REFRESH) {
-          ex.endsAtTurn = Math.max(ex.endsAtTurn, turn + baseDur);
-        } else if (stackingMode === STACKING_RULE.ADD_STACKS) {
-          const addStacks = a.stacks ?? 1;
-          const maxStacks = def.maxStacks ?? 999;
-          ex.stacks = Math.min((ex.stacks ?? 1) + addStacks, maxStacks);
-          ex.endsAtTurn = Math.max(ex.endsAtTurn, turn + baseDur);
-        } else if (stackingMode === "max") {
-          const addStacks = a.stacks ?? 1;
-          const addPotency = a.potency ?? addStacks;
-          ex.stacks = Math.max(ex.stacks ?? 1, addStacks);
-          ex.potency = Math.max(ex.potency ?? addStacks, addPotency);
-          ex.endsAtTurn = Math.max(ex.endsAtTurn, turn + baseDur);
-        } else if (stackingMode === "replace") {
-          const nextStacks = a.stacks ?? 1;
-          const nextPotency = a.potency ?? nextStacks;
-          ex.stacks = nextStacks;
-          ex.potency = nextPotency;
-          ex.endsAtTurn = turn + baseDur;
-        }
-        D.__log?.statusApply?.(a.id, {
-          chance: p,
-          baseChance: a.baseChance ?? 0,
-          duration: baseDur,
-          stacks: ex.stacks,
-        });
-      }
-    }
-  }
-
-  if (applied.length) {
-    rebuildStatusDerivedCache(D);
-  }
-  return applied;
 }
 
 globalThis.__applyStatusesImpl = applyStatuses;
@@ -431,7 +169,9 @@ function attachDebug(mob) {
 window.attachDebug = attachDebug;
 window.StatusRegistry = STATUS_REGISTRY;
 window.STATUS_REGISTRY = STATUS_REGISTRY;
-window.getStatus = getStatus;
+window.getStatus = getStatusDefinitionCore;
+window.getStatusDefinition = getStatusDefinitionCore;
+window.rebuildStatusDerived = rebuildStatusDerivedCore;
 window.applyStatuses = applyStatuses;
 window.resolveAttack = resolveAttack;
 
@@ -1173,7 +913,17 @@ const Game = (() => {
           continue;
         }
 
-        tickStatusesAtTurnStart(m, turn, gameCtx);
+        const hpBeforeTick =
+          m?.res && typeof m.res.hp === "number" ? m.res.hp : null;
+        tickStatusesAtTurnStart(m, turn);
+        if (
+          hpBeforeTick != null &&
+          typeof m?.res?.hp === "number" &&
+          m.res.hp > hpBeforeTick &&
+          (m.kind === "player" || (gameCtx?.player && m === gameCtx.player))
+        ) {
+          Sound.playHeal();
+        }
 
         if (!this.list.includes(m) || m.__dead) {
           startIndex.delete(startKey);
@@ -4303,7 +4053,18 @@ const Game = (() => {
         }
 
         const turn = ++simState.turnCounter;
-        tickStatusesAtTurnStart(player, turn, gameCtx);
+        const playerHpBefore =
+          player?.res && typeof player.res.hp === "number"
+            ? player.res.hp
+            : null;
+        tickStatusesAtTurnStart(player, turn);
+        if (
+          playerHpBefore != null &&
+          typeof player?.res?.hp === "number" &&
+          player.res.hp > playerHpBefore
+        ) {
+          Sound.playHeal();
+        }
         if (handleDeath(gameCtx, player)) {
           return;
         }
