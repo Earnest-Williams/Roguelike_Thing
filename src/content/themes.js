@@ -4,123 +4,21 @@
 const DEFAULT_LEVEL_COUNT = 3;
 
 export const DESCRIPTORS = [
-  {
-    id: "ashen_catacombs",
-    name: "Ashen Catacombs",
-    description: "Collapsed burial chambers wreathed in smoldering embers and bone dust.",
-    weight: 3,
-    levels: 3,
-    baseBudget: 24,
-    budgetPerLevel: 6,
-    depthMultiplier: 0.05,
-    mobTags: ["undead", "bone", "fire"],
-    affixTags: ["fire", "burn", "shadow"],
-    mobWeights: { undead: 3, bone: 2, fire: 1 },
-    affixWeights: { fire: 2, burn: 1, shadow: 1 },
-    culmination: {
-      name: "Reliquary of Cinders",
-      description: "An ossuary vault sealed behind a barricade of ash and soul-flames.",
-      tags: ["undead", "fire"],
-    },
-  },
-  {
-    id: "sunken_hollows",
-    name: "Sunken Hollows",
-    description: "Flooded tunnels where moss-choked ruins echo with distant waves.",
-    weight: 2,
-    levels: 4,
-    baseBudget: 22,
-    budgetPerLevel: 5,
-    depthMultiplier: 0.04,
-    mobTags: ["aquatic", "slime", "ancient"],
-    affixTags: ["water", "acid", "control"],
-    mobWeights: { aquatic: 3, slime: 1, ancient: 1 },
-    affixWeights: { water: 2, acid: 1, control: 1 },
-    culmination: {
-      name: "Drowned Reliquary",
-      description: "A tidal vault guarded by barnacled idols.",
-      tags: ["water", "ancient"],
-    },
-  },
-  {
-    id: "arcane_spire",
-    name: "Arcane Spire",
-    description: "A spiraling tower humming with unstable magical experiments.",
-    weight: 2,
-    levels: 3,
-    baseBudget: 26,
-    budgetPerLevel: 7,
-    depthMultiplier: 0.06,
-    mobTags: ["construct", "arcane", "humanoid"],
-    affixTags: ["arcane", "mana", "lightning"],
-    mobWeights: { construct: 2, arcane: 2, humanoid: 1 },
-    affixWeights: { arcane: 2, mana: 1, lightning: 1 },
-    culmination: {
-      name: "Resonant Focus",
-      description: "A chamber containing a crystalline heart amplifying errant spells.",
-      tags: ["arcane", "ritual"],
-    },
-  },
+  { id: "ashen_catacombs", type: "descriptor", tags: ["undead", "bone", "ember"], weight: 8 },
+  { id: "sunken_ruins", type: "descriptor", tags: ["aquatic", "moss", "ancient"], weight: 6 },
+  { id: "arcane_spire", type: "descriptor", tags: ["arcane", "construct", "sigil"], weight: 5 },
+  { id: "crystalline_wastes", type: "descriptor", tags: ["crystal", "frigid", "reflective"], weight: 4 },
+  { id: "fungal_wilds", type: "descriptor", tags: ["fungal", "spore", "feral"], weight: 7 },
+  { id: "goblin_redoubts", type: "descriptor", tags: ["goblin", "scrap", "trap"], weight: 5, budgetModifier: 2 },
 ];
 
 export const MECHANICS = [
-  {
-    id: "haunting_resurgence",
-    name: "of Haunting Resurgence",
-    description: "Restless spirits periodically claw their way back into the fray.",
-    weight: 3,
-    mobTags: ["undead", "spectral"],
-    affixTags: ["spirit", "curse"],
-    mobWeights: { undead: 2, spectral: 2 },
-    affixWeights: { spirit: 2, curse: 2 },
-    budgetModifier: 4,
-    budgetPerLevel: 3,
-    depthMultiplier: 0.02,
-    finalLevelBonus: 6,
-    culmination: {
-      name: "Soul-Echo Reliquary",
-      description: "A vault echoing with imprisoned spirits eager for release.",
-      tags: ["spirit", "haunted"],
-    },
-  },
-  {
-    id: "storm_wracked",
-    name: "of Storm Wracked Wards",
-    description: "Erratic lightning surges empower denizens attuned to the storm.",
-    weight: 2,
-    mobTags: ["elemental", "storm"],
-    affixTags: ["lightning", "tempo"],
-    mobWeights: { elemental: 2, storm: 3 },
-    affixWeights: { lightning: 3, tempo: 1 },
-    budgetModifier: 5,
-    budgetPerLevel: 4,
-    depthMultiplier: 0.04,
-    finalLevelBonus: 4,
-    culmination: {
-      name: "Stormheart Vault",
-      description: "A sealed ward filled with arcing coils and stormglass prisms.",
-      tags: ["lightning", "ritual"],
-    },
-  },
-  {
-    id: "ritual_convergence",
-    name: "of Ritual Convergence",
-    description: "Cultists assemble elaborate rites, bolstering summoned allies.",
-    weight: 2,
-    mobTags: ["cultist", "summoner"],
-    affixTags: ["summoning", "support"],
-    mobWeights: { cultist: 2, summoner: 2 },
-    affixWeights: { summoning: 2, support: 2 },
-    budgetModifier: 3,
-    budgetPerLevel: 5,
-    depthMultiplier: 0.03,
-    finalLevelBonus: 8,
-    culmination: {
-      name: "Grand Convergence",
-      description: "A vault arranged as a summoning locus ready to unleash a guardian.",
-      tags: ["summoning", "ritual"],
-    },
-  },
+  { id: "haunting_resurgence", type: "mechanic", tags: ["spectral", "curse", "echo"], weight: 7, budgetModifier: 4 },
+  { id: "storm_wracked", type: "mechanic", tags: ["lightning", "tempo", "charged"], weight: 6, budgetModifier: 5 },
+  { id: "ritual_convergence", type: "mechanic", tags: ["summoning", "support", "ritual"], weight: 5, budgetModifier: 3 },
+  { id: "infernal_pressure", type: "mechanic", tags: ["fire", "pressure", "rage"], weight: 6, budgetModifier: 6 },
+  { id: "temporal_echoes", type: "mechanic", tags: ["temporal", "echo", "paradox"], weight: 3, budgetModifier: 8 },
+  { id: "toxic_bloom", type: "mechanic", tags: ["poison", "blight", "growth"], weight: 4 },
 ];
 
 function pickWeighted(list, rng) {
@@ -131,15 +29,6 @@ function pickWeighted(list, rng) {
     if (roll < 0) return entry;
   }
   return list[0];
-}
-
-function mergeWeightMaps(base = {}, extra = {}) {
-  const out = { ...base };
-  for (const [key, value] of Object.entries(extra)) {
-    if (!Number.isFinite(value)) continue;
-    out[key] = (out[key] || 0) + value;
-  }
-  return out;
 }
 
 function uniqueTags(list = []) {
@@ -153,77 +42,126 @@ function uniqueTags(list = []) {
   return out;
 }
 
-/**
- * @param {() => number} [rng]
- */
-export function generateDungeonTheme(rng = Math.random) {
-  const picker = typeof rng === "function" ? rng : Math.random;
-  const descriptor = pickWeighted(DESCRIPTORS, picker);
-  const mechanic = pickWeighted(MECHANICS, picker);
+function formatComponentName(id) {
+  return String(id || "")
+    .split(/[_-]/g)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
 
-  const totalLevels = Math.max(
-    1,
-    Math.round(mechanic.levelsOverride || descriptor.levels || DEFAULT_LEVEL_COUNT),
-  );
-
-  const baseBudget = Math.max(
-    0,
-    Math.round((descriptor.baseBudget || 0) + (mechanic.budgetModifier || 0)),
-  );
-  const perLevel = Math.max(
-    0,
-    Math.round((descriptor.budgetPerLevel || 0) + (mechanic.budgetPerLevel || 0)),
-  );
-  const depthMultiplier = Math.max(
-    0,
-    Number(descriptor.depthMultiplier || 0) + Number(mechanic.depthMultiplier || 0),
-  );
-  const bonusFinal = Math.max(
-    0,
-    Math.round((descriptor.finalLevelBonus || 0) + (mechanic.finalLevelBonus || 0)),
-  );
-
-  const tags = {
-    mobs: uniqueTags([...(descriptor.mobTags || []), ...(mechanic.mobTags || [])]),
-    affixes: uniqueTags([...(descriptor.affixTags || []), ...(mechanic.affixTags || [])]),
-  };
-
-  const weights = {
-    mobTags: mergeWeightMaps(descriptor.mobWeights, mechanic.mobWeights),
-    affixTags: mergeWeightMaps(descriptor.affixWeights, mechanic.affixWeights),
-  };
-
-  let culmination = mechanic.culmination || descriptor.culmination || null;
-  if (culmination) {
-    culmination = {
-      name: culmination.name || "Chapter Culmination",
-      description: culmination.description || "",
-      tags: uniqueTags([...(culmination.tags || []), ...tags.mobs, "vault"]),
-    };
+function pickMechanicsForDepth(depth, rng) {
+  const mechanicCount = depth >= 5 ? 2 : 1;
+  const mechanics = [];
+  const pool = [...MECHANICS];
+  for (let i = 0; i < mechanicCount && pool.length > 0; i += 1) {
+    const choice = pickWeighted(pool, rng);
+    mechanics.push(choice);
+    const index = pool.findIndex((entry) => entry.id === choice.id);
+    if (index >= 0) pool.splice(index, 1);
   }
+  if (mechanics.length === 0 && MECHANICS.length > 0) {
+    mechanics.push(MECHANICS[0]);
+  }
+  return mechanics;
+}
 
+function buildPowerBudgetCurve(depth, components) {
+  const depthLevel = Math.max(0, Math.floor(depth));
+  const modifier = components.reduce((sum, component) => sum + (component.budgetModifier || 0), 0);
+  const baseStart = 18 + depthLevel * 2;
+  const start = Math.max(10, baseStart + modifier);
+  const perLevel = Math.max(4, 4 + Math.floor(depthLevel / 2) + Math.floor(modifier / 3));
+  const depthScaling = Number((0.02 + depthLevel * 0.005 + modifier * 0.001).toFixed(3));
+  const finalBonus = Math.max(0, 6 + Math.floor(depthLevel / 2) + modifier);
+  return { start, perLevel, depthScaling, finalBonus };
+}
+
+function buildWeightsFromTags(tags) {
+  const weights = {};
+  for (const tag of tags) {
+    if (!tag) continue;
+    weights[tag] = (weights[tag] || 0) + 1;
+  }
+  return weights;
+}
+
+function buildCulminationEvent(descriptor, mechanics, tags) {
+  const mechanicNames = mechanics.map((m) => formatComponentName(m.id));
+  const mechanicLabel = mechanicNames.length > 0 ? mechanicNames.join(" & ") : "Unknown";
+  const name = `${mechanicLabel} Nexus`;
+  const description = `An apex chamber where ${
+    formatComponentName(descriptor.id)
+  } forces intertwine with ${mechanicNames.length > 0 ? mechanicNames.join(" and ") : "unstable"} energies.`;
+  const culminationTags = uniqueTags([
+    ...tags,
+    ...descriptor.tags,
+    ...mechanics.flatMap((m) => m.tags || []),
+    "culmination",
+  ]);
   return {
-    id: `${descriptor.id}:${mechanic.id}`,
-    name: `${descriptor.name} ${mechanic.name}`,
-    descriptor,
-    mechanic,
-    totalLevels,
-    tags,
-    weights,
-    budget: {
-      base: baseBudget,
-      perLevel,
-      depthMultiplier,
-      bonusFinal,
-    },
-    culmination,
+    id: `culmination:${descriptor.id}:${mechanics.map((m) => m.id).join(":")}`,
+    name,
+    description,
+    tags: culminationTags,
   };
 }
 
-export function debugGenerateThemes(count = 5, rng = Math.random) {
+/**
+ * @param {number} [dungeonDepth]
+ * @param {() => number} [rng]
+ */
+export function generateDungeonTheme(dungeonDepth = 0, rng = Math.random) {
+  const picker = typeof rng === "function" ? rng : Math.random;
+  const descriptor = pickWeighted(DESCRIPTORS, picker);
+  const mechanics = pickMechanicsForDepth(dungeonDepth, picker);
+
+  const componentTags = uniqueTags([
+    ...descriptor.tags,
+    ...mechanics.flatMap((mechanic) => mechanic.tags || []),
+  ]);
+
+  const monsterTags = uniqueTags([
+    ...descriptor.tags,
+    ...mechanics.flatMap((mechanic) => mechanic.tags || []),
+  ]);
+  const affixTags = componentTags;
+  const weights = {
+    mobTags: buildWeightsFromTags(monsterTags),
+    affixTags: buildWeightsFromTags(affixTags),
+  };
+
+  const totalLevels = Math.max(
+    1,
+    DEFAULT_LEVEL_COUNT + Math.floor(Math.max(0, dungeonDepth) / 2) + (mechanics.length - 1),
+  );
+
+  const powerBudgetCurve = buildPowerBudgetCurve(dungeonDepth, [descriptor, ...mechanics]);
+  const idComponents = [descriptor.id, ...mechanics.map((m) => m.id)];
+  const id = idComponents.join("__");
+  const mechanicNamesForName = mechanics.length > 0
+    ? mechanics.map((mechanic) => formatComponentName(mechanic.id))
+    : ["Unknown"];
+  const name = `${formatComponentName(descriptor.id)} with ${mechanicNamesForName.join(" & ")}`;
+  const culminationEvent = buildCulminationEvent(descriptor, mechanics, componentTags);
+
+  return {
+    id,
+    name,
+    components: { descriptor, mechanics },
+    totalLevels,
+    monsterTags,
+    affixTags,
+    weights,
+    powerBudgetCurve,
+    culminationEvent,
+  };
+}
+
+export function debugGenerateThemes(count = 5, depth = 0, rng = Math.random) {
   const themes = [];
   for (let i = 0; i < count; i += 1) {
-    themes.push(generateDungeonTheme(rng));
+    themes.push(generateDungeonTheme(depth, rng));
   }
   return themes;
 }

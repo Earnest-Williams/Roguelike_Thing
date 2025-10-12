@@ -306,19 +306,20 @@ const Game = (() => {
     const px = Math.round(endPos.x ?? NaN);
     const py = Math.round(endPos.y ?? NaN);
     if (!Number.isFinite(px) || !Number.isFinite(py)) return null;
-    const tags = Array.isArray(theme.culmination?.tags)
-      ? theme.culmination.tags.slice()
+    const culmination = theme.culminationEvent || theme.culmination || null;
+    const tags = Array.isArray(culmination?.tags)
+      ? culmination.tags.slice()
       : [];
     if (!tags.includes("vault")) tags.push("vault");
     return {
       furniture: {
         id: `chapter_vault:${theme.id}`,
         kind: "chapter_vault",
-        name: theme.culmination?.name || "Culmination Vault",
+        name: culmination?.name || "Culmination Vault",
         tags,
         metadata: {
           themeId: theme.id,
-          description: theme.culmination?.description || "",
+          description: culmination?.description || "",
         },
       },
       position: { x: px, y: py },
@@ -4420,7 +4421,7 @@ const Game = (() => {
     }
 
     if (!gameState.chapter) {
-      gameState.chapter = new ChapterState();
+      gameState.chapter = new ChapterState({ depth: 0 });
     } else {
       gameState.chapter.reset();
     }

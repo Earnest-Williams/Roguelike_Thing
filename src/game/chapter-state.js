@@ -3,16 +3,23 @@
 import { generateDungeonTheme } from "../content/themes.js";
 
 const DEFAULT_PER_LEVEL_BUDGET = 5;
-const DEFAULT_BASE_BUDGET = 15;
+const DEFAULT_BASE_BUDGET = 18;
+const DEFAULT_DEPTH_SCALING = 0.02;
+const DEFAULT_FINAL_BONUS = 6;
 
 export class ChapterState {
   /**
-   * @param {{ rng?: () => number, theme?: ReturnType<typeof generateDungeonTheme> }} [options]
+   * @param {{
+   *   rng?: () => number,
+   *   theme?: ReturnType<typeof generateDungeonTheme>,
+   *   depth?: number,
+   * }} [options]
    */
   constructor(options = {}) {
-    const { rng = Math.random, theme = null } = options;
+    const { rng = Math.random, theme = null, depth = 0 } = options;
     this._rng = typeof rng === "function" ? rng : Math.random;
-    this.theme = theme || generateDungeonTheme(this._rng);
+    this.depth = Number.isFinite(depth) ? Number(depth) : 0;
+    this.theme = theme || generateDungeonTheme(this.depth, this._rng);
     this.levelIndex = 0;
     this.totalLevels = Math.max(1, Math.round(this.theme?.totalLevels || 1));
   }
@@ -26,19 +33,17 @@ export class ChapterState {
   }
 
   get currentBudget() {
-    const budget = this.theme?.budget || {};
-    const base = Number.isFinite(budget.base) ? budget.base : DEFAULT_BASE_BUDGET;
-    const perLevel = Number.isFinite(budget.perLevel)
-      ? budget.perLevel
-      : DEFAULT_PER_LEVEL_BUDGET;
-    const depthMultiplier = Number.isFinite(budget.depthMultiplier)
-      ? budget.depthMultiplier
-      : 0;
-    const bonusFinal = Number.isFinite(budget.bonusFinal) ? budget.bonusFinal : 0;
+    const curve = this.theme?.powerBudgetCurve || {};
+    const base = Number.isFinite(curve.start) ? curve.start : DEFAULT_BASE_BUDGET;
+    const perLevel = Number.isFinite(curve.perLevel) ? curve.perLevel : DEFAULT_PER_LEVEL_BUDGET;
+    const depthScaling = Number.isFinite(curve.depthScaling)
+      ? curve.depthScaling
+      : DEFAULT_DEPTH_SCALING;
+    const finalBonus = Number.isFinite(curve.finalBonus) ? curve.finalBonus : DEFAULT_FINAL_BONUS;
 
     const depth = this.levelIndex;
-    const scaled = (base + depth * perLevel) * (1 + depth * depthMultiplier);
-    const adjusted = this.isFinalLevel ? scaled + bonusFinal : scaled;
+    const scaled = (base + depth * perLevel) * (1 + depth * depthScaling);
+    const adjusted = this.isFinalLevel ? scaled + finalBonus : scaled;
     return Math.max(0, Math.round(adjusted));
   }
 
@@ -47,7 +52,8 @@ export class ChapterState {
       this.levelIndex += 1;
       return this.levelIndex;
     }
-    this.theme = generateDungeonTheme(this._rng);
+    this.depth += 1;
+    this.theme = generateDungeonTheme(this.depth, this._rng);
     this.levelIndex = 0;
     this.totalLevels = Math.max(1, Math.round(this.theme?.totalLevels || 1));
     return this.levelIndex;
@@ -59,13 +65,31 @@ export class ChapterState {
    * the chapter's deterministic RNG hook so restarts still feel varied while
    * remaining reproducible in tests.
    *
-   * @param {ReturnType<typeof generateDungeonTheme>} [theme]
+   * @param {(ReturnType<typeof generateDungeonTheme> | {
+   *   theme?: ReturnType<typeof generateDungeonTheme>,
+   *   depth?: number,
+   * })} [theme]
    */
   reset(theme) {
-    if (theme) {
-      this.theme = theme;
+    let nextTheme = null;
+    let nextDepth = this.depth;
+    if (theme && typeof theme === "object" && ("theme" in theme || "depth" in theme)) {
+      const options = /** @type {{ theme?: ReturnType<typeof generateDungeonTheme>, depth?: number }} */ (theme);
+      if (Number.isFinite(options.depth)) {
+        nextDepth = Number(options.depth);
+      }
+      if (options.theme) {
+        nextTheme = options.theme;
+      }
+    } else if (theme) {
+      nextTheme = /** @type {ReturnType<typeof generateDungeonTheme>} */ (theme);
+    }
+
+    this.depth = Number.isFinite(nextDepth) ? nextDepth : 0;
+    if (nextTheme) {
+      this.theme = nextTheme;
     } else {
-      this.theme = generateDungeonTheme(this._rng);
+      this.theme = generateDungeonTheme(this.depth, this._rng);
     }
     this.levelIndex = 0;
     this.totalLevels = Math.max(1, Math.round(this.theme?.totalLevels || 1));
