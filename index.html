@@ -409,6 +409,7 @@
         smoothstep01,
         chebyshevDistance,
         hasLineOfSight,
+        clamp01Normalized,
       } from "./js/utils.js";
       import { CONFIG } from "./src/config.js";
       import { createInitialState } from "./src/game/state.js";
@@ -417,11 +418,6 @@
         createDefaultStatusModCache,
         createEmptyStatusDerivedMods,
       } from "./src/game/utils.js";
-      const clampUnitInterval = (value) => {
-        if (!Number.isFinite(value)) return 0;
-        return clamp(value, 0, 1);
-      };
-
       import {
         Item,
         ItemStack,
@@ -665,7 +661,7 @@
             S.modCache.status ?? createDefaultStatusModCache();
           p += getModNumber(attackerMods.inflictBonus, a.id);
           p -= getModNumber(defenderStatusMods.resistBonus, a.id);
-          p = clampUnitInterval(p);
+          p = clamp01Normalized(p);
           if (p <= 0) continue;
 
           if (
@@ -3073,7 +3069,7 @@
         // ----- CONFIG -----
         const HYBRID_CFG = CONFIG.generator.hybrid;
         // Utility
-        // clampUnitInterval helper ensures probability/ratio values stay in [0, 1].
+        // clamp01Normalized helper ensures probability/ratio values stay in [0, 1].
         const manhattan = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
         // -------------------------
         // Phase A: Large rooms
@@ -3261,7 +3257,7 @@
           }
           // Optionally thin out density
           const targetCount = Math.round(
-            kept.length * clampUnitInterval(cfg.keepRatio),
+            kept.length * clamp01Normalized(cfg.keepRatio),
           );
           const smallRooms = shuffle(kept).slice(0, targetCount);
           // Carve
