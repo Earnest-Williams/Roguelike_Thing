@@ -148,34 +148,82 @@ export const decayPerTurn = tickAttunements;
  * Apply outgoing attunement scaling to packets before defenses.
  * @param {{ packets: Array<{type: string, amount: number}>, attacker: any, target: any }} ctx
  */
-export function applyOutgoingScaling(ctx) {
-  const packets = Array.isArray(ctx?.packets) ? ctx.packets : null;
-  const attacker = ctx?.attacker;
-  if (!packets || !attacker) return;
+export function applyOutgoingScaling(arg0, arg1) {
+  const ctx = arg1 === undefined ? arg0 : arg1;
+  const attacker = arg1 === undefined ? ctx?.attacker : arg0;
+  if (!ctx || !attacker || ctx.__attunementScaled) return;
+
   ensureAttunement(attacker);
   if (!attacker.attunement?.rules) return;
 
+  const packets = Array.isArray(ctx.packets) ? ctx.packets : null;
+  const totals = ctx.packetsAfterDefense && typeof ctx.packetsAfterDefense === "object"
+    ? ctx.packetsAfterDefense
+    : null;
+
   const applied = [];
-  for (const packet of packets) {
-    if (!packet || typeof packet.type !== "string") continue;
-    const baseAmount = Number(packet.amount);
-    if (!Number.isFinite(baseAmount) || baseAmount <= 0) continue;
-    const rule = ruleFor(attacker, packet.type);
-    if (!rule) continue;
-    const stacks = getStacks(attacker, packet.type);
-    if (!stacks) continue;
-    const dmgPct = rule.perStack?.damagePct || 0;
-    if (!dmgPct) continue;
-    const scaled = Math.max(0, baseAmount * (1 + dmgPct * stacks));
-    if (scaled === baseAmount) continue;
-    packet.amount = scaled;
-    applied.push({ type: packet.type, stacks, amount: scaled });
+  const scaleByType = new Map();
+  const stacksByType = new Map();
+
+  if (packets && packets.length) {
+    for (const packet of packets) {
+      if (!packet || typeof packet.type !== "string") continue;
+      const baseAmount = Number(packet.amount);
+      if (!Number.isFinite(baseAmount) || baseAmount <= 0) continue;
+      const rule = ruleFor(attacker, packet.type);
+      if (!rule) continue;
+      const stacks = getStacks(attacker, packet.type);
+      if (!stacks) continue;
+      const dmgPct = rule.perStack?.damagePct || 0;
+      if (!dmgPct) continue;
+      const scale = 1 + dmgPct * stacks;
+      if (scale === 1) continue;
+      packet.amount = Math.max(0, baseAmount * scale);
+      scaleByType.set(packet.type, scale);
+      stacksByType.set(packet.type, stacks);
+      applied.push({ type: packet.type, stacks, amount: packet.amount });
+    }
+  }
+
+  let totalDamage = Number(ctx.totalDamage || 0);
+  if (totals) {
+    totalDamage = 0;
+    for (const [type, value] of Object.entries(totals)) {
+      const baseAmount = Number(value);
+      if (!Number.isFinite(baseAmount) || baseAmount <= 0) {
+        totals[type] = 0;
+        continue;
+      }
+      let scale = scaleByType.get(type);
+      if (scale === undefined) {
+        const rule = ruleFor(attacker, type);
+        if (!rule) {
+          scale = 1;
+        } else {
+          const stacks = getStacks(attacker, type);
+          const dmgPct = rule.perStack?.damagePct || 0;
+          scale = stacks ? 1 + dmgPct * stacks : 1;
+          if (stacks) stacksByType.set(type, stacks);
+        }
+        scaleByType.set(type, scale);
+      }
+      const scaledAmount = Math.max(0, Math.floor(baseAmount * scale));
+      totals[type] = scaledAmount;
+      totalDamage += scaledAmount;
+      if (scale !== 1) {
+        const stacks = stacksByType.get(type) || getStacks(attacker, type) || 0;
+        applied.push({ type, stacks, amount: scaledAmount });
+      }
+    }
+    ctx.totalDamage = totalDamage;
   }
 
   if (applied.length) {
     attacker.log?.push?.({ kind: "attune_apply", packets: applied });
     attacker.logs?.attack?.push?.({ kind: "attune_apply", packets: applied });
   }
+
+  ctx.__attunementScaled = true;
 }
 
 /**

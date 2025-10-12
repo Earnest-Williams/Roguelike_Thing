@@ -70,6 +70,34 @@ function mergePolarity(into, add) {
   }
 }
 
+function mergePolarityBias(dst = Object.create(null), src = Object.create(null)) {
+  if (!dst) return src || Object.create(null);
+  if (!src) return dst;
+  dst.all = (dst.all || 0) + Number(src.all || 0);
+  if (src.vs) {
+    dst.vs ||= Object.create(null);
+    for (const [k, v] of Object.entries(src.vs)) {
+      const value = Number(v) || 0;
+      if (!value) continue;
+      dst.vs[k] = (dst.vs[k] || 0) + value;
+    }
+  }
+  return dst;
+}
+
+function addGrantVector(actor, grant) {
+  if (!actor || !grant) return;
+  if (!actor.polarity || typeof actor.polarity !== "object") {
+    actor.polarity = { grant: Object.create(null) };
+  }
+  actor.polarity.grant ||= Object.create(null);
+  for (const [axis, value] of Object.entries(grant)) {
+    const amount = Number(value) || 0;
+    if (!amount) continue;
+    actor.polarity.grant[axis] = (actor.polarity.grant[axis] || 0) + amount;
+  }
+}
+
 /**
  * Multiplies numeric properties from `mults` into `into`.
  * @param {Record<string, number>} into
@@ -1242,23 +1270,13 @@ export function foldModsFromEquipment(actor) {
     if (Array.isArray(item.conversions)) {
       for (const conv of item.conversions) {
         if (!conv) continue;
-        mc.offense.conversions.push({
-          from: conv.from ?? null,
-          to: conv.to,
-          percent: Number(conv.percent ?? conv.pct ?? 0) || 0,
-          includeBaseOnly: !!conv.includeBaseOnly,
-        });
+        mc.offense.conversions.push({ ...conv });
       }
     }
     if (Array.isArray(item.offense?.conversions)) {
       for (const conv of item.offense.conversions) {
         if (!conv) continue;
-        mc.offense.conversions.push({
-          from: conv.from ?? null,
-          to: conv.to,
-          percent: Number(conv.percent ?? conv.pct ?? 0) || 0,
-          includeBaseOnly: !!conv.includeBaseOnly,
-        });
+        mc.offense.conversions.push({ ...conv });
       }
     }
     mergeRecord(mc.affinities, item.affinities);
@@ -1349,19 +1367,25 @@ export function foldModsFromEquipment(actor) {
 
     // Polarity grant/bias
     if (item.polarity?.grant) {
-      for (const [key, value] of Object.entries(item.polarity.grant)) {
+      addGrantVector(actor, item.polarity.grant);
+      mc.polarity.grant ||= Object.create(null);
+      for (const [axis, value] of Object.entries(item.polarity.grant)) {
         const amount = Number(value) || 0;
         if (!amount) continue;
-        mc.polarity.grant[key] = (mc.polarity.grant[key] || 0) + amount;
+        mc.polarity.grant[axis] = (mc.polarity.grant[axis] || 0) + amount;
       }
     }
     if (item.polarity?.onHitBias) {
-      mergePolarity(mc.polarity.onHitBias, item.polarity.onHitBias);
-      mergePolarity(mc.offense.polarity.onHitBias, item.polarity.onHitBias);
+      mc.offense.polarity.onHitBias = mergePolarityBias(
+        mc.offense.polarity.onHitBias,
+        item.polarity.onHitBias,
+      );
     }
     if (item.polarity?.defenseBias) {
-      mergePolarity(mc.polarity.defenseBias, item.polarity.defenseBias);
-      mergePolarity(mc.defense.polarity.defenseBias, item.polarity.defenseBias);
+      mc.defense.polarity.defenseBias = mergePolarityBias(
+        mc.defense.polarity.defenseBias,
+        item.polarity.defenseBias,
+      );
     }
 
     // Status interaction
