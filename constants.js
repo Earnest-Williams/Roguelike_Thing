@@ -59,6 +59,8 @@ export const BASE_PASSIVE_REGEN = Object.freeze({
   mana: BASE_PASSIVE_REGEN_MANA,
 });
 
+export const CHANNELING_REGEN_MULT = 1.5;
+
 export const DEFAULT_AP_CAP = 100;
 export const DEFAULT_BASE_ACTION_AP = 100;
 export const MIN_TOTAL_ACTION_COST_MULTIPLIER = 0.05;

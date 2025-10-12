@@ -1,10 +1,26 @@
 // src/combat/resolve.js
 // @ts-check
+import { DebugBus } from "../../js/debug/debug-bus.js";
 import { logAttackStep } from "./debug-log.js";
 import { addStatus, applyStatuses } from "./status.js";
 import { applyOutgoingScaling, gainAttunement } from "./attunement.js";
 import { polarityOnHitScalar, polarityDefScalar } from "./polarity.js";
 import { rand } from "./rng.js";
+
+const clone = (value) => {
+  try {
+    if (typeof structuredClone === "function") {
+      return structuredClone(value);
+    }
+  } catch (err) {
+    // fall through to JSON strategy
+  }
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch (err) {
+    return value;
+  }
+};
 
 export function resolveAttack(ctx) {
   const { attacker, defender } = ctx;
@@ -12,22 +28,46 @@ export function resolveAttack(ctx) {
   const onHitStatuses = [];
   const log = (d) => logAttackStep(attacker, d);
 
+  const defenderHpBefore = Number.isFinite(defender?.res?.hp)
+    ? defender.res.hp
+    : Number.isFinite(defender?.hp)
+    ? defender.hp
+    : null;
+
+  const debugData = {
+    turn: ctx.turn ?? attacker?.turn ?? defender?.turn ?? 0,
+    attacker: attacker?.id ?? attacker?.name ?? null,
+    defender: defender?.id ?? defender?.name ?? null,
+    inputs: { packets: clone(packetsIn) },
+    steps: [],
+    defenderHp: { before: defenderHpBefore, after: defenderHpBefore },
+  };
+  const pushStep = (step, packets) => {
+    debugData.steps.push({ step, packets: clone(packets) });
+  };
+
   let packets = applyConversions(attacker, packetsIn);
   log({ step: "conversions", packets });
+  pushStep("conversions", packets);
   packets = applyBrands(attacker, packets, onHitStatuses);
   log({ step: "brands", packets });
+  pushStep("brands", packets);
 
   applyOutgoingScaling({ attacker, packets, target: defender });
   log({ step: "attunement", packets });
+  pushStep("attunement", packets);
 
   packets = applyAffinities(attacker, packets);
   log({ step: "affinities", packets });
+  pushStep("affinities", packets);
 
   packets = applyPolarityAttack(attacker, defender, packets);
   log({ step: "polarity_attack", packets });
+  pushStep("polarity_attack", packets);
 
   const defended = applyDefense(defender, packets);
   log({ step: "defense", packets: defended });
+  pushStep("defense", defended);
 
   const scalar = Number.isFinite(ctx.damageScalar) ? Math.max(0, ctx.damageScalar) : 1;
   const packetsAfterDefense = collapseByType(defended, scalar);
@@ -35,6 +75,13 @@ export function resolveAttack(ctx) {
   if (defender?.res) {
     defender.res.hp = Math.max(0, defender.res.hp - totalDamage);
   }
+  debugData.afterDefense = clone(packetsAfterDefense);
+  debugData.totalDamage = totalDamage;
+  debugData.defenderHp.after = Number.isFinite(defender?.res?.hp)
+    ? defender.res.hp
+    : Number.isFinite(defender?.hp)
+    ? defender.hp
+    : debugData.defenderHp.after;
 
   if (defender?.res?.hp === 0 && attacker?.modCache?.temporal?.onKillHaste) {
     const hk = attacker.modCache.temporal.onKillHaste;
@@ -62,6 +109,12 @@ export function resolveAttack(ctx) {
       if (echoTotal > 0 && defender?.res) {
         defender.res.hp = Math.max(0, defender.res.hp - echoTotal);
         echo = { packets: scaled, total: echoTotal };
+        debugData.echo = clone(echo);
+        debugData.defenderHp.after = Number.isFinite(defender?.res?.hp)
+          ? defender.res.hp
+          : Number.isFinite(defender?.hp)
+          ? defender.hp
+          : debugData.defenderHp.after;
       }
     }
   }
@@ -77,6 +130,11 @@ export function resolveAttack(ctx) {
   const appliedStatuses = attempts.length
     ? applyStatuses({ statusAttempts: attempts }, attacker, defender, ctx.turn)
     : [];
+
+  debugData.statusAttempts = clone(attempts);
+  debugData.appliedStatuses = clone(appliedStatuses);
+
+  DebugBus.emit({ type: "attack", payload: debugData });
 
   return { packetsAfterDefense, totalDamage, appliedStatuses, echo };
 }
