@@ -9,6 +9,7 @@ import {
   STATUS_SLOWED_MOVE_AP_DELTA,
   STATUS_STUNNED_ACTION_SPEED_PENALTY_PER_STACK,
 } from "../config.js";
+import { BLEED_STATUS_DEFINITION } from "../content/statuses.js";
 import { registerStatus } from "./status.js";
 
 function ensureResources(actor) {
@@ -60,6 +61,8 @@ registerStatus({
     loseHP(ctx.target, potency);
   },
 });
+
+registerStatus(BLEED_STATUS_DEFINITION);
 
 registerStatus({
   id: "slowed",
