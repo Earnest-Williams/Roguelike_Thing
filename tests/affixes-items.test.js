@@ -36,3 +36,27 @@ import { ITEMS } from "../src/content/items.js";
 
   console.log("✓ composite items expose layered modifiers");
 })();
+
+(function testElementalBrandCoverage() {
+  const brandTypes = new Map();
+  for (const item of ITEMS) {
+    if (!Array.isArray(item.brands)) continue;
+    for (const brand of item.brands) {
+      if (!brand || typeof brand.type !== "string") continue;
+      if (!brandTypes.has(brand.type)) brandTypes.set(brand.type, []);
+      brandTypes.get(brand.type).push(brand);
+    }
+  }
+
+  assert(brandTypes.size >= 10, "expected at least ten distinct weapon brand types");
+
+  for (const type of ["cold", "acid", "earth", "lightning"]) {
+    assert(brandTypes.has(type), `missing expected elemental brand type ${type}`);
+    const hasScaling = brandTypes
+      .get(type)
+      .some((brand) => Number.isFinite(brand.flat) || Number.isFinite(brand.pct));
+    assert(hasScaling, `elemental brand ${type} is missing damage scaling`);
+  }
+
+  console.log("✓ elemental brand coverage expanded");
+})();
