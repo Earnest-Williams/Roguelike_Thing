@@ -52,6 +52,351 @@ function mergeRecord(into, add) {
   }
 }
 
+export function rebuildModCache(actor) {
+  if (!actor) return;
+
+  const resists = Object.create(null);
+  const affinities = Object.create(null);
+  const immunities = new Set();
+
+  const offenseBrands = [];
+  const offenseConversions = [];
+  const offenseAffinities = Object.create(null);
+
+  const statusBucket = {
+    inflictBonus: Object.create(null),
+    inflictDurMult: Object.create(null),
+    resistBonus: Object.create(null),
+    recvDurMult: Object.create(null),
+    buffDurMult: 1,
+    freeActionIgnore: new Set(),
+    freeActionCooldown: 0,
+    freeActionPurge: false,
+  };
+
+  const temporalBucket = {
+    actionSpeedPct: 0,
+    moveAPDelta: 0,
+    moveAPPct: 0,
+    moveAPMult: 1,
+    baseActionAPDelta: 0,
+    baseActionAPPct: 0,
+    baseActionAPMult: 1,
+    apGainFlat: 0,
+    apGainPct: 0,
+    apGainMult: 1,
+    apCapFlat: 0,
+    apCapPct: 0,
+    apCapMult: 1,
+    initiativeFlat: 0,
+    initiativePct: 0,
+    initiativeMult: 1,
+    cooldownMult: 1,
+    cooldownPerTag: new Map(),
+    echo: null,
+    onKillHaste: null,
+  };
+
+  const resourceBucket = {
+    maxFlat: { hp: 0, stamina: 0, mana: 0 },
+    maxPct: { hp: 0, stamina: 0, mana: 0 },
+    regenFlat: { hp: 0, stamina: 0, mana: 0 },
+    regenPct: { hp: 0, stamina: 0, mana: 0 },
+    startFlat: { hp: 0, stamina: 0, mana: 0 },
+    startPct: { hp: 0, stamina: 0, mana: 0 },
+    gainFlat: { hp: 0, stamina: 0, mana: 0 },
+    gainPct: { hp: 0, stamina: 0, mana: 0 },
+    leechFlat: { hp: 0, stamina: 0, mana: 0 },
+    leechPct: { hp: 0, stamina: 0, mana: 0 },
+    costFlat: { hp: 0, stamina: 0, mana: 0 },
+    costMult: { hp: 1, stamina: 1, mana: 1 },
+    costPerTag: new Map(),
+    onHitGain: null,
+    onKillGain: null,
+    onSpendGain: null,
+    onSpendRefund: null,
+    channeling: false,
+  };
+
+  const cache = actor.modCache = {
+    resists,
+    affinities,
+    immunities,
+    dmgMult: actor.modCache?.dmgMult ?? 1,
+    speedMult: actor.modCache?.speedMult ?? 1,
+    brands: offenseBrands,
+    attunementRules: Object.create(null),
+    offense: {
+      brands: offenseBrands,
+      conversions: offenseConversions,
+      affinities: offenseAffinities,
+      polarity: { grant: Object.create(null), onHitBias: Object.create(null) },
+    },
+    defense: {
+      resists,
+      immunities,
+      polarity: { grant: Object.create(null), defenseBias: Object.create(null) },
+    },
+    temporal: temporalBucket,
+    resource: resourceBucket,
+    status: statusBucket,
+    statusInteraction: statusBucket,
+    polarity: { grant: Object.create(null), onHitBias: Object.create(null), defenseBias: Object.create(null) },
+  };
+
+  const equipment = actor.equipment || {};
+  for (const entry of Object.values(equipment)) {
+    const item = asItem(entry);
+    if (!item) continue;
+    pushBrands(cache, item.brands);
+    pushBrands(cache, item.offense?.brands);
+    pushConversions(cache, item.conversions);
+    pushConversions(cache, item.offense?.conversions);
+    addAffinities(cache, item.affinities);
+    addAffinities(cache, item.offense?.affinities);
+    addResists(cache, item.resists);
+    addResists(cache, item.defense?.resists);
+    addImmunities(cache, item.immunities);
+    addImmunities(cache, item.defense?.immunities);
+    merge(cache.polarity.grant, item.polarity?.grant);
+    merge(cache.polarity.onHitBias, item.polarity?.onHitBias);
+    merge(cache.polarity.defenseBias, item.polarity?.defenseBias);
+    foldStatusInteraction(cache, item.statusMods);
+    if (item.temporal && typeof item.temporal === "object") {
+      Object.assign(cache.temporal, item.temporal);
+    }
+    if (item.resource && typeof item.resource === "object") {
+      deepMerge(cache.resource, item.resource);
+    }
+  }
+
+  for (const key of Object.keys(cache.defense.resists)) {
+    cache.defense.resists[key] = Math.max(
+      COMBAT_RESIST_MIN,
+      Math.min(COMBAT_RESIST_MAX, cache.defense.resists[key]),
+    );
+  }
+  for (const key of Object.keys(cache.resists)) {
+    cache.resists[key] = Math.max(
+      COMBAT_RESIST_MIN,
+      Math.min(COMBAT_RESIST_MAX, cache.resists[key]),
+    );
+  }
+}
+
+function pushBrands(cache, brands) {
+  if (!brands) return;
+  const list = Array.isArray(brands) ? brands : [brands];
+  for (const brand of list) {
+    if (!brand) continue;
+    const normalized = { ...brand };
+    normalized.kind = normalized.kind || "brand";
+    cache.offense.brands.push(normalized);
+  }
+}
+
+function pushConversions(cache, conversions) {
+  if (!conversions) return;
+  const list = Array.isArray(conversions) ? conversions : [conversions];
+  for (const conv of list) {
+    if (!conv) continue;
+    cache.offense.conversions.push({ ...conv });
+  }
+}
+
+function addAffinities(cache, affinities) {
+  if (!affinities) return;
+  if (Array.isArray(affinities)) {
+    for (const entry of affinities) {
+      if (!entry) continue;
+      const key = entry.type ?? entry.id;
+      if (!key) continue;
+      const amount = Number(
+        entry.amount ??
+          entry.value ??
+          entry.flat ??
+          entry.percent ??
+          entry.pct ??
+          0,
+      ) || 0;
+      if (!amount) continue;
+      cache.affinities[key] = (cache.affinities[key] || 0) + amount;
+      cache.offense.affinities[key] = (cache.offense.affinities[key] || 0) + amount;
+    }
+    return;
+  }
+  for (const [key, value] of Object.entries(affinities)) {
+    const amount = Number(value) || 0;
+    if (!amount) continue;
+    cache.affinities[key] = (cache.affinities[key] || 0) + amount;
+    cache.offense.affinities[key] = (cache.offense.affinities[key] || 0) + amount;
+  }
+}
+
+function addResists(cache, resists) {
+  if (!resists) return;
+  if (Array.isArray(resists)) {
+    for (const entry of resists) {
+      if (!entry) continue;
+      const key = entry.type ?? entry.id;
+      if (!key) continue;
+      const amount = Number(
+        entry.amount ??
+          entry.value ??
+          entry.flat ??
+          entry.percent ??
+          entry.pct ??
+          0,
+      ) || 0;
+      if (!amount) continue;
+      const next = (cache.defense.resists[key] || 0) + amount;
+      cache.defense.resists[key] = next;
+      cache.resists[key] = next;
+    }
+    return;
+  }
+  for (const [key, value] of Object.entries(resists)) {
+    const amount = Number(value) || 0;
+    if (!amount && amount !== 0) continue;
+    const next = (cache.defense.resists[key] || 0) + amount;
+    cache.defense.resists[key] = next;
+    cache.resists[key] = next;
+  }
+}
+
+function addImmunities(cache, immunities) {
+  if (!immunities) return;
+  if (immunities instanceof Set) {
+    for (const value of immunities) {
+      if (!value) continue;
+      const key = String(value);
+      cache.defense.immunities.add(key);
+      cache.immunities.add(key);
+    }
+    return;
+  }
+  if (typeof immunities === "string") {
+    cache.defense.immunities.add(immunities);
+    cache.immunities.add(immunities);
+    return;
+  }
+  const list = Array.isArray(immunities)
+    ? immunities
+    : immunities && typeof immunities === "object"
+      ? Object.keys(immunities)
+      : [];
+  for (const entry of list) {
+    if (!entry) continue;
+    const key = typeof entry === "string" ? entry : String(entry);
+    cache.defense.immunities.add(key);
+    cache.immunities.add(key);
+  }
+}
+
+function merge(into, add) {
+  if (!into || !add) return;
+  for (const [key, value] of Object.entries(add)) {
+    const amount = Number(value);
+    if (!Number.isFinite(amount) || amount === 0) continue;
+    into[key] = (into[key] || 0) + amount;
+  }
+}
+
+function deepMerge(into, add) {
+  if (!add || typeof add !== "object") return;
+  if (into instanceof Map) {
+    if (add instanceof Map) {
+      for (const [key, value] of add.entries()) {
+        into.set(key, value);
+      }
+    } else {
+      for (const [key, value] of Object.entries(add)) {
+        into.set(key, value);
+      }
+    }
+    return;
+  }
+  if (add instanceof Map) {
+    const target = into instanceof Map ? into : new Map();
+    for (const [key, value] of add.entries()) {
+      target.set(key, value);
+    }
+    return;
+  }
+  for (const [key, value] of Object.entries(add)) {
+    if (value === undefined || value === null) continue;
+    if (value instanceof Map) {
+      const target = into[key] instanceof Map ? into[key] : new Map();
+      for (const [mapKey, mapValue] of value.entries()) {
+        target.set(mapKey, mapValue);
+      }
+      into[key] = target;
+      continue;
+    }
+    if (Array.isArray(value)) {
+      const target = Array.isArray(into[key]) ? into[key] : [];
+      target.push(...value);
+      into[key] = target;
+      continue;
+    }
+    if (typeof value === "object") {
+      const target =
+        into[key] && typeof into[key] === "object" && !Array.isArray(into[key])
+          ? into[key]
+          : Object.create(null);
+      deepMerge(target, value);
+      into[key] = target;
+      continue;
+    }
+    if (typeof value === "number") {
+      if (!Number.isFinite(value)) continue;
+      into[key] = (Number(into[key]) || 0) + value;
+      continue;
+    }
+    if (typeof value === "boolean") {
+      into[key] = into[key] || value;
+      continue;
+    }
+    into[key] = value;
+  }
+}
+
+function foldStatusInteraction(cache, payload) {
+  if (!payload) return;
+  const entries = Array.isArray(payload) ? payload : [payload];
+  const status = cache.statusInteraction;
+  for (const sm of entries) {
+    if (!sm) continue;
+    mergeRecord(status.inflictBonus, sm.inflictChanceBonus || sm.inflictBonus);
+    mergeRecord(status.inflictDurMult, sm.inflictDurationMult || sm.inflictDurMult);
+    mergeRecord(status.resistBonus, sm.resistChanceBonus || sm.resistBonus);
+    mergeRecord(status.recvDurMult, sm.receivedDurationMult ?? sm.recvDurMult);
+
+    const buffDelta = Number(sm.buffDurationMult ?? sm.buffDurMult);
+    if (Number.isFinite(buffDelta) && buffDelta !== 0) {
+      status.buffDurMult = Math.max(0, status.buffDurMult * (1 + buffDelta));
+    }
+
+    const freeAction = sm.freeAction || {};
+    const freeIgnores = sm.freeActionIgnore || freeAction.ignore;
+    if (Array.isArray(freeIgnores)) {
+      for (const id of freeIgnores) {
+        if (!id) continue;
+        status.freeActionIgnore.add(String(id));
+      }
+    }
+    if (Number.isFinite(freeAction.cooldown)) {
+      status.freeActionCooldown = Math.max(
+        status.freeActionCooldown,
+        Number(freeAction.cooldown),
+      );
+    }
+    if (freeAction.purgeOnUse || sm.freeActionPurge) {
+      status.freeActionPurge = true;
+    }
+  }
+}
+
 const POLAR_AXES = ["order", "growth", "chaos", "decay", "void"]; // allow "all" separately
 const POLAR_AXES_SET = new Set(POLAR_AXES);
 

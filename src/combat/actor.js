@@ -11,6 +11,7 @@ import {
   SLOT,
 } from "../../constants.js";
 import { normalizePolaritySigned } from "./polarity.js";
+import { rebuildModCache } from "./mod-folding.js";
 import { rebuildDerived } from "./status.js";
 
 /**
@@ -389,10 +390,12 @@ export class Actor {
    */
   equip(slot, itemOrStack) {
     this.equipment[slot] = itemOrStack;
+    rebuildModCache(this);
   }
   unequip(slot) {
     const it = this.equipment[slot];
     delete this.equipment[slot];
+    rebuildModCache(this);
     return it;
   }
 
