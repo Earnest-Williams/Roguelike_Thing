@@ -84,7 +84,7 @@ function createBasicActors() {
 
 (function testOnKillHasteCooldownAndOncePerTurn() {
   const attacker = new Actor({
-    id: "attacker", 
+    id: "attacker",
     baseStats: {
       str: 10,
       dex: 10,
@@ -138,4 +138,51 @@ function createBasicActors() {
   assert.ok(fourthStacks >= 2, "haste should grant another stack once cooldown ends");
 
   console.log("✓ on-kill haste respects oncePerTurn and cooldownTurns gates");
+})();
+
+(function testEchoSkipsStatusesByDefault() {
+  const { attacker, defender } = createBasicActors();
+  attacker.modCache.temporal.echo = { chancePct: 1, fraction: 0.5 };
+
+  resolveAttack({
+    attacker,
+    defender,
+    packets: [{ type: "physical", amount: 4 }],
+    statusAttempts: [{ id: "burning", baseChance: 1, duration: 2, stacks: 1 }],
+  });
+
+  const burning = defender.statuses.find((s) => s.id === "burning");
+  assert.ok(burning, "burning should apply on the initial hit");
+  assert.equal(
+    burning.stacks,
+    1,
+    "burning stacks should remain at 1 when echo does not copy statuses",
+  );
+
+  console.log("✓ echo suppresses on-hit statuses when copyStatuses is false");
+})();
+
+(function testEchoCanCopyStatusesWhenEnabled() {
+  const { attacker, defender } = createBasicActors();
+  attacker.modCache.temporal.echo = {
+    chancePct: 1,
+    fraction: 0.5,
+    copyStatuses: true,
+  };
+
+  resolveAttack({
+    attacker,
+    defender,
+    packets: [{ type: "physical", amount: 4 }],
+    statusAttempts: [{ id: "burning", baseChance: 1, duration: 2, stacks: 1 }],
+  });
+
+  const burning = defender.statuses.find((s) => s.id === "burning");
+  assert.ok(burning, "burning should still apply");
+  assert.ok(
+    burning.stacks >= 2,
+    "burning stacks should increase when echo copies statuses",
+  );
+
+  console.log("✓ echo copies status attempts when copyStatuses is true");
 })();

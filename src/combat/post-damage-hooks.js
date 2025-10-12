@@ -130,33 +130,52 @@ function getAllowOnKill(cfg) {
  */
 function buildEchoContext(ctx, echoCfg, fraction) {
   if (!ctx) return null;
-  const packets = Array.isArray(ctx.packets)
-    ? ctx.packets.map((p) => ({ ...p }))
-    : [];
+
+  const basePackets = extractPacketsForEcho(ctx);
+  const packets = scalePacketList(basePackets, fraction);
   if (!packets.length) return null;
 
   const statusAttempts = echoCfg.copyStatuses
-    ? Array.isArray(ctx.statusAttempts)
-      ? ctx.statusAttempts.map((s) => ({ ...s }))
-      : []
+    ? cloneStatusAttempts(ctx?.statusAttempts)
     : [];
 
   const damageScalarBase = Number.isFinite(ctx?.damageScalar)
     ? Math.max(0, Number(ctx.damageScalar))
     : 1;
 
+  const scaledPacketTotal = sumPacketAmounts(packets);
+  const basePacketTotal = sumPacketAmounts(basePackets);
+  const postDefenseTotal = sumPacketTotals(ctx?.packetsAfterDefense);
+  const desiredTotalDamage = Number.isFinite(postDefenseTotal) && postDefenseTotal > 0
+    ? postDefenseTotal * fraction
+    : basePacketTotal * damageScalarBase * fraction;
+
+  let damageScalar = damageScalarBase;
+  if (scaledPacketTotal > 0 && Number.isFinite(desiredTotalDamage)) {
+    const targetScalar = desiredTotalDamage / scaledPacketTotal;
+    if (Number.isFinite(targetScalar)) {
+      damageScalar = Math.max(0, targetScalar);
+    }
+  }
+
   const echoCtx = {
     ...ctx,
     packets,
     statusAttempts,
     isEcho: true,
-    damageScalar: damageScalarBase * fraction,
+    damageScalar,
+    skipOnHitStatuses: !echoCfg.copyStatuses,
   };
 
   if (!echoCfg.copyResourceCosts) {
     if ("resourceCosts" in echoCtx) delete echoCtx.resourceCosts;
   } else if (ctx?.resourceCosts && typeof ctx.resourceCosts === "object") {
-    echoCtx.resourceCosts = cloneObject(ctx.resourceCosts);
+    const scaledCosts = scaleResourceCosts(ctx.resourceCosts, fraction);
+    if (scaledCosts) {
+      echoCtx.resourceCosts = scaledCosts;
+    } else if ("resourceCosts" in echoCtx) {
+      delete echoCtx.resourceCosts;
+    }
   }
 
   if ("packetsAfterDefense" in echoCtx) delete echoCtx.packetsAfterDefense;
@@ -164,6 +183,106 @@ function buildEchoContext(ctx, echoCfg, fraction) {
   if ("appliedStatuses" in echoCtx) delete echoCtx.appliedStatuses;
 
   return echoCtx;
+}
+
+function extractPacketsForEcho(ctx) {
+  if (Array.isArray(ctx?.packets) && ctx.packets.length) {
+    return ctx.packets.map((p) => ({ ...p }));
+  }
+  const pad = ctx?.packetsAfterDefense;
+  if (pad && typeof pad === "object") {
+    return Object.entries(pad)
+      .filter(([, amt]) => Number.isFinite(amt) && amt > 0)
+      .map(([type, amount]) => ({ type, amount }));
+  }
+  return [];
+}
+
+function scalePacketList(packets, fraction) {
+  if (!Array.isArray(packets) || !packets.length) return [];
+  const f = Math.max(0, Math.min(1, fraction || 0));
+  if (f === 0) {
+    return [];
+  }
+  const out = [];
+  for (const pkt of packets) {
+    if (!pkt || typeof pkt !== "object") continue;
+    const amount = Number(pkt.amount);
+    if (!Number.isFinite(amount)) continue;
+    const scaled = roundDamage(amount * f);
+    if (scaled <= 0) continue;
+    out.push({ ...pkt, amount: scaled });
+  }
+  return out;
+}
+
+function sumPacketAmounts(packets) {
+  if (!Array.isArray(packets) || !packets.length) return 0;
+  let total = 0;
+  for (const pkt of packets) {
+    const amount = Number(pkt?.amount);
+    if (Number.isFinite(amount) && amount > 0) {
+      total += amount;
+    }
+  }
+  return total;
+}
+
+function sumPacketTotals(totals) {
+  if (!totals || typeof totals !== "object") return 0;
+  let total = 0;
+  for (const value of Object.values(totals)) {
+    const amount = Number(value);
+    if (Number.isFinite(amount) && amount > 0) {
+      total += amount;
+    }
+  }
+  return total;
+}
+
+function cloneStatusAttempts(attempts) {
+  if (!attempts) return [];
+  if (Array.isArray(attempts)) {
+    return attempts
+      .map((attempt) => (attempt && typeof attempt === "object" ? { ...attempt } : null))
+      .filter(Boolean);
+  }
+  if (typeof attempts === "object") {
+    return [{ ...attempts }];
+  }
+  return [];
+}
+
+function scaleResourceCosts(costs, fraction) {
+  if (!costs || typeof costs !== "object") return null;
+  const clone = cloneObject(costs);
+  if (!clone || typeof clone !== "object") return null;
+  applyResourceCostScale(clone, Math.max(0, Math.min(1, fraction || 0)));
+  return clone;
+}
+
+function applyResourceCostScale(node, fraction) {
+  if (!node || typeof node !== "object") return;
+  if (Array.isArray(node)) {
+    for (let i = 0; i < node.length; i += 1) {
+      const value = node[i];
+      if (typeof value === "number" && Number.isFinite(value)) {
+        node[i] = roundNumber(value * fraction);
+      } else if (value && typeof value === "object") {
+        applyResourceCostScale(value, fraction);
+      }
+    }
+    return;
+  }
+  for (const [key, value] of Object.entries(node)) {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      node[key] = roundNumber(value * fraction);
+      continue;
+    }
+    if (value && typeof value === "object") {
+      applyResourceCostScale(value, fraction);
+    }
+  }
 }
 
 /**
@@ -385,9 +504,31 @@ function ensureHasteCtl(actor) {
   return actor._onKillHasteCtl;
 }
 
+function roundDamage(value) {
+  if (!Number.isFinite(value)) return 0;
+  const rounded = Math.round(value);
+  return rounded > 0 ? rounded : 0;
+}
+
+function roundNumber(value) {
+  if (!Number.isFinite(value)) return 0;
+  return Math.round(value);
+}
+
 function cloneObject(obj) {
   if (!obj || typeof obj !== "object") return obj;
-  return structuredClone(obj);
+  if (typeof structuredClone === "function") {
+    try {
+      return structuredClone(obj);
+    } catch (err) {
+      // fall through to JSON fallback
+    }
+  }
+  try {
+    return JSON.parse(JSON.stringify(obj));
+  } catch (err) {
+    return obj;
+  }
 }
 
 function pickNumber(...values) {
