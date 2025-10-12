@@ -1,219 +1,229 @@
 // src/content/themes.js
 // @ts-check
 
-/**
- * @typedef {Object} ChapterTheme
- * @property {string} id
- * @property {string} name
- * @property {{ id: string, title: string, description?: string, tags?: string[], mobTagWeights?: Record<string, number>, affixTagWeights?: Record<string, number>, baseBudget?: number, perLevelBudget?: number, culmination?: { name?: string, description?: string, tags?: string[] } }} descriptor
- * @property {Array<{ id: string, title: string, description?: string, tags?: string[], mobTagWeights?: Record<string, number>, affixTagWeights?: Record<string, number>, budgetBonus?: number, perLevelBonus?: number }>} mechanics
- * @property {string[]} tags
- * @property {Record<string, number>} mobTagWeights
- * @property {Record<string, number>} affixTagWeights
- * @property {number} baseBudget
- * @property {number} perLevelBudget
- * @property {{ name: string, description: string, tags: string[] }} culmination
- */
+const DEFAULT_LEVEL_COUNT = 3;
 
-/**
- * Descriptor components describe the overarching flavor of a chapter. Each
- * entry contributes weighted tags and budget baselines that the theme builder
- * combines with a set of mechanics.
- */
 export const DESCRIPTORS = [
   {
     id: "ashen_catacombs",
-    title: "Ashen Catacombs",
-    description: "Smoldering ossuaries where the dead burn but never rest.",
-    tags: ["fire", "undead", "ruins"],
-    mobTagWeights: { undead: 1.6, fire: 1.25, guardian: 1.1 },
-    affixTagWeights: { fire: 1.5, burn: 1.2, elemental: 1.1 },
-    baseBudget: 36,
-    perLevelBudget: 8,
+    name: "Ashen Catacombs",
+    description: "Collapsed burial chambers wreathed in smoldering embers and bone dust.",
+    weight: 3,
+    levels: 3,
+    baseBudget: 24,
+    budgetPerLevel: 6,
+    depthMultiplier: 0.05,
+    mobTags: ["undead", "bone", "fire"],
+    affixTags: ["fire", "burn", "shadow"],
+    mobWeights: { undead: 3, bone: 2, fire: 1 },
+    affixWeights: { fire: 2, burn: 1, shadow: 1 },
     culmination: {
-      name: "Ember Reliquary",
-      description: "A vault of charred relics sealed in ritual flame.",
-      tags: ["fire", "undead", "vault"],
+      name: "Reliquary of Cinders",
+      description: "An ossuary vault sealed behind a barricade of ash and soul-flames.",
+      tags: ["undead", "fire"],
     },
   },
   {
-    id: "sunken_galleries",
-    title: "Sunken Galleries",
-    description: "Flooded halls swallowed by the tides and reclaimed by kelp.",
-    tags: ["water", "ancient", "depths"],
-    mobTagWeights: { aquatic: 1.4, humanoid: 1.1, caster: 1.05 },
-    affixTagWeights: { water: 1.45, control: 1.15, sustain: 1.05 },
-    baseBudget: 32,
-    perLevelBudget: 7,
+    id: "sunken_hollows",
+    name: "Sunken Hollows",
+    description: "Flooded tunnels where moss-choked ruins echo with distant waves.",
+    weight: 2,
+    levels: 4,
+    baseBudget: 22,
+    budgetPerLevel: 5,
+    depthMultiplier: 0.04,
+    mobTags: ["aquatic", "slime", "ancient"],
+    affixTags: ["water", "acid", "control"],
+    mobWeights: { aquatic: 3, slime: 1, ancient: 1 },
+    affixWeights: { water: 2, acid: 1, control: 1 },
     culmination: {
-      name: "Tidal Vault",
-      description: "A pressure-locked sanctum humming with abyssal song.",
-      tags: ["water", "pressure", "vault"],
+      name: "Drowned Reliquary",
+      description: "A tidal vault guarded by barnacled idols.",
+      tags: ["water", "ancient"],
     },
   },
   {
-    id: "shattered_bastion",
-    title: "Shattered Bastion",
-    description: "Ruined ramparts where spectral sentinels patrol crumbling walls.",
-    tags: ["order", "ruin", "guardian"],
-    mobTagWeights: { guardian: 1.5, construct: 1.2, humanoid: 1.05 },
-    affixTagWeights: { polarity: 1.4, defense: 1.2, stamina: 1.1 },
-    baseBudget: 38,
-    perLevelBudget: 9,
+    id: "arcane_spire",
+    name: "Arcane Spire",
+    description: "A spiraling tower humming with unstable magical experiments.",
+    weight: 2,
+    levels: 3,
+    baseBudget: 26,
+    budgetPerLevel: 7,
+    depthMultiplier: 0.06,
+    mobTags: ["construct", "arcane", "humanoid"],
+    affixTags: ["arcane", "mana", "lightning"],
+    mobWeights: { construct: 2, arcane: 2, humanoid: 1 },
+    affixWeights: { arcane: 2, mana: 1, lightning: 1 },
     culmination: {
-      name: "Aegis Vault",
-      description: "A luminous ward storing vows carved in stone and light.",
-      tags: ["order", "ward", "vault"],
+      name: "Resonant Focus",
+      description: "A chamber containing a crystalline heart amplifying errant spells.",
+      tags: ["arcane", "ritual"],
     },
   },
 ];
 
-/**
- * Mechanic components add twists to the base descriptor and can stack together
- * to form the final theme.
- */
 export const MECHANICS = [
   {
-    id: "pyre_cult",
-    title: "Pyre Cult",
-    description: "Fanatics kindle braziers to empower fire rites.",
-    tags: ["fire", "humanoid", "ritual"],
-    mobTagWeights: { humanoid: 1.2, caster: 1.25, fire: 1.15 },
-    affixTagWeights: { fire: 1.3, elemental: 1.1 },
-    budgetBonus: 6,
-    perLevelBonus: 3,
+    id: "haunting_resurgence",
+    name: "of Haunting Resurgence",
+    description: "Restless spirits periodically claw their way back into the fray.",
+    weight: 3,
+    mobTags: ["undead", "spectral"],
+    affixTags: ["spirit", "curse"],
+    mobWeights: { undead: 2, spectral: 2 },
+    affixWeights: { spirit: 2, curse: 2 },
+    budgetModifier: 4,
+    budgetPerLevel: 3,
+    depthMultiplier: 0.02,
+    finalLevelBonus: 6,
+    culmination: {
+      name: "Soul-Echo Reliquary",
+      description: "A vault echoing with imprisoned spirits eager for release.",
+      tags: ["spirit", "haunted"],
+    },
   },
   {
-    id: "tidal_surge",
-    title: "Tidal Surge",
-    description: "Currents sweep through the halls, empowering fluid tactics.",
-    tags: ["water", "mobility", "hazard"],
-    mobTagWeights: { aquatic: 1.25, mobility: 1.15 },
-    affixTagWeights: { water: 1.25, mobility: 1.2 },
-    budgetBonus: 5,
-    perLevelBonus: 2,
+    id: "storm_wracked",
+    name: "of Storm Wracked Wards",
+    description: "Erratic lightning surges empower denizens attuned to the storm.",
+    weight: 2,
+    mobTags: ["elemental", "storm"],
+    affixTags: ["lightning", "tempo"],
+    mobWeights: { elemental: 2, storm: 3 },
+    affixWeights: { lightning: 3, tempo: 1 },
+    budgetModifier: 5,
+    budgetPerLevel: 4,
+    depthMultiplier: 0.04,
+    finalLevelBonus: 4,
+    culmination: {
+      name: "Stormheart Vault",
+      description: "A sealed ward filled with arcing coils and stormglass prisms.",
+      tags: ["lightning", "ritual"],
+    },
   },
   {
-    id: "bone_legion",
-    title: "Bone Legion",
-    description: "An army of skeletal wardens drilled for relentless assault.",
-    tags: ["undead", "melee", "guardian"],
-    mobTagWeights: { undead: 1.35, melee: 1.2 },
-    affixTagWeights: { endurance: 1.1, stamina: 1.2 },
-    budgetBonus: 7,
-    perLevelBonus: 3,
-  },
-  {
-    id: "temporal_echo",
-    title: "Temporal Echo",
-    description: "Fragments of time distort initiative and reflexes.",
-    tags: ["tempo", "arcane", "anomaly"],
-    mobTagWeights: { caster: 1.15, temporal: 1.25 },
-    affixTagWeights: { tempo: 1.35, cooldown: 1.2 },
-    budgetBonus: 8,
-    perLevelBonus: 4,
+    id: "ritual_convergence",
+    name: "of Ritual Convergence",
+    description: "Cultists assemble elaborate rites, bolstering summoned allies.",
+    weight: 2,
+    mobTags: ["cultist", "summoner"],
+    affixTags: ["summoning", "support"],
+    mobWeights: { cultist: 2, summoner: 2 },
+    affixWeights: { summoning: 2, support: 2 },
+    budgetModifier: 3,
+    budgetPerLevel: 5,
+    depthMultiplier: 0.03,
+    finalLevelBonus: 8,
+    culmination: {
+      name: "Grand Convergence",
+      description: "A vault arranged as a summoning locus ready to unleash a guardian.",
+      tags: ["summoning", "ritual"],
+    },
   },
 ];
 
-function pickOne(list, rng) {
-  if (!Array.isArray(list) || list.length === 0) {
-    return null;
+function pickWeighted(list, rng) {
+  const total = list.reduce((sum, entry) => sum + (entry.weight || 1), 0) || 1;
+  let roll = Math.floor(rng() * total);
+  for (const entry of list) {
+    roll -= entry.weight || 1;
+    if (roll < 0) return entry;
   }
-  const roll = Math.floor((typeof rng === "function" ? rng() : Math.random()) * list.length);
-  return list[Math.max(0, Math.min(list.length - 1, roll))];
+  return list[0];
 }
 
-function pickDistinct(list, count, rng) {
-  if (!Array.isArray(list) || list.length === 0 || count <= 0) {
-    return [];
+function mergeWeightMaps(base = {}, extra = {}) {
+  const out = { ...base };
+  for (const [key, value] of Object.entries(extra)) {
+    if (!Number.isFinite(value)) continue;
+    out[key] = (out[key] || 0) + value;
   }
-  const pool = list.slice();
-  const picks = [];
-  while (pool.length > 0 && picks.length < count) {
-    const idx = Math.floor((typeof rng === "function" ? rng() : Math.random()) * pool.length);
-    picks.push(pool.splice(idx, 1)[0]);
-  }
-  return picks;
+  return out;
 }
 
-function mergeWeights(...sources) {
-  /** @type {Record<string, number>} */
-  const merged = {};
-  for (const source of sources) {
-    if (!source) continue;
-    for (const [tag, value] of Object.entries(source)) {
-      if (!Number.isFinite(value)) continue;
-      const current = merged[tag] ?? 1;
-      merged[tag] = current * value;
-    }
+function uniqueTags(list = []) {
+  const seen = new Set();
+  const out = [];
+  for (const tag of list) {
+    if (!tag || seen.has(tag)) continue;
+    seen.add(tag);
+    out.push(tag);
   }
-  return merged;
-}
-
-function collectTags(...groups) {
-  const set = new Set();
-  for (const group of groups) {
-    if (!group) continue;
-    for (const tag of group) {
-      if (typeof tag === "string" && tag.length > 0) {
-        set.add(tag);
-      }
-    }
-  }
-  return Array.from(set);
+  return out;
 }
 
 /**
- * Build a complete procedural theme by combining a descriptor with a handful
- * of mechanics.
  * @param {() => number} [rng]
- * @returns {ChapterTheme}
  */
 export function generateDungeonTheme(rng = Math.random) {
-  const descriptor = pickOne(DESCRIPTORS, rng) || DESCRIPTORS[0];
-  const mechanics = pickDistinct(MECHANICS, 2, rng);
-  const tags = collectTags(
-    descriptor.tags,
-    ...mechanics.map((m) => m.tags || []),
-  );
-  const mobTagWeights = mergeWeights(
-    descriptor.mobTagWeights,
-    ...mechanics.map((m) => m.mobTagWeights || {}),
-  );
-  const affixTagWeights = mergeWeights(
-    descriptor.affixTagWeights,
-    ...mechanics.map((m) => m.affixTagWeights || {}),
-  );
-  const baseBudget =
-    Number(descriptor.baseBudget || 0) +
-    mechanics.reduce((sum, mech) => sum + Number(mech.budgetBonus || 0), 0);
-  const perLevelBudget =
-    Number(descriptor.perLevelBudget || 0) +
-    mechanics.reduce((sum, mech) => sum + Number(mech.perLevelBonus || 0), 0);
+  const picker = typeof rng === "function" ? rng : Math.random;
+  const descriptor = pickWeighted(DESCRIPTORS, picker);
+  const mechanic = pickWeighted(MECHANICS, picker);
 
-  const nameSuffix = mechanics.map((m) => m.title).join(" & ");
-  const name = nameSuffix ? `${descriptor.title}: ${nameSuffix}` : descriptor.title;
+  const totalLevels = Math.max(
+    1,
+    Math.round(mechanic.levelsOverride || descriptor.levels || DEFAULT_LEVEL_COUNT),
+  );
+
+  const baseBudget = Math.max(
+    0,
+    Math.round((descriptor.baseBudget || 0) + (mechanic.budgetModifier || 0)),
+  );
+  const perLevel = Math.max(
+    0,
+    Math.round((descriptor.budgetPerLevel || 0) + (mechanic.budgetPerLevel || 0)),
+  );
+  const depthMultiplier = Math.max(
+    0,
+    Number(descriptor.depthMultiplier || 0) + Number(mechanic.depthMultiplier || 0),
+  );
+  const bonusFinal = Math.max(
+    0,
+    Math.round((descriptor.finalLevelBonus || 0) + (mechanic.finalLevelBonus || 0)),
+  );
+
+  const tags = {
+    mobs: uniqueTags([...(descriptor.mobTags || []), ...(mechanic.mobTags || [])]),
+    affixes: uniqueTags([...(descriptor.affixTags || []), ...(mechanic.affixTags || [])]),
+  };
+
+  const weights = {
+    mobTags: mergeWeightMaps(descriptor.mobWeights, mechanic.mobWeights),
+    affixTags: mergeWeightMaps(descriptor.affixWeights, mechanic.affixWeights),
+  };
+
+  let culmination = mechanic.culmination || descriptor.culmination || null;
+  if (culmination) {
+    culmination = {
+      name: culmination.name || "Chapter Culmination",
+      description: culmination.description || "",
+      tags: uniqueTags([...(culmination.tags || []), ...tags.mobs, "vault"]),
+    };
+  }
 
   return {
-    id: [descriptor.id].concat(mechanics.map((m) => m.id)).join(":"),
-    name,
+    id: `${descriptor.id}:${mechanic.id}`,
+    name: `${descriptor.name} ${mechanic.name}`,
     descriptor,
-    mechanics,
+    mechanic,
+    totalLevels,
     tags,
-    mobTagWeights,
-    affixTagWeights,
-    baseBudget,
-    perLevelBudget,
-    culmination: {
-      name: descriptor.culmination?.name || `${descriptor.title} Vault`,
-      description:
-        descriptor.culmination?.description ||
-        `A vault steeped in the themes of ${descriptor.title.toLowerCase()}.`,
-      tags: collectTags(
-        descriptor.culmination?.tags || [],
-        descriptor.tags || [],
-      ),
+    weights,
+    budget: {
+      base: baseBudget,
+      perLevel,
+      depthMultiplier,
+      bonusFinal,
     },
+    culmination,
   };
 }
 
+export function debugGenerateThemes(count = 5, rng = Math.random) {
+  const themes = [];
+  for (let i = 0; i < count; i += 1) {
+    themes.push(generateDungeonTheme(rng));
+  }
+  return themes;
+}

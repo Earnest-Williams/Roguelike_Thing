@@ -20,7 +20,7 @@ function findPowerCost(id) {
 
 (function testApplyAffixesBudgeted() {
   const base = { id: "training_blade", name: "Training Blade" };
-  const theme = { affixTagWeights: { fire: 1.3, elemental: 1.1, stamina: 1.2 } };
+  const theme = { weights: { affixTags: { fire: 1.3, elemental: 1.1, stamina: 1.2 } } };
   const rng = makeDeterministicRng(11);
   const budget = 9;
 

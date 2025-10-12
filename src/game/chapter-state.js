@@ -1,63 +1,66 @@
 // src/game/chapter-state.js
 // @ts-check
-
 import { generateDungeonTheme } from "../content/themes.js";
 
-/**
- * Tracks chapter progression and exposes the current loot power budget.
- */
+const DEFAULT_PER_LEVEL_BUDGET = 5;
+const DEFAULT_BASE_BUDGET = 15;
+
 export class ChapterState {
   /**
-   * @param {{ rng?: () => number, levelsPerChapter?: number }=} options
+   * @param {{ rng?: () => number, theme?: ReturnType<typeof generateDungeonTheme> }} [options]
    */
   constructor(options = {}) {
-    const { rng = Math.random, levelsPerChapter = 3 } = options;
+    const { rng = Math.random, theme = null } = options;
     this._rng = typeof rng === "function" ? rng : Math.random;
-    this.levelsPerChapter = Math.max(1, Math.floor(levelsPerChapter));
+    this.theme = theme || generateDungeonTheme(this._rng);
     this.levelIndex = 0;
-    this.theme = generateDungeonTheme(this._rng);
+    this.totalLevels = Math.max(1, Math.round(this.theme?.totalLevels || 1));
   }
 
-  /** @returns {number} */
   get currentLevel() {
     return this.levelIndex + 1;
   }
 
-  /** @returns {boolean} */
   get isFinalLevel() {
-    return this.currentLevel >= this.levelsPerChapter;
+    return this.levelIndex >= this.totalLevels - 1;
   }
 
-  /** @returns {number} */
   get currentBudget() {
-    const base = Number(this.theme?.baseBudget ?? 0);
-    const perLevel = Number(this.theme?.perLevelBudget ?? 0);
-    const value = base + perLevel * this.levelIndex;
-    return value > 0 ? value : 0;
+    const budget = this.theme?.budget || {};
+    const base = Number.isFinite(budget.base) ? budget.base : DEFAULT_BASE_BUDGET;
+    const perLevel = Number.isFinite(budget.perLevel)
+      ? budget.perLevel
+      : DEFAULT_PER_LEVEL_BUDGET;
+    const depthMultiplier = Number.isFinite(budget.depthMultiplier)
+      ? budget.depthMultiplier
+      : 0;
+    const bonusFinal = Number.isFinite(budget.bonusFinal) ? budget.bonusFinal : 0;
+
+    const depth = this.levelIndex;
+    const scaled = (base + depth * perLevel) * (1 + depth * depthMultiplier);
+    const adjusted = this.isFinalLevel ? scaled + bonusFinal : scaled;
+    return Math.max(0, Math.round(adjusted));
   }
 
-  /**
-   * Advance to the next dungeon level. When the chapter is completed, a new
-   * theme is generated and the level index resets.
-   * @returns {ChapterState}
-   */
   nextLevel() {
-    if (this.levelIndex + 1 < this.levelsPerChapter) {
+    if (this.levelIndex < this.totalLevels - 1) {
       this.levelIndex += 1;
-    } else {
-      this.theme = generateDungeonTheme(this._rng);
-      this.levelIndex = 0;
+      return this.levelIndex;
     }
-    return this;
-  }
-
-  /**
-   * Force a brand new theme, resetting progression within the chapter.
-   * @returns {ChapterState}
-   */
-  resetTheme() {
     this.theme = generateDungeonTheme(this._rng);
     this.levelIndex = 0;
-    return this;
+    this.totalLevels = Math.max(1, Math.round(this.theme?.totalLevels || 1));
+    return this.levelIndex;
+  }
+
+  /**
+   * @param {ReturnType<typeof generateDungeonTheme>} theme
+   */
+  reset(theme) {
+    if (theme) {
+      this.theme = theme;
+    }
+    this.levelIndex = 0;
+    this.totalLevels = Math.max(1, Math.round(this.theme?.totalLevels || 1));
   }
 }
