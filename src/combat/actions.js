@@ -15,7 +15,7 @@ import {
   MIN_AP_COST,
   MIN_ATTACK_DAMAGE,
   SLOT,
-} from "../../constants.js";
+} from "../../js/constants.js";
 import { canPay, eventGain } from "./resources.js";
 import { noteAttacked, noteMoved } from "./actor.js";
 

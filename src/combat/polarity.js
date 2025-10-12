@@ -1,7 +1,7 @@
 // src/combat/polarity.js
 // @ts-check
 
-import { POLAR_BIAS as POLAR_BIAS_SOURCE } from "../../constants.js";
+import { POLAR_BIAS as POLAR_BIAS_SOURCE } from "../../js/constants.js";
 import { clamp } from "../utils/number.js";
 
 const DEFAULT_POLAR_BIAS = Object.freeze({

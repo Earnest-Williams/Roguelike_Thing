@@ -9,7 +9,7 @@ import {
   BURN_TICK_DAMAGE_PER_STACK,
   BLEED_DURATION_TURNS,
   BLEED_TICK_DAMAGE_PER_STACK,
-} from "../constants.js";
+} from "../js/constants.js";
 
 export const COMBAT_ATTACK_TYPE_HINT_DURATION_MS = 250;
 
