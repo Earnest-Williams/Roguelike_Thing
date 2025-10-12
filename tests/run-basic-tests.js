@@ -37,37 +37,31 @@ function testStatusZeroDuration() {
 }
 
 function testResolveWithPolarity() {
-  const attacker = {
+  const attacker = new Actor({
     id: "atk",
-    statusDerived: {},
-    modCache: {
-      offense: { conversions: [], brandAdds: [], affinities: {}, brands: [] },
-      defense: { resists: {}, immunities: new Set() },
-      immunities: new Set(),
-      affinities: {},
-      polarity: { onHitBias: { all: 0.2 }, defenseBias: {} },
-    },
-    attunement: { rules: Object.create(null), stacks: Object.create(null) },
-  };
-  const defender = {
+    baseStats: { str: 10, dex: 10, int: 10, vit: 10, maxHP: 100, maxStamina: 10, maxMana: 10, baseSpeed: 1 },
+  });
+  attacker.setPolarity({ order: 1 });
+  attacker.modCache.offense.polarity.onHitBias.order = 0.2;
+
+  const defender = new Actor({
     id: "def",
-    statusDerived: {},
-    modCache: {
-      defense: { resists: { fire: 0.2 }, immunities: new Set(), flatDR: {}, polarity: { defenseBias: { all: 0.1 } } },
-      immunities: new Set(),
-      resists: { fire: 0.2 },
-      polarity: { defenseBias: { all: 0.1 } },
-    },
-    res: { hp: 200 },
-  };
+    baseStats: { str: 10, dex: 10, int: 10, vit: 10, maxHP: 200, maxStamina: 10, maxMana: 10, baseSpeed: 1 },
+  });
+  defender.setPolarity({ chaos: 1 });
+  defender.modCache.defense.resists.fire = 0.2;
+  defender.modCache.resists.fire = 0.2;
+  defender.modCache.defense.polarity.defenseBias.chaos = -0.1;
+  defender.res.hp = 200;
+
   const ctx = {
     attacker,
     defender,
     packets: [{ type: "fire", amount: 100 }],
   };
   const result = resolveAttack(ctx);
-  assert.equal(result.totalDamage, 105, "polarity biases and resists should combine deterministically");
-  assert.equal(defender.res.hp, 95, "defender hp reduced by resolved damage");
+  assert.equal(result.totalDamage, 104, "polarity opposition should affect offense/defense multipliers");
+  assert.equal(defender.res.hp, 96, "defender hp reduced by resolved damage");
   console.log("✓ resolveAttack polarity/resist order");
 }
 

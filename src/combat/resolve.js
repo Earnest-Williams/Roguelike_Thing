@@ -4,7 +4,7 @@ import { DebugBus } from "../../js/debug/debug-bus.js";
 import { logAttackStep } from "./debug-log.js";
 import { applyStatuses } from "./status.js";
 import { applyOutgoingScaling, noteUseGain } from "./attunement.js";
-import { polarityOnHitScalar, polarityDefScalar } from "./polarity.js";
+import { polarityDefenseMult, polarityOffenseMult } from "./polarity.js";
 import { postDamageTemporalResourceHooks } from "./post-damage-hooks.js";
 
 const clone = (value) => {
@@ -66,11 +66,14 @@ export function resolveAttack(ctx) {
   log({ step: "affinities", packets });
   pushStep("affinities", packets);
 
-  packets = applyPolarityAttack(attacker, defender, packets);
+  const polOff = polarityOffenseMult(attacker, defender);
+  const polDef = polarityDefenseMult(defender, attacker);
+
+  packets = applyPolarityAttack(packets, polOff);
   log({ step: "polarity_attack", packets });
   pushStep("polarity_attack", packets);
 
-  const defended = applyDefense(defender, packets);
+  const defended = applyDefense(defender, packets, polDef);
   log({ step: "defense", packets: defended });
   pushStep("defense", defended);
 
@@ -227,23 +230,25 @@ function applyAffinities(actor, packets) {
   });
 }
 
-function applyPolarityAttack(attacker, defender, packets) {
-  const s = polarityOnHitScalar(attacker, defender);
-  return packets.map((p) => ({ ...p, amount: Math.floor(p.amount * s) }));
+function applyPolarityAttack(packets, scalar) {
+  if (!Number.isFinite(scalar) || scalar === 1) return packets;
+  return packets.map((p) => ({ ...p, amount: Math.floor(p.amount * scalar) }));
 }
 
-function applyDefense(defender, packets) {
+function applyDefense(defender, packets, polarityScalar) {
   const imm = defender?.modCache?.immunities || new Set();
   const res = defender?.modCache?.resists || {};
   const statusRes = defender?.statusDerived?.resistsPct || {};
-  const scalar = polarityDefScalar(defender);
   const out = [];
   for (const p of packets) {
     if (imm.has(p.type)) continue;
     const baseResist = Number(res[p.type] || 0);
     const derivedResist = Number(statusRes[p.type] || 0);
     const totalResist = Math.max(-1, Math.min(0.95, baseResist + derivedResist));
-    const amt = Math.floor(p.amount * (1 - totalResist) * scalar);
+    let amt = Math.floor(p.amount * (1 - totalResist));
+    if (Number.isFinite(polarityScalar) && polarityScalar !== 1) {
+      amt = Math.floor(amt * polarityScalar);
+    }
     if (amt > 0) out.push({ type: p.type, amount: amt });
   }
   return out;
