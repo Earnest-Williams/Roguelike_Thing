@@ -75,3 +75,11 @@ export const DEFAULT_MELEE_RANGE_TILES = 1;
 
 export const SIMPLE_PLANNER_FALLBACK_BASE_DAMAGE = 8;
 export const SIMPLE_PLANNER_FALLBACK_BASE_COOLDOWN = 2;
+
+export const POLAR_BIAS = Object.freeze({
+  order: Object.freeze({ chaos: 0.1, decay: 0.1 }),
+  growth: Object.freeze({ decay: 0.1, void: -0.05 }),
+  chaos: Object.freeze({ order: 0.1, void: -0.05 }),
+  decay: Object.freeze({ growth: 0.1, order: 0.1, void: -0.05 }),
+  void: Object.freeze({ order: -0.05, growth: -0.05, chaos: -0.05, decay: -0.05 }),
+});
