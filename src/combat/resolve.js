@@ -6,6 +6,7 @@ import { noteUseGain } from "./attunement.js";
 import { polarityOffenseScalar, polarityDefenseScalar } from "./polarity.js";
 import { clamp01 } from "../utils/number.js";
 import { consolidatedResists } from "./defense-merge.js";
+import { showAttackDebug } from "../ui/debug-panel.js";
 
 /**
  * @typedef {{ type:string, amount:number, __isBase?:boolean }} Packet
@@ -249,6 +250,10 @@ function resolveAttackCore(attacker, defender, opts = {}) {
 
   if (ctx.hooks && !Object.keys(ctx.hooks).length) {
     ctx.hooks = undefined;
+  }
+
+  if (isAttackDebugEnabled()) {
+    showAttackDebug(ctx);
   }
 
   return ctx;
@@ -734,6 +739,30 @@ function maybeEcho(attacker, defender, ctx) {
   ctx.echo = summary;
   ctx.hooks ||= Object.create(null);
   ctx.hooks.echo = summary;
+}
+
+function isAttackDebugEnabled() {
+  if (typeof globalThis === "undefined") return false;
+  const g = /** @type {any} */ (globalThis);
+  if (g.__ATTACK_DEBUG__ || g.ATTACK_DEBUG || g.DEBUG_ATTACK) {
+    return true;
+  }
+  const flags = g.DEBUG_FLAGS;
+  if (flags && (flags.attackDebug || flags.attackPackets || flags.combatAttackDebug)) {
+    return true;
+  }
+  try {
+    const ls = g.localStorage;
+    if (ls && typeof ls.getItem === "function") {
+      const value = ls.getItem("attack-debug");
+      if (value === "1" || value === "true") {
+        return true;
+      }
+    }
+  } catch {
+    // ignore storage access issues
+  }
+  return false;
 }
 
 /**
