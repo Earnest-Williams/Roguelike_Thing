@@ -28,17 +28,16 @@ export function finalAPForAction(actor, baseAP, tags = []) {
   const baseActionDelta = (temporal.baseActionAPDelta || 0) + (sd.baseActionAPDelta || 0);
   const additive = Math.max(0, base + moveDelta + castDelta + baseActionDelta);
 
-  const temporalSpeedScalar = 1 - (temporal.actionSpeedPct || 0);
-  const statusSpeedScalar = 1 - (sd.actionSpeedPct || 0);
   const temporalBaseMult = Number.isFinite(temporal.baseActionAPMult)
     ? temporal.baseActionAPMult
     : 1;
-  const temporalMoveMult = tagsArr.includes("move") && Number.isFinite(temporal.moveAPMult)
-    ? temporal.moveAPMult
-    : 1;
-  const speedScalar = Math.max(0.2, temporalSpeedScalar * statusSpeedScalar);
-
-  const totalMult = Math.max(0, temporalBaseMult * temporalMoveMult * speedScalar);
+  const temporalMoveMult =
+    tagsArr.includes("move") && Number.isFinite(temporal.moveAPMult)
+      ? temporal.moveAPMult
+      : 1;
+  const temporalSpeedScalar = 1 + (temporal.actionSpeedPct || 0);
+  const statusSpeedScalar = 1 + (sd.actionSpeedPct || 0);
+  const totalMult = Math.max(0, temporalBaseMult * temporalMoveMult * temporalSpeedScalar * statusSpeedScalar);
   const scaled = Math.max(0, Math.floor(additive * totalMult));
 
   const refundPct = Math.max(0, (temporal.recoveryPct || 0) + (sd.recoveryPct || 0));

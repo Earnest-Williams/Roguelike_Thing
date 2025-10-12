@@ -25,7 +25,7 @@ const clone = (value) => {
 
 export function resolveAttack(ctx) {
   const { attacker, defender } = ctx;
-  const tags = Array.isArray(ctx?.tags) ? ctx.tags : [];
+  const tags = ctx?.tags instanceof Set ? ctx.tags : Array.isArray(ctx?.tags) ? ctx.tags : [];
 
   if (attacker?.resources) {
     let baseCosts = ctx?.baseCosts;
