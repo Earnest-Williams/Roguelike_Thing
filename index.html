@@ -450,73 +450,63 @@
         computeTileOverlayAlpha,
         createLightOverlayContext,
       } from "./src/world/fov.js";
+      import "./src/combat/status-registry.js";
+      import {
+        STATUS_REGISTRY,
+        getStatusDefinition as getStatusDefinitionCore,
+        rebuildStatusDerived as rebuildStatusDerivedCore,
+      } from "./src/combat/status.js";
+      import { setStatusDamageAdapter } from "./src/content/statuses.js";
 
       Sound.init();
 
-      const StatusRegistry = new Map();
-
-      function registerStatus(def) {
-        if (!def || !def.id) {
-          throw new Error("registerStatus requires an id");
-        }
-        StatusRegistry.set(def.id, def);
-      }
+      setStatusDamageAdapter(({ statusId, target, amount, type, turn }) => {
+        const dmg = Math.max(0, Math.floor(Number(amount) || 0));
+        if (!target || dmg <= 0) return 0;
+        const ctx = resolveAttack({
+          attacker: { id: `status:${statusId}` },
+          defender: target,
+          turn,
+          base: 0,
+          prePackets: [{ type: type || "physical", amount: dmg }],
+          tags: ["status", statusId, "dot"],
+        });
+        return ctx?.totalDamage ?? 0;
+      });
 
       function getStatus(id) {
-        if (!StatusRegistry.has(id)) {
+        const def = getStatusDefinitionCore(id);
+        if (!def) {
           throw new Error(`Unknown status definition: ${id}`);
         }
-        return StatusRegistry.get(id);
+        return def;
       }
 
       function rebuildStatusDerivedCache(actor) {
         if (!actor) return;
-        const agg = createEmptyStatusDerivedMods();
-        const statuses = Array.isArray(actor.statuses) ? actor.statuses : [];
-        for (const st of statuses) {
-          const def = StatusRegistry.get(st.id);
-          if (!def || typeof def.derive !== "function") continue;
-          const derived = def.derive({
-            target: actor,
-            stacks: st.stacks ?? 1,
-            potency: st.potency,
-          });
-          if (!derived) continue;
-          if (typeof derived.canAct === "boolean") {
-            agg.canAct = agg.canAct && derived.canAct;
-          }
-          if (typeof derived.moveAPDelta === "number") {
-            agg.moveAPDelta += derived.moveAPDelta;
-          }
-          if (typeof derived.actionSpeedPct === "number") {
-            agg.actionSpeedPct += derived.actionSpeedPct;
-          }
-          if (typeof derived.accuracyFlat === "number") {
-            agg.accuracyFlat += derived.accuracyFlat;
-          }
-          if (typeof derived.critChancePct === "number") {
-            agg.critChancePct += derived.critChancePct;
-          }
-          if (derived.damageDealtMult) {
-            for (const [k, v] of Object.entries(derived.damageDealtMult)) {
-              if (typeof v !== "number") continue;
-              agg.damageDealtMult[k] = (agg.damageDealtMult[k] ?? 0) + v;
-            }
-          }
-          if (derived.damageTakenMult) {
-            for (const [k, v] of Object.entries(derived.damageTakenMult)) {
-              if (typeof v !== "number") continue;
-              agg.damageTakenMult[k] = (agg.damageTakenMult[k] ?? 0) + v;
-            }
-          }
-          if (derived.resistDelta) {
-            for (const [k, v] of Object.entries(derived.resistDelta)) {
-              if (typeof v !== "number") continue;
-              agg.resistDelta[k] = (agg.resistDelta[k] ?? 0) + v;
-            }
-          }
+        actor.statusDerived = rebuildStatusDerivedCore(actor);
+      }
+
+      function normalizeStackingRule(value) {
+        const raw = typeof value === "string" ? value.toLowerCase() : "";
+        switch (raw) {
+          case "refresh":
+          case STACKING_RULE.REFRESH:
+            return STACKING_RULE.REFRESH;
+          case "add":
+          case "add_stacks":
+          case STACKING_RULE.ADD_STACKS:
+            return STACKING_RULE.ADD_STACKS;
+          case "independent":
+          case STACKING_RULE.INDEPENDENT:
+            return STACKING_RULE.INDEPENDENT;
+          case "max":
+            return "max";
+          case "replace":
+            return "replace";
+          default:
+            return STACKING_RULE.ADD_STACKS;
         }
-        actor.statusDerived = agg;
       }
 
       function computeActorDelay(actor) {
@@ -567,7 +557,7 @@
         const hpBeforeTick = hasHpResource ? actor.res.hp : null;
         const expired = [];
         for (const st of actor.statuses) {
-          const def = StatusRegistry.get(st.id);
+          const def = getStatusDefinitionCore(st.id);
           if (!def) continue;
           if (def.tickEvery && st.nextTickAt != null) {
             while (turn >= st.nextTickAt) {
@@ -653,7 +643,7 @@
         };
 
         for (const a of attempts) {
-          const def = StatusRegistry.get(a.id);
+          const def = getStatusDefinitionCore(a.id);
           if (!def) continue;
 
           let p = a.baseChance ?? 0;
@@ -690,7 +680,8 @@
             ),
           );
 
-          if (def.stacking === STACKING_RULE.INDEPENDENT) {
+          const stackingMode = normalizeStackingRule(def.stacking);
+          if (stackingMode === STACKING_RULE.INDEPENDENT) {
             const inst = {
               id: a.id,
               stacks: 1,
@@ -745,13 +736,25 @@
                 stacks,
               });
             } else {
-              if (def.stacking === STACKING_RULE.REFRESH) {
+              if (stackingMode === STACKING_RULE.REFRESH) {
                 ex.endsAtTurn = Math.max(ex.endsAtTurn, turn + baseDur);
-              } else if (def.stacking === STACKING_RULE.ADD_STACKS) {
+              } else if (stackingMode === STACKING_RULE.ADD_STACKS) {
                 const addStacks = a.stacks ?? 1;
                 const maxStacks = def.maxStacks ?? 999;
                 ex.stacks = Math.min((ex.stacks ?? 1) + addStacks, maxStacks);
                 ex.endsAtTurn = Math.max(ex.endsAtTurn, turn + baseDur);
+              } else if (stackingMode === "max") {
+                const addStacks = a.stacks ?? 1;
+                const addPotency = a.potency ?? addStacks;
+                ex.stacks = Math.max(ex.stacks ?? 1, addStacks);
+                ex.potency = Math.max(ex.potency ?? addStacks, addPotency);
+                ex.endsAtTurn = Math.max(ex.endsAtTurn, turn + baseDur);
+              } else if (stackingMode === "replace") {
+                const nextStacks = a.stacks ?? 1;
+                const nextPotency = a.potency ?? nextStacks;
+                ex.stacks = nextStacks;
+                ex.potency = nextPotency;
+                ex.endsAtTurn = turn + baseDur;
               }
               D.__log?.statusApply?.(a.id, {
                 chance: p,
@@ -804,81 +807,11 @@
       }
 
       window.attachDebug = attachDebug;
-      window.StatusRegistry = StatusRegistry;
+      window.StatusRegistry = STATUS_REGISTRY;
+      window.STATUS_REGISTRY = STATUS_REGISTRY;
       window.getStatus = getStatus;
       window.applyStatuses = applyStatuses;
       window.resolveAttack = resolveAttack;
-
-      function applyStatusDamage({ statusId, target, amount, type = "physical", turn = 0 }) {
-        const dmg = Math.max(0, Math.floor(amount ?? 0));
-        if (!target || dmg <= 0) return;
-        resolveAttack({
-          attacker: { id: `status:${statusId}` },
-          defender: target,
-          turn,
-          physicalBase: 0,
-          prePackets: { [type]: dmg },
-          tags: ["status", statusId, "dot"],
-        });
-      }
-
-      registerStatus({
-        id: "burn",
-        label: "Burning",
-        harmful: true,
-        stacking: STACKING_RULE.ADD_STACKS,
-        maxStacks: 5,
-        tickEvery: 1,
-        onTick: ({ target, stacks = 1, turn }) => {
-          const dot = 1 + stacks;
-          applyStatusDamage({ statusId: "burn", target, amount: dot, type: "fire", turn });
-          target.__log?.statusTick?.("burn", { dot, stacks });
-        },
-        derive: ({ stacks = 1 }) => ({
-          damageTakenMult: { cold: -0.1, fire: 0.25 },
-        }),
-      });
-
-      registerStatus({
-        id: "poisoned",
-        label: "Poisoned",
-        harmful: true,
-        stacking: STACKING_RULE.INDEPENDENT,
-        tickEvery: 1,
-        onTick: ({ target, potency = 1, turn }) => {
-          const dot = Math.ceil(1.5 * potency);
-          applyStatusDamage({ statusId: "poisoned", target, amount: dot, type: "poison", turn });
-          target.__log?.statusTick?.("poisoned", { dot, potency });
-        },
-        onApply: () => ({ potency: 1 }),
-      });
-
-      registerStatus({
-        id: "slowed",
-        label: "Slowed",
-        harmful: true,
-        stacking: STACKING_RULE.REFRESH,
-        derive: ({ stacks = 1 }) => ({
-          actionSpeedPct: 0.1 * stacks,
-          moveAPDelta: 0.1,
-        }),
-      });
-
-      registerStatus({
-        id: "stunned",
-        label: "Stunned",
-        harmful: true,
-        stacking: STACKING_RULE.REFRESH,
-        derive: () => ({ canAct: false }),
-      });
-
-      registerStatus({
-        id: "haste",
-        label: "Haste",
-        harmful: false,
-        stacking: STACKING_RULE.REFRESH,
-        derive: ({ stacks = 1 }) => ({ actionSpeedPct: 0.15 * stacks }),
-      });
 
       const Game = (() => {
         const gameState = createInitialState();

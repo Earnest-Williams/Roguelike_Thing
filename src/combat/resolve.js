@@ -142,7 +142,7 @@ function resolveAttackCore(attacker, defender, opts = {}) {
   if (Array.isArray(opts?.conversions)) {
     conversionSources.push(...opts.conversions);
   }
-  let packets = applyConversions(ctx.prePackets, conversionSources);
+  let packets = conversionPipeline(ctx.prePackets, conversionSources);
 
   const brandSources = [];
   if (Array.isArray(attacker?.modCache?.offense?.brands)) {
@@ -416,49 +416,55 @@ function cloneStatusAttemptList(attempts) {
 }
 
 /**
- * @param {Packet[]} packets
- * @param {any[]} conversions
+ * Processes a list of damage packets through a set of conversion rules.
+ * @param {Packet[]} packets - The initial list of damage packets.
+ * @param {any[]} conversions - The list of conversion rules to apply.
+ * @returns {Packet[]} - A new, coalesced list of packets after conversions.
  */
-function applyConversions(packets, conversions) {
+function conversionPipeline(packets, conversions) {
   if (!Array.isArray(conversions) || !conversions.length) {
     return packets.map((pkt) => createPacket(pkt.type, pkt.amount, pkt.__isBase));
   }
-  const out = [];
+
+  const outputPackets = [];
+
   for (const pkt of packets) {
     const baseAmount = Math.max(0, Number(pkt?.amount) || 0);
     if (!pkt?.type || baseAmount <= 0) continue;
+
     let remaining = baseAmount;
+
     for (const conv of conversions) {
       if (!conv) continue;
-      const from = typeof conv.from === "string"
-        ? conv.from
-        : typeof conv.source === "string"
-        ? conv.source
-        : null;
+      const from = conv.from || conv.source || null;
       if (from && from !== pkt.type) continue;
       if (conv.includeBaseOnly && !pkt.__isBase) continue;
-      const pctRaw = pickNumber(conv.pct, conv.percent, conv.ratio);
-      const pct = Number(pctRaw);
+
+      const pct = pickNumber(conv.pct, conv.percent, conv.ratio);
       if (!Number.isFinite(pct) || pct <= 0) continue;
+
+      const toType = conv.to || conv.into || conv.type || null;
+      if (!toType) continue;
+
       const take = Math.floor(remaining * pct);
       if (take <= 0) continue;
-      const toType = typeof conv.to === "string"
-        ? conv.to
-        : typeof conv.into === "string"
-        ? conv.into
-        : typeof conv.type === "string"
-        ? conv.type
-        : null;
-      if (!toType) continue;
-      out.push(createPacket(String(toType), take, false));
+
+      outputPackets.push(createPacket(String(toType), take, false));
       remaining -= take;
+
       if (remaining <= 0) break;
     }
+
     if (remaining > 0) {
-      out.push(createPacket(pkt.type, remaining, pkt.__isBase));
+      outputPackets.push(createPacket(pkt.type, remaining, pkt.__isBase));
     }
   }
-  return out;
+
+  const coalesced = new Map();
+  for (const pkt of outputPackets) {
+    coalesced.set(pkt.type, (coalesced.get(pkt.type) || 0) + pkt.amount);
+  }
+  return Array.from(coalesced, ([type, amount]) => createPacket(type, amount, false));
 }
 
 /**
