@@ -85,6 +85,38 @@ function fakeActorWithRule(type, patch = {}) {
   console.log("✓ decayAttunements reduces stacks and prunes empties");
 })();
 
+(function testDecaySkipsMissingRules() {
+  const actor = fakeActorWithRule("fire", { decayPerTurn: 2 });
+  actor.attunement.stacks.cold = 5;
+  decayAttunements(actor);
+  assert.equal(actor.attunement.stacks.cold, 5);
+  console.log("✓ decayAttunements skips types without rules");
+})();
+
+(function testDecayClampsNegativeRates() {
+  const actor = fakeActorWithRule("fire", { decayPerTurn: -5 });
+  actor.attunement.stacks.fire = 4;
+  decayAttunements(actor);
+  assert.equal(actor.attunement.stacks.fire, 4);
+  console.log("✓ decayAttunements clamps negative decay rates");
+})();
+
+(function testDecayFloorsAfterSubtracting() {
+  const actor = fakeActorWithRule("fire", { decayPerTurn: 0.75 });
+  actor.attunement.stacks.fire = 5;
+  decayAttunements(actor);
+  assert.equal(actor.attunement.stacks.fire, 4);
+  console.log("✓ decayAttunements floors remaining stacks after decay");
+})();
+
+(function testDecayDropsInvalidStacks() {
+  const actor = fakeActorWithRule("fire", { decayPerTurn: 1 });
+  actor.attunement.stacks.fire = Number.NaN;
+  decayAttunements(actor);
+  assert.ok(!actor.attunement.stacks.fire);
+  console.log("✓ decayAttunements removes invalid stack entries");
+})();
+
 (function testContributeDerivedAddsPassiveBonuses() {
   const actor = fakeActorWithRule("fire", {
     maxStacks: 9,
