@@ -5,6 +5,7 @@ import { applyOnKillResourceGain } from "./resources.js";
 import { noteUseGain } from "./attunement.js";
 import { polarityOffenseScalar, polarityDefenseScalar } from "./polarity.js";
 import { clamp01 } from "../utils/number.js";
+import { consolidatedResists } from "./defense-merge.js";
 
 /**
  * @typedef {{ type:string, amount:number, __isBase?:boolean }} Packet
@@ -176,17 +177,19 @@ function resolveAttackCore(attacker, defender, opts = {}) {
   ctx.packetsAfterOffense = attachPacketAccess(packets);
 
   // ----- defense stages -----
-  const resistSources = [];
-  if (defender?.modCache?.resists) resistSources.push(defender.modCache.resists);
-  if (opts?.resists) resistSources.push(opts.resists);
-  const statusDerived = defender?.statusDerived || null;
-  if (statusDerived?.resistDelta) resistSources.push(statusDerived.resistDelta);
-  const resists = mergeResists(...resistSources);
-
   const immunities = mergeImmunities(defender, opts);
   const defenseScalar = polarityDefenseScalar(defenderForPolarity, attackerForPolarity);
   const defenseMult = Math.max(0, 1 + defenseScalar);
-  let defendedPackets = applyDefense(packets, { resists, immunities, defenseMult });
+  const extraResists = opts?.resists;
+  let defendedPackets = applyDefense(packets, {
+    defender,
+    resists: extraResists,
+    immunities,
+    defenseMult,
+    defPol: defenderForPolarity,
+    atkPol: attackerForPolarity,
+    polScalar: defenseScalar,
+  });
 
   const damageScalar = Number.isFinite(opts?.damageScalar) ? Math.max(0, Number(opts.damageScalar)) : 1;
   if (damageScalar !== 1) {
@@ -562,20 +565,23 @@ function mergeImmunities(defender, opts) {
 
 /**
  * @param {Packet[]} packets
- * @param {{ resists: Record<string, number>, immunities: Set<string>, defenseMult?: number, polScalar?: number, defPol?:any, atkPol?:any }} args
+ * @param {{ defender?: any, resists?: Record<string, number>|Record<string, number>[]|null, immunities: Set<string>, defenseMult?: number, polScalar?: number, defPol?:any, atkPol?:any }} args
  */
-function applyDefense(packets, { resists, immunities, defenseMult, polScalar, defPol, atkPol }) {
+function applyDefense(packets, { defender, resists, immunities, defenseMult, polScalar, defPol, atkPol }) {
   let mult = Number.isFinite(defenseMult) ? Number(defenseMult) : NaN;
   if (!Number.isFinite(mult)) {
     const scalar = Number.isFinite(polScalar) ? Number(polScalar) : polarityDefenseScalar(defPol, atkPol);
     mult = 1 + scalar;
   }
   const finalMult = mult > 0 ? mult : 0;
+  const baseResists = consolidatedResists(defender);
+  const resistSources = Array.isArray(resists) ? resists : [resists];
+  const mergedResists = mergeResists(baseResists, ...resistSources);
   const out = [];
   for (const pkt of packets) {
     if (!pkt?.type) continue;
     if (immunities && immunities.has(pkt.type)) continue;
-    const resist = clamp01(resists?.[pkt.type] || 0);
+    const resist = clamp01(mergedResists?.[pkt.type] || 0);
     const scaled = Math.max(0, Math.floor(pkt.amount * (1 - resist) * finalMult));
     if (scaled > 0) {
       out.push(createPacket(pkt.type, scaled, false));
