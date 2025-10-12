@@ -11,6 +11,7 @@ import {
   DEFAULT_BASE_ACTION_AP,
   DEFAULT_MELEE_RANGE_TILES,
   DEFAULT_RELOAD_TIME_TURNS,
+  DEFAULT_MARTIAL_DAMAGE_TYPE,
   HEALTH_FLOOR,
   MIN_AP_COST,
   MIN_ATTACK_DAMAGE,
@@ -74,7 +75,7 @@ export function tryAttack(attacker, defender, opts = {}) {
   const profile = {
     label: opts.label || "Basic Attack",
     base: Math.max(MIN_ATTACK_DAMAGE, opts.base ?? DEFAULT_ATTACK_BASE_DAMAGE),
-    type: String(opts.type || "physical"),
+    type: String(opts.type || DEFAULT_MARTIAL_DAMAGE_TYPE),
   };
   const ctx = {
     attacker,

@@ -25,6 +25,9 @@ import { rebuildDerived } from "./status.js";
  * @property {number} dex
  * @property {number} int
  * @property {number} vit
+ * @property {number} con
+ * @property {number} will
+ * @property {number} luck
  * @property {number} maxHP
  * @property {number} maxStamina
  * @property {number} maxMana
@@ -119,6 +122,7 @@ import { rebuildDerived } from "./status.js";
  * @typedef {Object} StatusInstance
  * @property {string} id
  * @property {number} stacks
+ * @property {number} endsAt
  * @property {number} endsAtTurn
  * @property {number} [nextTickAt]
  * @property {string} [source]
@@ -145,8 +149,25 @@ export class Actor {
     this.id = init.id;
     this.name = init.name ?? init.id;
 
+    const baseStats = init.baseStats ?? Object.create(null);
     /** @type {BaseStats} */
-    this.base = { ...init.baseStats };
+    this.base = {
+      str: Number.isFinite(baseStats.str) ? Number(baseStats.str) : 0,
+      dex: Number.isFinite(baseStats.dex) ? Number(baseStats.dex) : 0,
+      int: Number.isFinite(baseStats.int) ? Number(baseStats.int) : 0,
+      vit: Number.isFinite(baseStats.vit) ? Number(baseStats.vit) : 0,
+      con: Number.isFinite(baseStats.con) ? Number(baseStats.con) : 0,
+      will: Number.isFinite(baseStats.will) ? Number(baseStats.will) : 0,
+      luck: Number.isFinite(baseStats.luck) ? Number(baseStats.luck) : 0,
+      maxHP: Number.isFinite(baseStats.maxHP) ? Number(baseStats.maxHP) : 0,
+      maxStamina: Number.isFinite(baseStats.maxStamina)
+        ? Number(baseStats.maxStamina)
+        : 0,
+      maxMana: Number.isFinite(baseStats.maxMana) ? Number(baseStats.maxMana) : 0,
+      baseSpeed: Number.isFinite(baseStats.baseSpeed)
+        ? Number(baseStats.baseSpeed)
+        : BASE_SPEED_MULTIPLIER,
+    };
 
     /** @type {Partial<Record<string, Item|ItemStack>>} */
     this.equipment = {};

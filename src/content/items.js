@@ -1,6 +1,8 @@
 // src/content/items.js
 // @ts-check
 
+import { DAMAGE_TYPE } from "../../js/constants.js";
+
 export const ITEMS = [
   {
     id: "flame_sword",
@@ -36,7 +38,7 @@ export const ITEMS = [
     brands: [
       {
         id: "edge",
-        type: "physical",
+        type: DAMAGE_TYPE.SLASH,
         flat: 3,
       },
     ],
@@ -144,7 +146,7 @@ export const ITEMS = [
     name: "Equilibrium Halberd",
     kind: "weapon",
     equipSlot: "weapon",
-    weaponProfile: { base: [["physical", 6], ["arcane", 4]] },
+    weaponProfile: { base: [[DAMAGE_TYPE.PIERCE, 6], ["arcane", 4]] },
     brands: [
       {
         id: "gravity_well",

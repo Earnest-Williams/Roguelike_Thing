@@ -1,6 +1,7 @@
 // src/content/statuses.js
 // Canonical status definitions shared across runtime environments.
 
+import { DEFAULT_MARTIAL_DAMAGE_TYPE, DAMAGE_TYPE } from "../../js/constants.js";
 import { STATUS_BLEED_DAMAGE_PER_STACK, STATUS_BLEED_DURATION_TURNS } from "../config.js";
 
 let damageAdapter = null;
@@ -49,7 +50,10 @@ export function applyStatusDamage(payload) {
     statusId: String(payload.statusId || ""),
     target: payload.target,
     amount,
-    type: typeof payload.type === "string" && payload.type ? payload.type : "physical",
+    type:
+      typeof payload.type === "string" && payload.type
+        ? payload.type
+        : DEFAULT_MARTIAL_DAMAGE_TYPE,
     turn: Number.isFinite(payload.turn) ? Number(payload.turn) : 0,
   };
   if (damageAdapter) {
@@ -76,7 +80,13 @@ export const BLEED_STATUS_DEFINITION = {
   onTick(ctx) {
     const stacks = Math.max(1, ctx.stacks ?? 1);
     const damage = stacks * STATUS_BLEED_DAMAGE_PER_STACK;
-    const dealt = applyStatusDamage({ statusId: "bleed", target: ctx.target, amount: damage, type: "physical", turn: ctx.turn });
+    const dealt = applyStatusDamage({
+      statusId: "bleed",
+      target: ctx.target,
+      amount: damage,
+      type: DAMAGE_TYPE.PIERCE,
+      turn: ctx.turn,
+    });
     logStatusTick(ctx.target, "bleed", { stacks, damage: dealt });
   },
 };

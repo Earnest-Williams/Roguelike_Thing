@@ -1,6 +1,8 @@
 // src/ui/sound.js
 // @ts-check
 
+import { DEFAULT_MARTIAL_DAMAGE_TYPE, MARTIAL_DAMAGE_TYPES } from "../../js/constants.js";
+
 const SOUND_PARAMS = Object.freeze({
   coin: [1, , 1230, 0.02, 0.04, 0.18, 1, 1.5, 6, , , , , , , 0.1, 0.06, 0.22, 0.04, 0.5],
   sword: [1, , 200, , 0.02, 0.01, 2, 0.4, , , 50, , 0.01, , 3, , 0.02, 0.83, 0.01, 0.25],
@@ -21,6 +23,17 @@ function getZzfx() {
   if (!g) return undefined;
   const fn = g.zzfx;
   return typeof fn === "function" ? fn : undefined;
+}
+
+const MARTIAL_DAMAGE_SET = new Set(
+  Array.isArray(MARTIAL_DAMAGE_TYPES)
+    ? MARTIAL_DAMAGE_TYPES.map((t) => String(t).toLowerCase())
+    : [String(DEFAULT_MARTIAL_DAMAGE_TYPE).toLowerCase()],
+);
+
+function isMartialType(type) {
+  if (!type) return false;
+  return MARTIAL_DAMAGE_SET.has(String(type).toLowerCase());
 }
 
 let unlocked = false;
@@ -87,7 +100,7 @@ function hasNonPhysicalDamage(packets) {
   if (!packets || typeof packets !== "object") return false;
   for (const [type, value] of Object.entries(packets)) {
     if (!value) continue;
-    if (type !== "physical") return true;
+    if (!isMartialType(type)) return true;
   }
   return false;
 }
@@ -127,7 +140,7 @@ function playAttackFromPayload(payload) {
     (payload.out && payload.out.packetsAfterDefense) ||
     null;
   const profileType = typeof payload.profile?.type === "string" ? payload.profile.type : "";
-  const elemental = hasNonPhysicalDamage(packets) || (profileType && profileType !== "physical");
+  const elemental = hasNonPhysicalDamage(packets) || (profileType && !isMartialType(profileType));
 
   if (attackKind === "melee") {
     playPreset("sword");

@@ -56,13 +56,25 @@ export const FOV_TRANSFORMS = Object.freeze([
 ]);
 
 export const DAMAGE_TYPE = Object.freeze({
-  PHYSICAL: "physical",
+  SLASH: "slash",
+  PIERCE: "pierce",
+  BLUNT: "blunt",
   FIRE: "fire",
   COLD: "cold",
   LIGHTNING: "lightning",
   POISON: "poison",
   ARCANE: "arcane",
+  RADIANT: "radiant",
+  NECROTIC: "necrotic",
 });
+
+export const MARTIAL_DAMAGE_TYPES = Object.freeze([
+  DAMAGE_TYPE.SLASH,
+  DAMAGE_TYPE.PIERCE,
+  DAMAGE_TYPE.BLUNT,
+]);
+
+export const DEFAULT_MARTIAL_DAMAGE_TYPE = DAMAGE_TYPE.SLASH;
 
 export const STATUS_IDS = Object.freeze([
   "burn",

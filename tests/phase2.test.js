@@ -14,14 +14,38 @@ function assert(cond, msg) {
 
 const a = new Actor({
   id: "hero",
-  baseStats: { str: 10, dex: 10, int: 8, vit: 10, maxHP: 20, maxStamina: 10, maxMana: 5, baseSpeed: 1 },
+  baseStats: {
+    str: 10,
+    dex: 10,
+    int: 8,
+    vit: 10,
+    con: 10,
+    will: 8,
+    luck: 9,
+    maxHP: 20,
+    maxStamina: 10,
+    maxMana: 5,
+    baseSpeed: 1,
+  },
   equipment: { [SLOT.RightHand]: makeItem("long_sword") },
 });
 foldModsFromEquipment(a);
 
 const b = new Actor({
   id: "dummy",
-  baseStats: { str: 5, dex: 5, int: 5, vit: 5, maxHP: 30, maxStamina: 5, maxMana: 0, baseSpeed: 1 },
+  baseStats: {
+    str: 5,
+    dex: 5,
+    int: 5,
+    vit: 5,
+    con: 5,
+    will: 5,
+    luck: 5,
+    maxHP: 30,
+    maxStamina: 5,
+    maxMana: 0,
+    baseSpeed: 1,
+  },
 });
 foldModsFromEquipment(b);
 

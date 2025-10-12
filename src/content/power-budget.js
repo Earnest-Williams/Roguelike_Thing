@@ -14,6 +14,9 @@ export function computeItemPower(it) {
   if (Number.isFinite(stats?.dex)) add(6 * stats.dex);
   if (Number.isFinite(stats?.int)) add(6 * stats.int);
   if (Number.isFinite(stats?.vit)) add(6 * stats.vit);
+  if (Number.isFinite(stats?.con)) add(6 * stats.con);
+  if (Number.isFinite(stats?.will)) add(6 * stats.will);
+  if (Number.isFinite(stats?.luck)) add(6 * stats.luck);
 
   if (it.offense?.affinities) {
     for (const value of Object.values(it.offense.affinities)) {
