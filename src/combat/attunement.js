@@ -13,6 +13,31 @@
  * @typedef {{ rules: Record<string, AttuneRule>, stacks: Record<string, number> }} AttunementState
  */
 
+function logAttunementEvent(actor, entry) {
+  actor?.log?.push?.(entry);
+  actor?.logs?.attack?.push?.(entry);
+}
+
+/**
+ * Ensure .attunement exists and points to current rules.
+ * @param {any} actor
+ */
+export function ensureAttunement(actor) {
+  if (!actor) return;
+  if (!actor.attunement) {
+    actor.attunement = { rules: Object.create(null), stacks: Object.create(null) };
+  }
+  const cacheRules = actor.modCache?.attunementRules;
+  if (cacheRules) {
+    actor.attunement.rules = cacheRules;
+  } else if (!actor.attunement.rules) {
+    actor.attunement.rules = Object.create(null);
+  }
+  if (!actor.attunement.stacks) {
+    actor.attunement.stacks = Object.create(null);
+  }
+}
+
 /**
  * Fetch the current attunement stacks for a given damage type.
  * @param {import("./actor.js").Actor|{attunement?: {stacks?: Record<string, number>}}} actor
@@ -20,7 +45,9 @@
  */
 export function getStacks(actor, type) {
   if (!actor || typeof type !== "string") return 0;
-  return actor.attunement?.stacks?.[type] | 0;
+  ensureAttunement(actor);
+  const value = actor.attunement?.stacks?.[type];
+  return Number.isFinite(value) ? Number(value) : 0;
 }
 
 /**
@@ -31,9 +58,9 @@ export function getStacks(actor, type) {
  */
 export function setStacks(actor, type, value) {
   if (!actor || typeof type !== "string") return;
-  const attune = actor.attunement || (actor.attunement = {});
-  const stacks = attune.stacks || (attune.stacks = Object.create(null));
-  const next = Number.isFinite(value) ? (value | 0) : 0;
+  ensureAttunement(actor);
+  const stacks = actor.attunement.stacks;
+  const next = Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
   if (next <= 0) {
     delete stacks[type];
     return;
@@ -47,8 +74,56 @@ export function setStacks(actor, type, value) {
  * @param {string} type
  */
 export function ruleFor(actor, type) {
-  return actor?.attunement?.rules?.[type];
+  if (!actor || typeof type !== "string") return undefined;
+  ensureAttunement(actor);
+  return actor.attunement?.rules?.[type];
 }
+
+/**
+ * Gain stacks for a specific damage type.
+ * @param {any} actor
+ * @param {string} type
+ * @param {number} [amount]
+ */
+export function gainAttunement(actor, type, amount) {
+  if (!actor || typeof type !== "string") return;
+  ensureAttunement(actor);
+  const rule = actor.attunement.rules?.[type];
+  if (!rule) return;
+  const incRaw = Number.isFinite(amount) ? Number(amount) : Number(rule.onUseGain ?? 1);
+  const inc = Math.max(0, incRaw);
+  if (!inc) return;
+  const cur = Number(actor.attunement.stacks[type] || 0);
+  const max = Number(rule.maxStacks ?? 0);
+  const cap = max > 0 ? max : Number.POSITIVE_INFINITY;
+  const next = Math.min(cap, cur + inc);
+  if (next === cur) return;
+  actor.attunement.stacks[type] = next;
+  logAttunementEvent(actor, { kind: "attune_gain", type, stacks: next });
+}
+
+/**
+ * Decay stacks for all types at turn start.
+ * @param {any} actor
+ */
+export function decayAttunements(actor) {
+  ensureAttunement(actor);
+  const stacks = actor.attunement.stacks;
+  const rules = actor.attunement.rules;
+  for (const type of Object.keys(stacks)) {
+    const r = rules?.[type];
+    const dec = Math.max(0, Number(r?.decayPerTurn ?? 1));
+    const current = Number(stacks[type] || 0);
+    const next = Math.max(0, current - dec);
+    if (next <= 0) {
+      delete stacks[type];
+    } else {
+      stacks[type] = next;
+    }
+  }
+}
+
+export const decayPerTurn = decayAttunements;
 
 /**
  * Apply outgoing attunement scaling to packets before defenses.
@@ -57,7 +132,9 @@ export function ruleFor(actor, type) {
 export function applyOutgoingScaling(ctx) {
   const packets = Array.isArray(ctx?.packets) ? ctx.packets : null;
   const attacker = ctx?.attacker;
-  if (!packets || !attacker?.attunement?.rules) return;
+  if (!packets || !attacker) return;
+  ensureAttunement(attacker);
+  if (!attacker.attunement?.rules) return;
 
   const applied = [];
   for (const packet of packets) {
@@ -88,45 +165,9 @@ export function applyOutgoingScaling(ctx) {
  * @param {Set<string>} usedTypes
  */
 export function noteUseGain(attacker, usedTypes) {
-  if (!attacker?.attunement?.rules || !usedTypes?.size) return;
+  if (!usedTypes?.size) return;
   for (const type of usedTypes) {
-    const rule = ruleFor(attacker, type);
-    if (!rule) continue;
-    const gain = rule.onUseGain | 0;
-    if (!gain) continue;
-    const current = getStacks(attacker, type);
-    const maxStacks = rule.maxStacks | 0;
-    const cap = maxStacks > 0 ? maxStacks : Number.POSITIVE_INFINITY;
-    const next = Math.min(cap, current + gain);
-    if (next === current) continue;
-    setStacks(attacker, type, next);
-    attacker.log?.push?.({ kind: "attune_gain", type, stacks: next });
-    attacker.logs?.attack?.push?.({ kind: "attune_gain", type, stacks: next });
-  }
-}
-
-/**
- * Decay attunement stacks once per turn.
- * @param {any} actor
- */
-export function decayPerTurn(actor) {
-  const stacks = actor?.attunement?.stacks;
-  if (!stacks) return;
-  for (const [type, value] of Object.entries(stacks)) {
-    const current = value | 0;
-    if (!current) {
-      delete stacks[type];
-      continue;
-    }
-    const rule = ruleFor(actor, type);
-    if (!rule) {
-      delete stacks[type];
-      continue;
-    }
-    const decay = rule.decayPerTurn | 0;
-    if (!decay) continue;
-    const next = Math.max(0, current - decay);
-    setStacks(actor, type, next);
+    gainAttunement(attacker, type);
   }
 }
 
@@ -137,6 +178,7 @@ export function decayPerTurn(actor) {
  */
 export function contributeDerived(actor, derived) {
   if (!actor || !derived) return derived;
+  ensureAttunement(actor);
   const stacks = actor.attunement?.stacks;
   if (!stacks) return derived;
 

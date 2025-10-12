@@ -4,7 +4,7 @@ import { rebuildDerived, tickStatuses } from "./status.js";
 import { gainAP, tickCooldowns, initiativeWithTemporal } from "./time.js";
 import { updateResources, isDefeated, regenTurn } from "./resources.js";
 import { EVENT, emit } from "../ui/event-log.js";
-import { decayPerTurn } from "./attunement.js";
+import { decayAttunements } from "./attunement.js";
 import { logTurnEvt } from "./debug-log.js";
 import { tickFreeAction } from "./actor.js";
 
@@ -14,7 +14,7 @@ export function startTurn(actor) {
   if (!actor.turnFlags || typeof actor.turnFlags !== "object") {
     actor.turnFlags = { moved: false, attacked: false, channeled: false };
   }
-  decayPerTurn(actor);
+  decayAttunements(actor);
   tickStatuses(actor, actor.turn || 0);
   rebuildDerived(actor);
   logTurnEvt(actor, {
