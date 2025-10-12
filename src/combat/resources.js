@@ -129,21 +129,27 @@ export function tickResources(actor) {
   const sd = actor?.statusDerived || Object.create(null);
   const maxFlat = res.maxFlat || Object.create(null);
   const maxPct = res.maxPct || Object.create(null);
+  const sdMaxFlat = sd?.maxFlat || Object.create(null);
+  const sdMaxPct = sd?.maxPct || Object.create(null);
   const channelingBonusMap = sd?.channelingRegenPct || Object.create(null);
   const channelingActive = Boolean(res.channeling);
 
   for (const key of RESOURCE_KEYS) {
     const baseMax = baseMaxFor(actor, key);
-    const max = Math.max(0, baseMax * (1 + (maxPct[key] || 0)) + (maxFlat[key] || 0));
+    const pctBonus = (maxPct[key] || 0) + (sdMaxPct[key] || 0);
+    const flatBonus = (maxFlat[key] || 0) + (sdMaxFlat[key] || 0);
+    const max = Math.max(0, baseMax * (1 + pctBonus) + flatBonus);
     actor.max[key] = max;
     const cur = Number.isFinite(store[key]) ? Number(store[key]) : max;
     if (store.pools?.[key]) {
       store.pools[key].max = max;
     }
-    const channelingBonus = channelingActive
-      ? 1 + (Number.isFinite(channelingBonusMap[key]) ? channelingBonusMap[key] : 0.1)
-      : 1;
-    const gain = regenFor(cur, max, res, sd, key) * channelingBonus;
+    const channelingBonusPct = channelingActive
+      ? Number.isFinite(channelingBonusMap[key])
+        ? channelingBonusMap[key]
+        : 0.1
+      : 0;
+    const gain = regenFor(cur, max, res, sd, key) * (1 + channelingBonusPct);
     const next = Math.min(max, Math.max(0, cur + gain));
     store[key] = next;
     if (store.pools?.[key]) {
