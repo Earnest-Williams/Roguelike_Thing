@@ -6,17 +6,28 @@ export const AFFIX_POOLS = {
     { id:"searing",  apply:i=>addBrand(i, "fire", { flat:2, pct:0.05 }), w:3 },
     { id:"freezing", apply:i=>addBrand(i, "cold", { flat:2, pct:0.05 }), w:3 },
     { id:"crackling",apply:i=>addBrand(i, "lightning", { flat:1, pct:0.08 }), w:2 },
+    { id:"corroding", apply:i=>addBrand(i, "acid", { flat:1, pct:0.06, onHitStatuses:[{ id:"poisoned", chance:0.2, stacks:1, potency:2 }] }), w:2 },
+    { id:"venom_laced", apply:i=>addBrand(i, "toxic", { pct:0.08, onHitStatuses:[{ id:"poisoned", chance:0.35, stacks:1 }] }), w:2 },
+    { id:"radiant", apply:i=>merge(addBrand(i, "radiant", { flat:2, pct:0.05 }), { affinities:{ radiant:0.05 } }), w:1 },
+    { id:"duskforged", apply:i=>merge(addBrand(i, "void", { pct:0.05 }), { polarity:{ grant:{ void:0.1 } } }), w:1 },
+    { id:"tempestuous", apply:i=>merge(addBrand(i, "storm", { pct:0.07 }), { temporal:{ actionSpeedPct:-0.05 } }), w:2 },
+    { id:"geomantic", apply:i=>addBrand(i, "earth", { flat:3, onHitStatuses:[{ id:"slowed", chance:0.25, stacks:1, duration:2 }] }), w:1 },
+    { id:"siphoning", apply:i=>merge(addBrand(i, "blood", { pct:0.04 }), { resources:{ stamina:{ onHitGain:1 } } }), w:1 },
   ],
   suffix: [
     { id:"of_embers", apply:i=>merge(i, { affinities:{ fire:0.05 } }), w:3 },
     { id:"of_winter", apply:i=>merge(i, { resists:{ cold:0.10 } }), w:3 },
     { id:"of_swiftness", apply:i=>merge(i, { speedMult:0.95 }), w:2 },
+    { id:"of_precision", apply:i=>merge(i, { temporal:{ baseActionAPDelta:-5, actionSpeedPct:-0.02 } }), w:2 },
+    { id:"of_focus", apply:i=>merge(i, { temporal:{ cooldownPct:-0.05 }, resource:{ costMult:{ stamina:0.9 } } }), w:2 },
+    { id:"of_duality", apply:i=>merge(i, { affinities:{ fire:0.04, lightning:0.04 }, polarity:{ grant:{ order:0.05, chaos:0.05 } } }), w:1 },
+    { id:"of_vigor", apply:i=>merge(i, { resource:{ gainFlat:{ stamina:1 }, regenFlat:{ stamina:1 } } }), w:1 },
   ],
 };
 
-function addBrand(item, type, { flat=0, pct=0 }={}) {
+function addBrand(item, type, { flat=0, pct=0, ...rest }={}) {
   const arr = Array.isArray(item.brands) ? item.brands : (item.brands = []);
-  arr.push({ kind:"brand", type, flat, pct });
+  arr.push({ kind:"brand", type, flat, pct, ...rest });
   return item;
 }
 
