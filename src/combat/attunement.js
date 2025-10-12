@@ -108,15 +108,18 @@ export function gainAttunement(actor, type, amount) {
  * @param {number} [nTurns]
  */
 export function tickAttunements(actor, nTurns = 1) {
-  ensureAttunement(actor);
-  const stacks = actor.attunement?.stacks;
-  const rules = actor.attunement?.rules;
+  const attunement = actor?.attunement;
+  if (!attunement) return;
+  const stacks = attunement.stacks;
+  const rules = attunement.rules;
   if (!stacks || !rules) return;
+  if (typeof stacks !== "object" || typeof rules !== "object") return;
 
   const turns = Number(nTurns);
   if (!Number.isFinite(turns) || turns <= 0) return;
 
-  for (const [type, value] of Object.entries(stacks)) {
+  for (const type of Object.keys(stacks)) {
+    const value = stacks[type];
     const rule = rules[type];
     if (!rule) continue;
 
