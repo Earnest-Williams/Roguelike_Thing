@@ -1,7 +1,9 @@
 // tests/channeling.test.js
 // @ts-check
+import { CHANNELING_REGEN_MULT } from "../constants.js";
 import { regenTurn } from "../src/combat/resources.js";
 import { endTurn } from "../src/combat/loop.js";
+import { hasStatus } from "../src/combat/status.js";
 
 function assert(cond, msg) {
   if (!cond) throw new Error(msg);
@@ -21,8 +23,11 @@ function assert(cond, msg) {
   };
 
   endTurn(actor);
-  assert(actor.turnFlags.channeled === true, "Actor should be flagged as channeling when idle");
+  assert(hasStatus(actor, "channeling"), "Actor should gain channeling status when idle");
   regenTurn(actor);
-  assert(actor.resources.pools.stamina.cur === 5 + 2 * 1.5, "Channeling should grant +50% regen");
+  assert(
+    actor.resources.pools.stamina.cur === 5 + 2 * CHANNELING_REGEN_MULT,
+    "Channeling should grant boosted regen",
+  );
   console.log("✓ channeling regen bonus");
 })();

@@ -120,6 +120,23 @@ function ensureStatusList(target) {
   return target.statuses;
 }
 
+export function hasStatus(target, id) {
+  if (!target || !id) return false;
+  const list = Array.isArray(target.statuses) ? target.statuses : null;
+  if (!list || !list.length) return false;
+  return list.some((entry) => entry && entry.id === id);
+}
+
+export function removeStatusById(target, id) {
+  if (!target || !id) return false;
+  const list = Array.isArray(target.statuses) ? target.statuses : null;
+  if (!list || !list.length) return false;
+  const entry = list.find((s) => s && s.id === id);
+  if (!entry) return false;
+  removeStatus(target, entry);
+  return true;
+}
+
 function makeDerivedBase() {
   return {
     temporal: Object.create(null),

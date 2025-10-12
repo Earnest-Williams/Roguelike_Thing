@@ -1,6 +1,6 @@
 // src/combat/loop.js
 // @ts-check
-import { rebuildDerived, tickStatuses } from "./status.js";
+import { addStatus, hasStatus, rebuildDerived, removeStatusById, tickStatuses } from "./status.js";
 import { gainAP, tickCooldowns, initiativeWithTemporal } from "./time.js";
 import { updateResources, isDefeated, regenTurn } from "./resources.js";
 import { decayAttunements } from "./attunement.js";
@@ -14,6 +14,14 @@ export function startTurn(actor) {
   if (!actor.turnFlags || typeof actor.turnFlags !== "object") {
     actor.turnFlags = { moved: false, attacked: false, channeled: false };
   }
+  const actedLastTurn = Boolean(actor._prevTurnDidMove || actor._prevTurnDidAttack);
+  const hasChannelingStatus = hasStatus(actor, "channeling");
+  const canChannel = Boolean(actor.modCache?.resource?.channeling);
+  if ((actedLastTurn || !canChannel) && hasChannelingStatus) {
+    removeStatusById(actor, "channeling");
+  }
+  actor._turnDidMove = false;
+  actor._turnDidAttack = false;
   tickStatuses(actor, actor.turn || 0);
   rebuildDerived(actor);
   logTurnEvt(actor, {
@@ -29,12 +37,17 @@ export function endTurn(actor) {
   if (!actor.turnFlags || typeof actor.turnFlags !== "object") {
     actor.turnFlags = { moved: false, attacked: false, channeled: false };
   }
-  const canChannel = Boolean(actor.modCache?.resource?.channeling);
+  const canChannelNow = Boolean(actor.modCache?.resource?.channeling);
+  const idle = !actor._turnDidMove && !actor._turnDidAttack;
   const flags = actor.turnFlags;
-  const idle = !flags.moved && !flags.attacked;
-  flags.channeled = Boolean(canChannel && idle);
+  flags.channeled = Boolean(canChannelNow && idle);
   flags.moved = false;
   flags.attacked = false;
+  if (idle && canChannelNow) {
+    addStatus(actor, "channeling", { duration: 1, potency: 1 });
+  }
+  actor._prevTurnDidMove = Boolean(actor._turnDidMove);
+  actor._prevTurnDidAttack = Boolean(actor._turnDidAttack);
   logTurnEvt(actor, {
     phase: "end_turn",
     actorId: actor.id,

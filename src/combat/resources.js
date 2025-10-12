@@ -3,9 +3,11 @@
 
 import {
   BASE_PASSIVE_REGEN,
+  CHANNELING_REGEN_MULT,
   HEALTH_FLOOR,
   RESOURCE_FLOOR,
 } from "../../constants.js";
+import { hasStatus } from "./status.js";
 
 /**
  * @typedef {Object} ResourceState
@@ -71,11 +73,14 @@ export function updateResources(actor) {
     Math.round(hpMaxBase * (1 + (mods.maxPct?.hp ?? 0))),
   );
 
-  const hpGain = base.hp + regenFlat.hp + hpMax * (regenPct.hp ?? 0);
+  const channelingActive = hasStatus(actor, "channeling") && actor.modCache?.resource?.channeling;
+  const channelingMult = channelingActive ? CHANNELING_REGEN_MULT : 1;
+
+  const hpGain = (base.hp + regenFlat.hp + hpMax * (regenPct.hp ?? 0)) * channelingMult;
   const hpCap = hpMax || baseHP;
   pool.hp = clamp(pool.hp + hpGain, HEALTH_FLOOR, Number.isFinite(hpCap) ? hpCap : pool.hp);
 
-  const staminaGain = base.stamina + regenFlat.stamina + staminaMax * (regenPct.stamina ?? 0);
+  const staminaGain = (base.stamina + regenFlat.stamina + staminaMax * (regenPct.stamina ?? 0)) * channelingMult;
   const staminaCap = staminaMax || baseStamina;
   pool.stamina = clamp(
     pool.stamina + staminaGain,
@@ -83,7 +88,7 @@ export function updateResources(actor) {
     Number.isFinite(staminaCap) ? staminaCap : pool.stamina,
   );
 
-  const manaGain = base.mana + regenFlat.mana + manaMax * (regenPct.mana ?? 0);
+  const manaGain = (base.mana + regenFlat.mana + manaMax * (regenPct.mana ?? 0)) * channelingMult;
   const manaCap = manaMax || baseMana;
   pool.mana = clamp(
     pool.mana + manaGain,
@@ -206,8 +211,8 @@ export function spend(actor, action) {
  */
 export function regenTurn(actor) {
   if (!actor?.resources?.pools) return;
-  const channelingBonus = actor?.turnFlags?.channeled ? 0.5 : 0;
-  const mult = 1 + channelingBonus;
+  const channelingActive = hasStatus(actor, "channeling") && actor.modCache?.resource?.channeling;
+  const mult = channelingActive ? CHANNELING_REGEN_MULT : 1;
   for (const state of Object.values(actor.resources.pools)) {
     if (!state) continue;
     const gain = Number(state.regenPerTurn || 0) * mult;

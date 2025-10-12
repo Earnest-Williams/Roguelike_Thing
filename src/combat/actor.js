@@ -393,6 +393,9 @@ export function noteMoved(actor) {
     flags.moved = true;
     flags.channeled = false;
   }
+  if (actor) {
+    actor._turnDidMove = true;
+  }
   ensureFreeActionState(actor);
 }
 
@@ -401,6 +404,9 @@ export function noteAttacked(actor) {
   if (flags) {
     flags.attacked = true;
     flags.channeled = false;
+  }
+  if (actor) {
+    actor._turnDidAttack = true;
   }
 }
 

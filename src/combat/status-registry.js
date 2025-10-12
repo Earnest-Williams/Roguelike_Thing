@@ -98,3 +98,12 @@ registerStatus({
   },
 });
 
+registerStatus({
+  id: "channeling",
+  stacking: "refresh",
+  duration: 1,
+  derive() {
+    return {};
+  },
+});
+
