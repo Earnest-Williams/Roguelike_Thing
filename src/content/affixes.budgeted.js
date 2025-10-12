@@ -1,93 +1,87 @@
 // src/content/affixes.budgeted.js
 // @ts-check
-
 import { AFFIX_POOLS } from "./affixes.js";
 
-function cloneBase(def) {
-  return JSON.parse(JSON.stringify(def || {}));
-}
-
-function computeTagMultiplier(entry, weights) {
-  if (!Array.isArray(entry?.tags) || entry.tags.length === 0) {
-    return 1;
-  }
-  let multiplier = 1;
-  for (const tag of entry.tags) {
-    const factor = Number(weights?.[tag]);
-    if (Number.isFinite(factor) && factor > 0) {
-      multiplier *= factor;
-    }
-  }
-  return multiplier;
-}
-
-function pickAffix(pool, remainingBudget, weights, rng) {
-  const candidates = (pool || []).filter(
-    (entry) => Number(entry.powerCost || 0) > 0 && entry.powerCost <= remainingBudget,
-  );
-  if (candidates.length === 0) return null;
-  const weighted = candidates.map((entry) => ({
-    entry,
-    weight: Math.max(0, (entry.w || 1) * computeTagMultiplier(entry, weights)),
-  }));
-  const total = weighted.reduce((sum, item) => sum + item.weight, 0);
-  if (total <= 0) {
-    return weighted[0]?.entry ?? null;
-  }
-  let roll = Math.floor((typeof rng === "function" ? rng() : Math.random()) * total);
-  for (const item of weighted) {
-    roll -= item.weight;
-    if (roll < 0) return item.entry;
-  }
-  return weighted[weighted.length - 1]?.entry ?? null;
-}
-
 function formatAffixName(id = "") {
-  return id.replace(/_/g, " ").replace(/\b([a-z])/g, (_, ch) => ch.toUpperCase());
+  return id
+    .replace(/_/g, " ")
+    .replace(/\b([a-z])/g, (_, ch) => ch.toUpperCase());
+}
+
+function computeAffixWeight(affix, theme) {
+  let weight = Number.isFinite(affix.w) ? affix.w : 1;
+  const tagWeights = theme?.weights?.affixTags || theme?.affixTagWeights || {};
+  const tags = Array.isArray(affix.tags) ? affix.tags : [];
+  for (const tag of tags) {
+    const bonus = tagWeights[tag];
+    if (Number.isFinite(bonus)) weight += bonus;
+  }
+  return weight;
+}
+
+function pickWeighted(entries, rng) {
+  const total = entries.reduce((sum, entry) => sum + entry.weight, 0) || 1;
+  let roll = Math.floor(rng() * total);
+  for (const entry of entries) {
+    roll -= entry.weight;
+    if (roll < 0) return entry.item;
+  }
+  return entries[0]?.item || null;
 }
 
 /**
- * Apply affixes using a point-buy budget that is biased by the active theme.
- * @param {any} baseDef
+ * Applies affixes to an item while respecting a power budget.
+ *
+ * @param {Record<string, any>} baseDef
  * @param {number} budget
- * @param {{ affixTagWeights?: Record<string, number> } | null} [theme]
+ * @param {{ weights?: { affixTags?: Record<string, number> } }} [theme]
  * @param {() => number} [rng]
  */
-export function applyAffixesBudgeted(baseDef, budget, theme = null, rng = Math.random) {
-  const item = cloneBase(baseDef);
-  item.affixes = [];
-  let remaining = Math.max(0, Math.floor(Number(budget ?? 0)));
-  const weights = theme?.affixTagWeights || {};
+export function applyAffixesBudgeted(baseDef, budget = 0, theme, rng = Math.random) {
+  const random = typeof rng === "function" ? rng : Math.random;
+  const clone = JSON.parse(JSON.stringify(baseDef));
+  clone.affixes = [];
 
-  if (remaining > 0) {
-    const pickedPrefix = pickAffix(AFFIX_POOLS.prefix, remaining, weights, rng);
-    if (pickedPrefix) {
-      pickedPrefix.apply(item);
-      item.affixes.push({ slot: "prefix", id: pickedPrefix.id });
-      remaining -= pickedPrefix.powerCost;
-    }
+  let remaining = Math.max(0, Math.floor(Number(budget) || 0));
+
+  for (const slot of ["prefix", "suffix"]) {
+    if (remaining <= 0) break;
+    const pool = Array.isArray(AFFIX_POOLS[slot]) ? AFFIX_POOLS[slot] : [];
+    const affordable = pool.filter((affix) => {
+      const cost = Math.max(0, Math.floor(Number(affix.powerCost) || 0));
+      return cost <= remaining;
+    });
+    if (!affordable.length) continue;
+
+    if (random() >= 0.75) continue;
+
+    const weighted = affordable
+      .map((affix) => ({
+        item: affix,
+        weight: Math.max(0, computeAffixWeight(affix, theme)),
+      }))
+      .filter((entry) => entry.weight > 0);
+
+    if (!weighted.length) continue;
+
+    const chosen = pickWeighted(weighted, random);
+    if (!chosen || typeof chosen.apply !== "function") continue;
+
+    chosen.apply(clone);
+    clone.affixes.push({ slot, id: chosen.id });
+    const cost = Math.max(0, Math.floor(Number(chosen.powerCost) || 0));
+    remaining = Math.max(0, remaining - cost);
   }
 
-  if (remaining > 0) {
-    const pickedSuffix = pickAffix(AFFIX_POOLS.suffix, remaining, weights, rng);
-    if (pickedSuffix) {
-      pickedSuffix.apply(item);
-      item.affixes.push({ slot: "suffix", id: pickedSuffix.id });
-      remaining -= pickedSuffix.powerCost;
-    }
-  }
-
-  if (Array.isArray(item.affixes) && item.affixes.length && item.name) {
-    const prefix = item.affixes.find((a) => a.slot === "prefix");
-    const suffix = item.affixes.find((a) => a.slot === "suffix");
+  if (Array.isArray(clone.affixes) && clone.affixes.length && clone.name) {
+    const prefix = clone.affixes.find((a) => a.slot === "prefix");
+    const suffix = clone.affixes.find((a) => a.slot === "suffix");
     const parts = [];
     if (prefix) parts.push(formatAffixName(prefix.id));
     parts.push(baseDef.name || baseDef.id || "Item");
     if (suffix) parts.push(formatAffixName(suffix.id));
-    item.name = parts.filter(Boolean).join(" ");
+    clone.name = parts.filter(Boolean).join(" ");
   }
 
-  item.powerBudget = { provided: budget, spent: Math.max(0, (budget || 0) - remaining) };
-
-  return item;
+  return clone;
 }
