@@ -432,6 +432,7 @@
       import { mountDevPanel } from "./js/render/presenters.js";
       import { resolveAttack } from "./src/combat/attack.js";
       import { Sound } from "./src/ui/sound.js";
+      import { DebugOverlay } from "./src/ui/debug-overlay.js";
       import {
         FurnitureKind,
         FurnitureOrientation,
@@ -1132,6 +1133,8 @@
         const uiHooks = { simState, statusDiv, restartBtn };
 
         let devPanelMounted = false;
+        let debugOverlayMounted = false;
+        let debugOverlayInstance = null;
 
         const mapState = {
           width: 0,
@@ -5189,10 +5192,20 @@
             );
           }
           mobManager.add(newPlayer);
+          mobManager.player = newPlayer;
 
           if (!devPanelMounted && typeof document !== "undefined") {
             mountDevPanel(document.body, newPlayer);
             devPanelMounted = true;
+          }
+
+          if (!debugOverlayMounted && typeof document !== "undefined") {
+            debugOverlayInstance =
+              debugOverlayInstance ||
+              new DebugOverlay({
+                actorProvider: () => mobManager?.player || null,
+              });
+            debugOverlayMounted = true;
           }
 
           // Wearables
