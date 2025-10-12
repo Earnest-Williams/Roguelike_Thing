@@ -2,7 +2,6 @@
 // @ts-check
 import { getAttackModesForItem } from "../../js/item-system.js";
 import { resolveAttack } from "../combat/resolve.js";
-import { tryTemporalEcho, applyOnKillHaste } from "../combat/temporal.js";
 import { EVENT, emit } from "../ui/event-log.js";
 import { Sound } from "../ui/sound.js";
 import "../combat/status-registry.js";
@@ -165,7 +164,6 @@ export function performEquippedAttack(attacker, defender, weaponItem, distTiles,
   };
 
   const out = resolveAttack(ctx);
-  const echoResult = tryTemporalEcho(ctx, out);
   if (defender?.res && typeof defender.res.hp === "number") {
     defender.res.hp = Math.max(0, defender.res.hp);
   }
@@ -189,14 +187,14 @@ export function performEquippedAttack(attacker, defender, weaponItem, distTiles,
     damage: hpBefore - hpAfter,
     totalDamage: hpBefore - hpAfter,
     primaryDamage: out.totalDamage,
-    echoDamage: echoResult?.totalDamage ?? 0,
+    echoDamage: out.echo?.totalDamage ?? 0,
     hpBefore,
     hpAfter,
     packets: out.packetsAfterDefense,
     statuses: out.appliedStatuses,
     ctx,
     breakdown: null,
-    echoResult,
+    echoResult: out.echo?.result ?? null,
   };
   emit(EVENT.COMBAT, payload);
   Sound.playAttack(payload);
@@ -210,10 +208,6 @@ export function performEquippedAttack(attacker, defender, weaponItem, distTiles,
     until: now + COMBAT_ATTACK_TYPE_HINT_DURATION_MS,
   });
 
-  if (hpAfter <= 0 && hpBefore > 0) {
-    applyOnKillHaste(attacker);
-  }
-
   return {
     ...out,
     totalDamage: hpBefore - hpAfter,
@@ -223,7 +217,7 @@ export function performEquippedAttack(attacker, defender, weaponItem, distTiles,
     mode,
     damageRoll,
     attackContext: ctx,
-    echoResult,
+    echoResult: out.echo?.result ?? null,
   };
 }
 
