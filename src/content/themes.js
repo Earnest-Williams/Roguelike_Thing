@@ -1,8 +1,13 @@
 // src/content/themes.js
 // @ts-check
 
+// Default fallback for how many dungeon levels a theme should create when
+// depth-specific data does not increase the count.
 const DEFAULT_LEVEL_COUNT = 3;
 
+// Theme descriptors establish the broad fantasy of a dungeon. Each entry is a
+// weighted option with tags and optional budget modifiers that influence later
+// generation stages.
 export const DESCRIPTORS = [
   { id: "ashen_catacombs", type: "descriptor", tags: ["undead", "bone", "ember"], weight: 8 },
   { id: "sunken_ruins", type: "descriptor", tags: ["aquatic", "moss", "ancient"], weight: 6 },
@@ -12,6 +17,8 @@ export const DESCRIPTORS = [
   { id: "goblin_redoubts", type: "descriptor", tags: ["goblin", "scrap", "trap"], weight: 5, budgetModifier: 2 },
 ];
 
+// Mechanics apply gameplay twists to a descriptor. We pick from this list with
+// weights and may use the optional budgetModifier values to scale difficulty.
 export const MECHANICS = [
   { id: "haunting_resurgence", type: "mechanic", tags: ["spectral", "curse", "echo"], weight: 7, budgetModifier: 4 },
   { id: "storm_wracked", type: "mechanic", tags: ["lightning", "tempo", "charged"], weight: 6, budgetModifier: 5 },
@@ -21,6 +28,9 @@ export const MECHANICS = [
   { id: "toxic_bloom", type: "mechanic", tags: ["poison", "blight", "growth"], weight: 4 },
 ];
 
+// Choose a single element from a weighted list using the provided RNG. We fall
+// back to the first element so that generation always returns a value even if
+// the math encounters an edge case.
 function pickWeighted(list, rng) {
   const total = list.reduce((sum, entry) => sum + (entry.weight || 1), 0) || 1;
   let roll = Math.floor(rng() * total);
@@ -31,6 +41,8 @@ function pickWeighted(list, rng) {
   return list[0];
 }
 
+// Deduplicate tag lists while preserving the original ordering of the first
+// occurrence of each tag. This keeps later descriptions stable between runs.
 function uniqueTags(list = []) {
   const seen = new Set();
   const out = [];
@@ -42,6 +54,8 @@ function uniqueTags(list = []) {
   return out;
 }
 
+// Convert stored identifier strings (often snake_case) into a display ready
+// label such as "Fungal Wilds" for use in UI copy.
 function formatComponentName(id) {
   return String(id || "")
     .split(/[_-]/g)
@@ -50,6 +64,9 @@ function formatComponentName(id) {
     .join(" ");
 }
 
+// Select one or more mechanics depending on the depth. Deeper dungeons get
+// two mechanics to reinforce complexity while shallower ones receive just one.
+// We also prevent duplicate mechanics by removing choices from the pool.
 function pickMechanicsForDepth(depth, rng) {
   const mechanicCount = depth >= 5 ? 2 : 1;
   const mechanics = [];
@@ -66,6 +83,9 @@ function pickMechanicsForDepth(depth, rng) {
   return mechanics;
 }
 
+// Translate dungeon depth and component modifiers into numbers used by the
+// encounter builder. The curve tracks the starting budget, how it grows per
+// level, scaling modifiers, and an end-of-dungeon bonus.
 function buildPowerBudgetCurve(depth, components) {
   const depthLevel = Math.max(0, Math.floor(depth));
   const modifier = components.reduce((sum, component) => sum + (component.budgetModifier || 0), 0);
@@ -77,6 +97,8 @@ function buildPowerBudgetCurve(depth, components) {
   return { start, perLevel, depthScaling, finalBonus };
 }
 
+// Convert a list of tags into a frequency map. These weights are later used by
+// other systems to bias selections toward the dominant theme elements.
 function buildWeightsFromTags(tags) {
   const weights = {};
   for (const tag of tags) {
@@ -86,12 +108,17 @@ function buildWeightsFromTags(tags) {
   return weights;
 }
 
+// Gather all tags from the chosen descriptor and mechanics while ensuring the
+// list only contains unique values.
 function collectComponentTags(components) {
   return uniqueTags(
     components.flatMap((component) => Array.isArray(component.tags) ? component.tags : []),
   );
 }
 
+// Craft the final dungeon event description that ties descriptors and
+// mechanics together. This creates a narrative capstone for the generated
+// theme, combining names, descriptions, and accumulated tags.
 function buildCulminationEvent(descriptor, mechanics, tags) {
   const mechanicNames = mechanics.map((m) => formatComponentName(m.id));
   const mechanicLabel = mechanicNames.length > 0 ? mechanicNames.join(" & ") : "Unknown";
@@ -118,6 +145,8 @@ function buildCulminationEvent(descriptor, mechanics, tags) {
  * @param {() => number} [rng]
  */
 export function generateDungeonTheme(dungeonDepth = 0, rng = Math.random) {
+  // Pick core components for the theme: one descriptor plus depth-scaled
+  // mechanics. The RNG may be user supplied for deterministic generation.
   const picker = typeof rng === "function" ? rng : Math.random;
   const descriptor = pickWeighted(DESCRIPTORS, picker);
   const mechanics = pickMechanicsForDepth(dungeonDepth, picker);
@@ -125,6 +154,8 @@ export function generateDungeonTheme(dungeonDepth = 0, rng = Math.random) {
   const components = [descriptor, ...mechanics];
   const componentTags = collectComponentTags(components);
 
+  // Monster and affix tags start the same but are separated in case later
+  // systems want to mutate them independently.
   const monsterTags = [...componentTags];
   const affixTags = [...componentTags];
   const weights = {
@@ -132,11 +163,14 @@ export function generateDungeonTheme(dungeonDepth = 0, rng = Math.random) {
     affixTags: buildWeightsFromTags(affixTags),
   };
 
+  // Depth increases level count and extra mechanics add more stages to explore.
   const totalLevels = Math.max(
     1,
     DEFAULT_LEVEL_COUNT + Math.floor(Math.max(0, dungeonDepth) / 2) + (mechanics.length - 1),
   );
 
+  // Build supporting metadata for downstream systems like encounter or loot
+  // generators.
   const powerBudgetCurve = buildPowerBudgetCurve(dungeonDepth, components);
   const idComponents = [descriptor.id, ...mechanics.map((m) => m.id)];
   const id = idComponents.join("__");
@@ -159,6 +193,8 @@ export function generateDungeonTheme(dungeonDepth = 0, rng = Math.random) {
   };
 }
 
+// Helper for quick manual inspection or testing; generates multiple themes at
+// once using the same configuration options as the main generator.
 export function debugGenerateThemes(count = 5, depth = 0, rng = Math.random) {
   const themes = [];
   for (let i = 0; i < count; i += 1) {
