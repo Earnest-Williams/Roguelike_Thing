@@ -1,5 +1,6 @@
 import "./resolve-order.test.js";
 import "./status-buffduration.test.js";
+import "./status-bleed.test.js";
 import "./temporal-cooldown-tags.test.js";
 import "./attunement-gain.test.js";
 import "./attunement.test.js";
