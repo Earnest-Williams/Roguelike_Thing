@@ -1,5 +1,6 @@
 // src/combat/save.js
 // @ts-check
+import { normalizePolaritySigned } from "./polarity.js";
 
 export function serializeActor(actor) {
   if (!actor) return null;
@@ -19,7 +20,7 @@ export function serializeActor(actor) {
     attunement: { stacks: { ...(actor.attunement?.stacks || {}) } },
     resources: { pools: clonePools(actor.resources?.pools) },
     cooldowns: { ...(actor.cooldowns || {}) },
-    polarity: actor.polarity,
+    polarity: actor?.polarity ? { ...actor.polarity } : undefined,
   };
 }
 
@@ -27,7 +28,13 @@ export function hydrateActor(actor, blob) {
   if (!actor || !blob) return actor;
   actor.hp = blob.hp;
   actor.ap = blob.ap;
-  actor.polarity = blob.polarity;
+  if (blob.polarity) {
+    if (typeof actor.setPolarity === "function") {
+      actor.setPolarity(blob.polarity);
+    } else {
+      actor.polarity = normalizePolaritySigned(blob.polarity);
+    }
+  }
   actor.statuses = Array.isArray(blob.statuses) ? blob.statuses.map(s => ({ ...s })) : [];
   actor.attunement = actor.attunement || {};
   actor.attunement.stacks = { ...(blob.attunement?.stacks || {}) };

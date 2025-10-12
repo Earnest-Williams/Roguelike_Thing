@@ -10,6 +10,7 @@ import {
   MIN_TOTAL_COOLDOWN_MULTIPLIER,
   SLOT,
 } from "../../constants.js";
+import { normalizePolaritySigned } from "./polarity.js";
 import { rebuildDerived } from "./status.js";
 
 /**
@@ -55,8 +56,8 @@ import { rebuildDerived } from "./status.js";
  * @property {number} speedMult                   // < 1 faster, > 1 slower (AP)
  * @property {Array<Object>} brands               // normalized brand mods on the actor
  * @property {Record<string, any>} attunementRules
- * @property {{ conversions: any[], brandAdds: any[], affinities: Record<string, number>, polarity: { onHitBias: Record<string, number> } }} offense
- * @property {{ resists: Record<string, number>, immunities: Set<string>, polarity: { defenseBias: Record<string, number> } }} defense
+ * @property {{ conversions: any[], brandAdds: any[], affinities: Record<string, number>, polarity: { grant: Record<string, number>, onHitBias: Record<string, number> } }} offense
+ * @property {{ resists: Record<string, number>, immunities: Set<string>, polarity: { grant: Record<string, number>, defenseBias: Record<string, number> } }} defense
  * @property {{
  *   actionSpeedPct: number,
  *   moveAPDelta: number,
@@ -157,6 +158,21 @@ export class Actor {
     /** @type {import("./status.js").StatusDerived} */
     this.statusDerived = rebuildDerived(this);
 
+    /**
+     * Baseline signed polarity vector (-1..+1 per axis).
+     * @type {{ order: number, growth: number, chaos: number, decay: number, void: number }}
+     */
+    this.polarity = {
+      order: 0,
+      growth: 0,
+      chaos: 0,
+      decay: 0,
+      void: 0,
+    };
+    this.polarityRaw = { ...this.polarity };
+    this.polarityEffective = { ...this.polarity };
+    this.polarityVector = this.polarityEffective;
+
     /** @type {ModCache} */
     this.modCache = {
       resists: Object.create(null),
@@ -171,12 +187,12 @@ export class Actor {
         brandAdds: [],
         brands: [],
         affinities: Object.create(null),
-        polarity: { grant: Object.create(null), onHitBias: {} },
+        polarity: { grant: Object.create(null), onHitBias: Object.create(null) },
       },
       defense: {
         resists: Object.create(null),
         immunities: new Set(),
-        polarity: { grant: Object.create(null), defenseBias: {} },
+        polarity: { grant: Object.create(null), defenseBias: Object.create(null) },
       },
       temporal: {
         actionSpeedPct: 0,
@@ -230,7 +246,11 @@ export class Actor {
         freeActionCooldown: 0,
         freeActionPurge: false,
       },
-      polarity: { grant: Object.create(null) },
+      polarity: {
+        grant: Object.create(null),
+        onHitBias: Object.create(null),
+        defenseBias: Object.create(null),
+      },
     };
 
     // Track per-type attunement runtime state (rules + live stacks).
@@ -374,8 +394,45 @@ export class Actor {
     delete this.equipment[slot];
     return it;
   }
+
+  /**
+   * Set the actor's baseline polarity vector (signed, normalized) and optionally
+   * configure built-in polarity bias hooks for offense/defense calculations.
+   * @param {(
+   *   Partial<Record<"order"|"growth"|"chaos"|"decay"|"void", number>> & {
+   *     onHitBias?: Partial<Record<"order"|"growth"|"chaos"|"decay"|"void"|"all", number>>;
+   *     defenseBias?: Partial<Record<"order"|"growth"|"chaos"|"decay"|"void"|"all", number>>;
+   *   }
+   * )} config
+   */
+  setPolarity(config) {
+    const { onHitBias, defenseBias, ...vec } = config ?? {};
+    this.polarity = normalizePolaritySigned(vec);
+    this.polarityRaw = { ...this.polarity };
+    this.polarityEffective = { ...this.polarity };
+    this.polarityVector = this.polarityEffective;
+
+    if (onHitBias && this.modCache?.offense?.polarity?.onHitBias) {
+      const bias = this.modCache.offense.polarity.onHitBias;
+      clearAndAssign(bias, onHitBias);
+    }
+
+    if (defenseBias && this.modCache?.defense?.polarity?.defenseBias) {
+      const bias = this.modCache.defense.polarity.defenseBias;
+      clearAndAssign(bias, defenseBias);
+    }
+  }
 }
 
+/**
+ * Helper to clear all keys from target and assign properties from source.
+ * @param {Object} target
+ * @param {Object} source
+ */
+function clearAndAssign(target, source) {
+  for (const key of Object.keys(target)) delete target[key];
+  Object.assign(target, source);
+}
 function ensureTurnFlags(actor) {
   if (!actor) return { moved: false, attacked: false, channeled: false };
   if (!actor.turnFlags || typeof actor.turnFlags !== "object") {

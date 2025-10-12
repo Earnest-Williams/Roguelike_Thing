@@ -2,7 +2,7 @@
 // @ts-check
 import { COMBAT_RESIST_MAX, COMBAT_RESIST_MIN } from "../config.js";
 import { rebuildDerived } from "./status.js";
-import { normalizePolarity } from "./polarity.js";
+import { normalizePolaritySigned } from "./polarity.js";
 
 const SLOT_RULES = {
   offhand: ["parryPct"],
@@ -52,6 +52,9 @@ function mergeRecord(into, add) {
   }
 }
 
+const POLAR_AXES = ["order", "growth", "chaos", "decay", "void"]; // allow "all" separately
+const POLAR_AXES_SET = new Set(POLAR_AXES);
+
 /**
  * Merge polarity bias style maps additively.
  * @param {Record<string, number>} into
@@ -60,7 +63,9 @@ function mergeRecord(into, add) {
 function mergePolarity(into, add) {
   if (!add) return;
   for (const key of Object.keys(add)) {
-    const amount = Number(add[key]) || 0;
+    if (key !== "all" && !POLAR_AXES_SET.has(key)) continue;
+    const amount = Number(add[key]);
+    if (!Number.isFinite(amount) || amount === 0) continue;
     into[key] = (into[key] || 0) + amount;
   }
 }
@@ -976,13 +981,13 @@ export function foldModsFromEquipment(actor) {
       conversions: [],
       brandAdds: [],
       affinities: Object.create(null),
-      polarity: { grant: Object.create(null), onHitBias: {} },
+      polarity: { grant: Object.create(null), onHitBias: Object.create(null) },
     },
     defense: {
       resists: Object.create(null),
       immunities: new Set(),
       flatDR: Object.create(null),
-      polarity: { grant: Object.create(null), defenseBias: {} },
+      polarity: { grant: Object.create(null), defenseBias: Object.create(null) },
     },
     temporal: {
       actionSpeedPct: 0,
@@ -1039,13 +1044,15 @@ export function foldModsFromEquipment(actor) {
     },
     polarity: {
       grant: Object.create(null),
-      onHitBias: {},
-      defenseBias: {},
+      onHitBias: Object.create(null),
+      defenseBias: Object.create(null),
     },
   };
 
-  actor.polarityRaw = Object.create(null);
-  actor.polarity = actor.polarity || Object.create(null);
+  if (typeof actor.setPolarity === "function") {
+    actor.setPolarity(actor.polarity);
+  }
+  actor.polarityRaw = { ...(actor.polarity || Object.create(null)) };
 
   const equipment = actor.equipment || {};
   const sortedSlots = Object.keys(equipment).sort((a, b) =>
@@ -1454,9 +1461,15 @@ export function foldModsFromEquipment(actor) {
     }
   }
 
-  actor.polarityRaw = { ...mc.polarity.grant };
-  actor.polarity = normalizePolarity(mc.polarity.grant);
-  actor.polarityVector = actor.polarity;
+  const combinedPolarity = Object.create(null);
+  for (const axis of POLAR_AXES) {
+    const base = Number(actor.polarity?.[axis] || 0);
+    const grant = Number(mc.polarity.grant?.[axis] || 0);
+    combinedPolarity[axis] = base + grant;
+  }
+  actor.polarityRaw = combinedPolarity;
+  actor.polarityEffective = normalizePolaritySigned(combinedPolarity);
+  actor.polarityVector = actor.polarityEffective;
   mc.offense.polarity.grant = { ...mc.polarity.grant };
   mc.defense.polarity.grant = { ...mc.polarity.grant };
   mc.statusInteraction = mc.status;
