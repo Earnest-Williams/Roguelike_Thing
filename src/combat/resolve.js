@@ -235,7 +235,17 @@ function resolveAttackCore(attacker, defender, opts = {}) {
 
   maybeApplyOnKillHaste(attacker, killed, ctx);
   maybeEcho(attacker, defender, ctx);
-  tickAttunementsAfterHit(attacker, defendedPackets.map((pkt) => pkt.type));
+
+  const dealtTypes = [];
+  for (const pkt of defendedPackets) {
+    if (!pkt || typeof pkt.type !== "string" || !pkt.type) continue;
+    const amount = Number(pkt.amount);
+    if (!Number.isFinite(amount) || amount <= 0) continue;
+    dealtTypes.push(pkt.type);
+  }
+  if (dealtTypes.length) {
+    noteUseGain(attacker, dealtTypes);
+  }
 
   if (ctx.hooks && !Object.keys(ctx.hooks).length) {
     ctx.hooks = undefined;
@@ -730,18 +740,6 @@ function maybeEcho(attacker, defender, ctx) {
  * @param {any} attacker
  * @param {string[]} types
  */
-function tickAttunementsAfterHit(attacker, types) {
-  if (!attacker || !Array.isArray(types) || !types.length) return;
-  const used = new Set();
-  for (const type of types) {
-    if (typeof type === "string" && type) {
-      used.add(type);
-    }
-  }
-  if (!used.size) return;
-  noteUseGain(attacker, used);
-}
-
 /**
  * @param {...any} values
  */
