@@ -131,6 +131,7 @@ import { rebuildDerived } from "./status.js";
  * @property {string} [name]
  * @property {BaseStats} baseStats
  * @property {Partial<Record<keyof typeof SLOT, Item|ItemStack>>} [equipment]
+ * @property {string[]} [actions]
  */
 
 /**
@@ -155,6 +156,9 @@ export class Actor {
 
     /** @type {StatusInstance[]} */
     this.statuses = [];
+
+    /** @type {string[]} */
+    this.actions = Array.isArray(init.actions) ? init.actions.slice() : [];
 
     /** @type {import("./status.js").StatusDerived} */
     this.statusDerived = rebuildDerived(this);
@@ -488,3 +492,4 @@ export function tickFreeAction(actor) {
     fa.ready = true;
   }
 }
+

@@ -45,7 +45,13 @@ export function createActorFromTemplate(tid) {
       if (slot) equipment[slot] = it;
     }
   }
-  const a = new Actor({ id: t.id, name: t.name, baseStats: t.baseStats, equipment });
+  const a = new Actor({
+    id: t.id,
+    name: t.name,
+    baseStats: t.baseStats,
+    equipment,
+    actions: Array.isArray(t.actions) ? t.actions : undefined,
+  });
   // merge innate payloads (affinities/resists/brands) by pretending they are “items” in a virtual slot
   if (t.innate) {
     const pseudo = { id: `${t.id}#innate`, ...t.innate };

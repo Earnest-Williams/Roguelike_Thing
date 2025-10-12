@@ -434,6 +434,8 @@
       import { resolveAttack } from "./src/combat/attack.js";
       import { Sound } from "./src/ui/sound.js";
       import { DebugOverlay } from "./src/ui/debug-overlay.js";
+      import { emit, EVENT } from "./src/ui/event-log.js";
+      import { UIManager } from "./src/ui/UIManager.js";
       import {
         FurnitureKind,
         FurnitureOrientation,
@@ -517,7 +519,7 @@
         return delay > 0 ? delay : 0.1;
       }
 
-      function handleDeath(gameCtx, actor, ui = null) {
+      function handleDeath(gameCtx, actor) {
         if (!actor || actor.hp > 0) return false;
         if (actor.__dead) return true;
         actor.__dead = true;
@@ -527,19 +529,19 @@
           manager.removeById(actor.id);
         }
 
-        if (actor.kind === "player" && ui) {
-          clearTimeout(ui.simState?.timeout);
-          if (ui.simState) {
-            ui.simState.timeout = null;
-            ui.simState.loopFn = null;
-            ui.simState.isPaused = true;
+        if (actor.kind === "player") {
+          const sim = gameCtx?.state?.sim;
+          if (sim) {
+            clearTimeout(sim.timeout);
+            sim.timeout = null;
+            sim.loopFn = null;
+            sim.isPaused = true;
           }
-          if (ui.statusDiv) {
-            ui.statusDiv.textContent = "You died";
-          }
-          if (ui.restartBtn) {
-            ui.restartBtn.style.display = "block";
-          }
+          emit(EVENT.STATUS, {
+            message: "You died",
+            restartVisible: true,
+            paused: true,
+          });
         }
 
         return true;
@@ -574,7 +576,7 @@
                 potency: st.potency,
               });
               st.nextTickAt += def.tickEvery;
-              if (gameCtx && handleDeath(gameCtx, actor, gameCtx.ui)) {
+              if (gameCtx && handleDeath(gameCtx, actor)) {
                 return;
               }
             }
@@ -840,6 +842,16 @@
         const containerEl =
           (gameState.ui.container = document.getElementById("container"));
 
+        const uiManager = new UIManager({
+          status: statusDiv,
+          restartButton: restartBtn,
+          pauseIndicator,
+          speedValue,
+          equipmentSlots: equipmentSlotsDiv,
+          inventorySlots: inventorySlotsDiv,
+        });
+        gameState.ui.manager = uiManager;
+
         const canvasRenderer = canvas ? new CanvasRenderer(canvas) : null;
         gameState.render.canvasRenderer = canvasRenderer;
         const renderController = canvasRenderer
@@ -872,8 +884,6 @@
         simState.speed = CONFIG.ai.ticksPerSecond;
         simState.isReady = false;
         simState.turnCounter = 0;
-
-        const uiHooks = { simState, statusDiv, restartBtn };
 
         const debugState = gameState.debug;
         let devPanelMounted = debugState.devPanelMounted;
@@ -1538,7 +1548,7 @@
               }
               if (m.kind === "player") continue;
 
-              if (handleDeath(gameCtx, m, gameCtx?.ui)) {
+              if (handleDeath(gameCtx, m)) {
                 startIndex.delete(startKey);
                 continue;
               }
@@ -1550,7 +1560,7 @@
                 continue;
               }
 
-              if (handleDeath(gameCtx, m, gameCtx?.ui)) {
+              if (handleDeath(gameCtx, m)) {
                 startIndex.delete(startKey);
                 continue;
               }
@@ -3611,17 +3621,6 @@
         }
         // --- UI & RENDER FUNCTIONS ---
         function setupDOM() {
-          equipmentSlotsDiv.innerHTML = "";
-          inventorySlotsDiv.innerHTML = "";
-          ALL_SLOTS_ORDER.forEach((slotName) => {
-            const slot = document.createElement("div");
-            slot.classList.add("slot");
-            slot.id = `equip-${slotName}`;
-            slot.dataset.slot = slotName;
-            const label = labelForSlot(slotName);
-            slot.innerHTML = `<div class="slot-label">${label}</div><div class="slot-item"></div>`;
-            equipmentSlotsDiv.appendChild(slot);
-          });
           const inventory = player?.inventory;
           const capacity =
             typeof inventory?.capacitySlots === "number"
@@ -3631,12 +3630,8 @@
             ? inventory.stacks.length
             : 0;
           const invCapacity = Math.max(capacity, stackLength);
-          for (let i = 0; i < invCapacity; i++) {
-            const slot = document.createElement("div");
-            slot.classList.add("slot");
-            slot.id = `inv-${i}`;
-            inventorySlotsDiv.appendChild(slot);
-          }
+          uiManager.setupEquipmentSlots(ALL_SLOTS_ORDER, labelForSlot);
+          uiManager.setupInventorySlots(invCapacity);
           updateResponsiveLayout(false);
         }
 
@@ -3656,59 +3651,17 @@
           return tooltipForItem(stack.item);
         }
 
-        function updateSlotElement(
-          slotEl,
-          { item = null, stack = null, emptyText = "-", clearWhenEmpty = false } = {},
-        ) {
-          if (!slotEl) return;
-
-          const itemDiv = slotEl.querySelector(".slot-item");
-          let textContent = emptyText;
-          let title = "";
-
-          if (stack) {
-            textContent = `${stack.name}${
-              stack.item?.stackable ? ` ×${stack.qty}` : ""
-            }`;
-            title = tooltipForStack(stack);
-          } else if (item) {
-            textContent = item.name ?? emptyText;
-            title = tooltipForItem(item);
-          }
-
-          if (stack || item || !clearWhenEmpty) {
-            if (itemDiv) {
-              itemDiv.textContent = textContent;
-            } else {
-              slotEl.innerHTML = `<div class="slot-item">${textContent}</div>`;
-            }
-          } else if (clearWhenEmpty) {
-            slotEl.innerHTML = "";
-          }
-
-          if (title) {
-            slotEl.title = title;
-          } else {
-            slotEl.removeAttribute("title");
-          }
-        }
-
         function renderUI() {
-          for (const slotName of ALL_SLOTS_ORDER) {
-            const slotEl = document.getElementById(`equip-${slotName}`);
-            const it = player.equipment.get(slotName);
-            updateSlotElement(slotEl, { item: it, emptyText: "-" });
-          }
-          for (let i = 0; i < player.inventory.capacitySlots; i++) {
-            const slotEl = document.getElementById(`inv-${i}`);
-            if (!slotEl) break;
-            const st = player.inventory.stacks[i];
-            updateSlotElement(slotEl, {
-              stack: st,
-              emptyText: "",
-              clearWhenEmpty: true,
-            });
-          }
+          uiManager.renderEquipment({
+            slotOrder: ALL_SLOTS_ORDER,
+            getItem: (slotName) => player.equipment.get(slotName),
+            tooltipForItem,
+          });
+          uiManager.renderInventory({
+            stacks: player.inventory.stacks,
+            capacity: player.inventory.capacitySlots,
+            tooltipForStack,
+          });
         }
 
         function calculateViewportTransform(playerPos) {
@@ -4452,8 +4405,7 @@
           hasPrevPlayerPos = state.hasPrevPlayerPos;
           currentEndPos = state.currentEndPos;
           initRetries = state.initRetries;
-          statusDiv.textContent = "AI exploring...";
-          restartBtn.style.display = "none";
+          emit(EVENT.STATUS, { message: "AI exploring...", restartVisible: false });
           player.x = startPos.x;
           player.y = startPos.y;
           player.nextActAt = 0;
@@ -4479,7 +4431,6 @@
             player,
             mobManager,
             maze: mapState.grid,
-            ui: uiHooks,
             state,
           };
 
@@ -4657,8 +4608,10 @@
               clearTimeout(simState.timeout);
               simState.timeout = null;
               simState.loopFn = null;
-              statusDiv.textContent = "AI is trapped!";
-              restartBtn.style.display = "block";
+              emit(EVENT.STATUS, {
+                message: "AI is trapped!",
+                restartVisible: true,
+              });
               return { ended: true };
             }
 
@@ -4721,19 +4674,19 @@
           function gameLoop() {
             clearTimeout(simState.timeout);
             if (!simState.isPaused) {
-              if (handleDeath(gameCtx, player, gameCtx.ui)) {
+              if (handleDeath(gameCtx, player)) {
                 return;
               }
 
               const turn = ++simState.turnCounter;
               tickStatusesAtTurnStart(player, turn, gameCtx);
-              if (handleDeath(gameCtx, player, gameCtx.ui)) {
+              if (handleDeath(gameCtx, player)) {
                 return;
               }
               if (mobManager) {
                 mobManager.tick(gameCtx, turn);
               }
-              if (handleDeath(gameCtx, player, gameCtx.ui)) {
+              if (handleDeath(gameCtx, player)) {
                 return;
               }
               const currentPlayerX = player.x;
@@ -4744,9 +4697,8 @@
               simState.timeout = null;
               simState.loopFn = null;
               Sound.playDoor();
-              statusDiv.textContent = "Exit found!";
+              emit(EVENT.STATUS, { message: "Exit found!", restartVisible: true });
               renderScene();
-              restartBtn.style.display = "block";
               return;
             }
 
@@ -4781,25 +4733,23 @@
       }
         function togglePause() {
           simState.isPaused = !simState.isPaused;
-          if (simState.isPaused) {
-            pauseIndicator.textContent = "PAUSED";
-          } else {
-            pauseIndicator.textContent = "";
-            if (typeof simState.loopFn === "function") {
-              simState.timeout = setTimeout(
-                simState.loopFn,
-                1000 / simState.speed,
-              ); // Resume the loop
-            }
+          emit(EVENT.STATUS, { paused: simState.isPaused });
+          if (!simState.isPaused && typeof simState.loopFn === "function") {
+            simState.timeout = setTimeout(
+              simState.loopFn,
+              1000 / simState.speed,
+            ); // Resume the loop
           }
         }
         function resetSimulationStateForInit() {
           clearTimeout(simState.timeout);
           simState.loopFn = null;
           simState.isPaused = false;
-          pauseIndicator.textContent = "";
-          statusDiv.textContent = "Generating dungeon...";
-          restartBtn.style.display = "none";
+          emit(EVENT.STATUS, {
+            paused: false,
+            restartVisible: false,
+            message: "Generating dungeon...",
+          });
           currentEndPos = null;
           gameState.currentEndPos = currentEndPos;
           hasPrevPlayerPos = false;
@@ -4903,7 +4853,7 @@
         }
 
         function generateAndValidateDungeon() {
-          statusDiv.textContent = "Generating dungeon...";
+          emit(EVENT.STATUS, { message: "Generating dungeon...", restartVisible: false });
           const dungeonData = generateDungeon();
           if (!dungeonData) {
             return { success: false, reason: "generation" };
@@ -4931,13 +4881,18 @@
 
         function handleDungeonFailure(reason) {
           if (reason === "generation") {
-            statusDiv.textContent = "Map generation failed, retrying...";
+            emit(EVENT.STATUS, {
+              message: "Map generation failed, retrying...",
+              restartVisible: false,
+            });
             initRetries++;
             gameState.initRetries = initRetries;
             setTimeout(startNewSimulation, 100);
           } else if (reason === "connectivity") {
-            statusDiv.textContent =
-              "Map is not fully connected, regenerating...";
+            emit(EVENT.STATUS, {
+              message: "Map is not fully connected, regenerating...",
+              restartVisible: false,
+            });
             initRetries++;
             gameState.initRetries = initRetries;
             setTimeout(startNewSimulation, 50);
@@ -5003,8 +4958,10 @@
 
         function startNewSimulation() {
           if (initRetries > MAX_INIT_RETRIES) {
-            statusDiv.textContent =
-              "Fatal Error: Map generation failed repeatedly.";
+            emit(EVENT.STATUS, {
+              message: "Fatal Error: Map generation failed repeatedly.",
+              restartVisible: true,
+            });
             console.error("Map generation failed after multiple retries.");
             return;
           }
@@ -5035,11 +4992,11 @@
         function bootstrap() {
           const ticksPerSecond = CONFIG.ai.ticksPerSecond;
           speedSlider.value = ticksPerSecond;
-          speedValue.textContent = `${ticksPerSecond} tps`;
+          emit(EVENT.STATUS, { speed: ticksPerSecond });
           restartBtn.addEventListener("click", startNewSimulation);
           speedSlider.addEventListener("input", (e) => {
             simState.speed = parseInt(e.target.value, 10);
-            speedValue.textContent = `${simState.speed} tps`;
+            emit(EVENT.STATUS, { speed: simState.speed });
           });
           window.addEventListener("resize", handleResize);
           window.addEventListener("keydown", (e) => {
