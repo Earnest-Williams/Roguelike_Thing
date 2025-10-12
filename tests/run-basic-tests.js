@@ -7,6 +7,7 @@ import "./attunement.test.js";
 import "./temporal-echo-haste.test.js";
 import "./channeling-regen.test.js";
 import "./affixes-items.test.js";
+import "./items-brand-catalog.test.js";
 import "./fov.test.js";
 
 import { strict as assert } from "node:assert";
