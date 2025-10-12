@@ -74,8 +74,8 @@ import "./src/combat/status-registry.js";
 import {
   STATUS_REGISTRY,
   applyStatuses,
-  getStatusDefinition as getStatusDefinitionCore,
-  rebuildStatusDerived as rebuildStatusDerivedCore,
+  getStatusDefinitionCore,
+  rebuildStatusDerivedCore,
   tickStatusesAtTurnStart,
 } from "./src/combat/status.js";
 import { setStatusDamageAdapter } from "./src/content/statuses.js";
