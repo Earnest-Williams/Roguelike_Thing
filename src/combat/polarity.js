@@ -128,6 +128,16 @@ export function polarityOffenseScalar(attackerOrPolarity, defender = null, cap =
     const mult = polarityOffenseMult(attackerOrPolarity, defender, cap);
     return clamp(mult - 1, -cap, cap);
   }
+
+  if (attackerOrPolarity && typeof attackerOrPolarity === "object") {
+    const grant = attackerOrPolarity.grant;
+    if (grant && typeof grant === "object") {
+      const sum = Object.values(grant).reduce((acc, value) => acc + (Number(value) || 0), 0);
+      const scalar = clamp(sum * 0.1, 0, Math.min(0.15, cap));
+      return clamp(scalar, -cap, cap);
+    }
+  }
+
   const attacker = {
     polarity: attackerOrPolarity || Object.create(null),
     modCache: { offense: { polarity: { grant: Object.create(null), onHitBias: Object.create(null) } } },
@@ -151,6 +161,35 @@ export function polarityDefenseScalar(defenderOrPolarity, attacker = null, cap =
     const mult = polarityDefenseMult(defenderOrPolarity, attacker, cap);
     return clamp(mult - 1, -cap, cap);
   }
+
+  if (defenderOrPolarity && typeof defenderOrPolarity === "object") {
+    const defenseBias = defenderOrPolarity.defenseBias;
+    if (defenseBias && typeof defenseBias === "object") {
+      const baseBias = Number(defenseBias.baseResistPct) || 0;
+      const vs = defenseBias.vs && typeof defenseBias.vs === "object" ? defenseBias.vs : null;
+      let opposed = 0;
+      if (vs) {
+        const attackGrant = attacker && typeof attacker === "object" && attacker.grant && typeof attacker.grant === "object"
+          ? attacker.grant
+          : null;
+        const attackPolarity = !attackGrant && attacker && typeof attacker === "object" && attacker.polarity && typeof attacker.polarity === "object"
+          ? attacker.polarity
+          : null;
+        let hasOpposition = false;
+        if (attackGrant) {
+          hasOpposition = Object.keys(vs).some((axis) => vs[axis] && (Number(attackGrant[axis]) || 0) > 0);
+        } else if (attackPolarity) {
+          hasOpposition = Object.keys(vs).some((axis) => vs[axis] && (Number(attackPolarity[axis]) || 0) > 0);
+        } else {
+          hasOpposition = Object.values(vs).some(Boolean);
+        }
+        opposed = hasOpposition ? 0.05 : 0;
+      }
+      const scalar = clamp(baseBias + opposed, 0, Math.min(0.2, cap));
+      return clamp(scalar, -cap, cap);
+    }
+  }
+
   const defender = {
     polarity: defenderOrPolarity || Object.create(null),
     modCache: { defense: { polarity: { grant: Object.create(null), defenseBias: Object.create(null) } } },
