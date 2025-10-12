@@ -1,4 +1,5 @@
 import { strict as assert } from "node:assert";
+import { DAMAGE_TYPE } from "../js/constants.js";
 import { Actor } from "../src/combat/actor.js";
 import { resolveAttack } from "../src/combat/resolve.js";
 
@@ -10,6 +11,9 @@ function createBasicActors() {
       dex: 10,
       int: 10,
       vit: 10,
+      con: 10,
+      will: 10,
+      luck: 10,
       maxHP: 20,
       maxStamina: 10,
       maxMana: 5,
@@ -23,6 +27,9 @@ function createBasicActors() {
       dex: 5,
       int: 5,
       vit: 5,
+      con: 5,
+      will: 5,
+      luck: 5,
       maxHP: 12,
       maxStamina: 5,
       maxMana: 5,
@@ -44,7 +51,7 @@ function createBasicActors() {
   const result = resolveAttack({
     attacker,
     defender,
-    packets: [{ type: "physical", amount: 10 }],
+    packets: [{ type: DAMAGE_TYPE.SLASH, amount: 10 }],
   });
 
   assert.ok(result.echo?.triggered, "echo should trigger");
@@ -73,7 +80,7 @@ function createBasicActors() {
   resolveAttack({
     attacker,
     defender,
-    packets: [{ type: "physical", amount: 8 }],
+    packets: [{ type: DAMAGE_TYPE.SLASH, amount: 8 }],
   });
 
   const haste = attacker.statuses.find((s) => s.id === "haste");
@@ -90,6 +97,9 @@ function createBasicActors() {
       dex: 10,
       int: 10,
       vit: 10,
+      con: 10,
+      will: 10,
+      luck: 10,
       maxHP: 20,
       maxStamina: 10,
       maxMana: 5,
@@ -112,6 +122,9 @@ function createBasicActors() {
         dex: 1,
         int: 1,
         vit: 1,
+        con: 1,
+        will: 1,
+        luck: 1,
         maxHP: 5,
         maxStamina: 1,
         maxMana: 1,
@@ -121,7 +134,7 @@ function createBasicActors() {
     resolveAttack({
       attacker,
       defender,
-      packets: [{ type: "physical", amount: 10 }],
+      packets: [{ type: DAMAGE_TYPE.SLASH, amount: 10 }],
     });
     const haste = attacker.statuses.find((s) => s.id === "haste");
     return haste ? haste.stacks : 0;
@@ -147,7 +160,7 @@ function createBasicActors() {
   resolveAttack({
     attacker,
     defender,
-    packets: [{ type: "physical", amount: 4 }],
+    packets: [{ type: DAMAGE_TYPE.SLASH, amount: 4 }],
     statusAttempts: [{ id: "burning", baseChance: 1, duration: 2, stacks: 1 }],
   });
 
@@ -173,7 +186,7 @@ function createBasicActors() {
   resolveAttack({
     attacker,
     defender,
-    packets: [{ type: "physical", amount: 4 }],
+    packets: [{ type: DAMAGE_TYPE.SLASH, amount: 4 }],
     statusAttempts: [{ id: "burning", baseChance: 1, duration: 2, stacks: 1 }],
   });
 

@@ -252,6 +252,7 @@ export function addStatus(target, id, opts = {}) {
       potency,
       nextTickAt: def.tickEvery ? now + def.tickEvery : now,
       endsAt: nextEndsAt,
+      endsAtTurn: nextEndsAt,
       source: opts.source,
     };
     list.push(entry);
@@ -290,6 +291,7 @@ export function addStatus(target, id, opts = {}) {
       break;
   }
   entry.endsAt = Math.max(entry.endsAt, nextEndsAt);
+  entry.endsAtTurn = entry.endsAt;
   if (opts.source !== undefined) {
     entry.source = opts.source;
   }

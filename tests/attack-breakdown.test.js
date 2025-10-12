@@ -1,5 +1,6 @@
 // tests/attack-breakdown.test.js
 import assert from "node:assert/strict";
+import { DAMAGE_TYPE } from "../js/constants.js";
 import { Actor } from "../src/combat/actor.js";
 import { foldModsFromEquipment } from "../src/combat/mod-folding.js";
 import { makeItem } from "../js/item-system.js";
@@ -13,6 +14,9 @@ function setupCombatants(dmgMult) {
       dex: 10,
       int: 8,
       vit: 10,
+      con: 11,
+      will: 8,
+      luck: 9,
       maxHP: 30,
       maxStamina: 12,
       maxMana: 5,
@@ -25,11 +29,11 @@ function setupCombatants(dmgMult) {
   attacker.modCache.brands.push({
     kind: "brand",
     id: "phys_flat",
-    type: "physical",
+    type: DAMAGE_TYPE.SLASH,
     flat: 2,
     pct: 0.1,
   });
-  attacker.attunement.rules.physical = {
+  attacker.attunement.rules[DAMAGE_TYPE.SLASH] = {
     maxStacks: 10,
     decayPerTurn: 1,
     onUseGain: 2,
@@ -43,6 +47,9 @@ function setupCombatants(dmgMult) {
       dex: 8,
       int: 8,
       vit: 8,
+      con: 8,
+      will: 8,
+      luck: 8,
       maxHP: 28,
       maxStamina: 10,
       maxMana: 4,
@@ -51,7 +58,7 @@ function setupCombatants(dmgMult) {
   });
   foldModsFromEquipment(defender);
   defender.modCache.resists ||= {};
-  defender.modCache.resists.physical = 0.1;
+  defender.modCache.resists[DAMAGE_TYPE.SLASH] = 0.1;
 
   return {
     attacker,
@@ -100,7 +107,7 @@ assert.equal(
 );
 
 assert.equal(
-  boosted.attacker.attunement.stacks.physical,
+  boosted.attacker.attunement.stacks[DAMAGE_TYPE.SLASH],
   2,
   "attacker should gain configured attunement stacks when using the brand",
 );

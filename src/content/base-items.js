@@ -1,11 +1,13 @@
 // src/content/base-items.js
 // @ts-check
 
+import { DAMAGE_TYPE } from "../../js/constants.js";
+
 export const items = {
   polarity_sword: {
     slot: "weapon",
-    damage: { base: 6, type: "physical" },
-    offense: { brands: [{ type: "physical", flat: 1 }] },
+    damage: { base: 6, type: DAMAGE_TYPE.SLASH },
+    offense: { brands: [{ type: DAMAGE_TYPE.SLASH, flat: 1 }] },
     polarity: { onHitBias: { all: 0.2 } },
   },
   polarity_cloak: {
@@ -17,7 +19,7 @@ export const items = {
   conversion_ring: {
     slot: "ring",
     offense: {
-      conversions: [{ from: "physical", to: "fire", pct: 0.5, includeBaseOnly: true }],
+      conversions: [{ from: DAMAGE_TYPE.SLASH, to: "fire", pct: 0.5, includeBaseOnly: true }],
     },
   },
   affinity_ring_fire: {

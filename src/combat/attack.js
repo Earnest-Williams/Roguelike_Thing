@@ -1,5 +1,6 @@
 // src/combat/attack.js
 // @ts-check
+import { DEFAULT_MARTIAL_DAMAGE_TYPE } from "../../js/constants.js";
 import { resolveAttack as resolveAttackNew } from "./resolve.js";
 
 function normalizePrePackets(prePackets) {
@@ -30,7 +31,7 @@ export function resolveAttack(ctx) {
   if (Array.isArray(ctx.packets)) {
     return resolveAttackNew(ctx);
   }
-  const baseType = ctx.attack?.type || ctx.type || "physical";
+  const baseType = ctx.attack?.type || ctx.type || DEFAULT_MARTIAL_DAMAGE_TYPE;
   const base = Number(ctx.attack?.base ?? ctx.physicalBase ?? 0);
   const bonus = Number(ctx.physicalBonus ?? 0);
   const totalBase = Math.max(0, Math.floor(base + bonus));

@@ -1,5 +1,6 @@
 // src/game/combat-glue.js
 // @ts-check
+import { DEFAULT_MARTIAL_DAMAGE_TYPE } from "../../js/constants.js";
 import { getAttackModesForItem } from "../../js/item-system.js";
 import { resolveAttack } from "../combat/resolve.js";
 import { EVENT, emit } from "../ui/event-log.js";
@@ -95,8 +96,8 @@ export function buildAttackProfileFromMode(attacker, mode) {
       ? avgFromDice(p.damage)
       : Math.max(1, p.base || COMBAT_FALLBACK_ATTACK_BASE_DAMAGE);
 
-  // crude mapping: melee defaults to physical, others inherit if provided
-  const type = (p.type || p.damageType || "physical").toString();
+  // crude mapping: melee defaults to a martial type, others inherit if provided
+  const type = (p.type || p.damageType || DEFAULT_MARTIAL_DAMAGE_TYPE).toString();
 
   return { label, base, type };
 }
@@ -204,7 +205,7 @@ export function performEquippedAttack(attacker, defender, weaponItem, distTiles,
       ? performance.now()
       : Date.now();
   emit("attack_type_hint", {
-    type: profile.type || "physical",
+    type: profile.type || DEFAULT_MARTIAL_DAMAGE_TYPE,
     until: now + COMBAT_ATTACK_TYPE_HINT_DURATION_MS,
   });
 

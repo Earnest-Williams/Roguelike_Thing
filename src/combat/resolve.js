@@ -1,5 +1,6 @@
 // src/combat/resolve.js
 // @ts-check
+import { DEFAULT_MARTIAL_DAMAGE_TYPE } from "../../js/constants.js";
 import { applyOneStatusAttempt, rebuildStatusDerived, tryApplyHaste } from "./status.js";
 import { applyOnKillResourceGain } from "./resources.js";
 import { noteUseGain } from "./attunement.js";
@@ -97,7 +98,10 @@ function resolveAttackCore(attacker, defender, opts = {}) {
   attacker.turn = Number.isFinite(attacker.turn) ? attacker.turn : turn;
   defender.turn = Number.isFinite(defender.turn) ? defender.turn : turn;
 
-  const baseType = typeof opts?.type === "string" && opts.type ? String(opts.type) : "physical";
+  const baseType =
+    typeof opts?.type === "string" && opts.type
+      ? String(opts.type)
+      : DEFAULT_MARTIAL_DAMAGE_TYPE;
   const baseAmountRaw = Number(opts?.base ?? 0);
   const baseAmount = Number.isFinite(baseAmountRaw) ? Math.max(0, Math.floor(baseAmountRaw)) : 0;
   const rng = typeof opts?.rng === "function" ? opts.rng : null;
@@ -727,7 +731,7 @@ function maybeEcho(attacker, defender, ctx) {
   const echoCtx = resolveAttackCore(attacker, defender, {
     prePackets: scaled,
     base: 0,
-    type: "physical",
+    type: scaled[0]?.type || DEFAULT_MARTIAL_DAMAGE_TYPE,
     statusAttempts,
     isEcho: true,
     turn: ctx.turn,

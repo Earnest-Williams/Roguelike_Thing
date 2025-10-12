@@ -5,7 +5,19 @@ import { Actor } from "../src/combat/actor.js";
 (function testApFormula() {
   const actor = new Actor({
     id: "tester",
-    baseStats: { str: 5, dex: 5, int: 5, vit: 5, maxHP: 10, maxStamina: 10, maxMana: 5, baseSpeed: 1 },
+    baseStats: {
+      str: 5,
+      dex: 5,
+      int: 5,
+      vit: 5,
+      con: 5,
+      will: 5,
+      luck: 5,
+      maxHP: 10,
+      maxStamina: 10,
+      maxMana: 5,
+      baseSpeed: 1,
+    },
   });
   actor.statusDerived = {
     moveAPDelta: 1,

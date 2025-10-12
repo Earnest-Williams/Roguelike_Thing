@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { DAMAGE_TYPE } from "../js/constants.js";
 import { Actor } from "../src/combat/actor.js";
 import { resolveAttack } from "../src/combat/resolve.js";
 
@@ -10,6 +11,9 @@ import { resolveAttack } from "../src/combat/resolve.js";
       dex: 8,
       int: 8,
       vit: 8,
+      con: 8,
+      will: 8,
+      luck: 8,
       maxHP: 20,
       maxStamina: 10,
       maxMana: 5,
@@ -23,6 +27,9 @@ import { resolveAttack } from "../src/combat/resolve.js";
       dex: 4,
       int: 4,
       vit: 4,
+      con: 4,
+      will: 4,
+      luck: 4,
       maxHP: 6,
       maxStamina: 4,
       maxMana: 2,
@@ -35,7 +42,7 @@ import { resolveAttack } from "../src/combat/resolve.js";
   const result = resolveAttack({
     attacker,
     defender,
-    packets: [{ type: "physical", amount: 6 }],
+    packets: [{ type: DAMAGE_TYPE.SLASH, amount: 6 }],
   });
 
   assert.equal(defender.res.hp, 0, "defender should be killed by attack + echo");

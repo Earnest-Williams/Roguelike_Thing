@@ -43,13 +43,37 @@ function testStatusZeroDuration() {
 function testResolveWithPolarity() {
   const attacker = new Actor({
     id: "atk",
-    baseStats: { str: 10, dex: 10, int: 10, vit: 10, maxHP: 100, maxStamina: 10, maxMana: 10, baseSpeed: 1 },
+    baseStats: {
+      str: 10,
+      dex: 10,
+      int: 10,
+      vit: 10,
+      con: 10,
+      will: 10,
+      luck: 10,
+      maxHP: 100,
+      maxStamina: 10,
+      maxMana: 10,
+      baseSpeed: 1,
+    },
   });
   attacker.setPolarity({ order: 1, onHitBias: { order: 0.2 } });
 
   const defender = new Actor({
     id: "def",
-    baseStats: { str: 10, dex: 10, int: 10, vit: 10, maxHP: 200, maxStamina: 10, maxMana: 10, baseSpeed: 1 },
+    baseStats: {
+      str: 10,
+      dex: 10,
+      int: 10,
+      vit: 10,
+      con: 10,
+      will: 10,
+      luck: 10,
+      maxHP: 200,
+      maxStamina: 10,
+      maxMana: 10,
+      baseSpeed: 1,
+    },
   });
   defender.setPolarity({ chaos: 1, defenseBias: { chaos: -0.1 } });
   defender.modCache.defense.resists.fire = 0.2;
@@ -106,7 +130,19 @@ function testTemporalMath() {
 function testResourceAndSave() {
   const actor = new Actor({
     id: "persist",
-    baseStats: { str: 8, dex: 8, int: 8, vit: 8, maxHP: 20, maxStamina: 10, maxMana: 5, baseSpeed: 1 },
+    baseStats: {
+      str: 8,
+      dex: 8,
+      int: 8,
+      vit: 8,
+      con: 8,
+      will: 8,
+      luck: 8,
+      maxHP: 20,
+      maxStamina: 10,
+      maxMana: 5,
+      baseSpeed: 1,
+    },
   });
   addStatus(actor, "haste", { stacks: 1, duration: 2 });
   rebuildDerived(actor);
@@ -114,7 +150,19 @@ function testResourceAndSave() {
   const blob = serializeActor(actor);
   const other = new Actor({
     id: "clone",
-    baseStats: { str: 8, dex: 8, int: 8, vit: 8, maxHP: 20, maxStamina: 10, maxMana: 5, baseSpeed: 1 },
+    baseStats: {
+      str: 8,
+      dex: 8,
+      int: 8,
+      vit: 8,
+      con: 8,
+      will: 8,
+      luck: 8,
+      maxHP: 20,
+      maxStamina: 10,
+      maxMana: 5,
+      baseSpeed: 1,
+    },
   });
   hydrateActor(other, blob);
   const entries = (value) =>

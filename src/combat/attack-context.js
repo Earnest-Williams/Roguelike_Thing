@@ -18,7 +18,7 @@ export function makeAttackContext({ attacker, defender, turn, prePackets, attemp
     defender,
     turn,
     steps: [], // push { stage, packets } snapshots
-    prePackets: { ...(prePackets || {}) }, // e.g., { physical: base, ... }
+    prePackets: { ...(prePackets || {}) }, // e.g., { slash: base, ... }
     postPackets: {}, // final after defense & scalars
     attempts: attempts || [], // status attempts from action + brands
   };

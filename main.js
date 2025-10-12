@@ -13,6 +13,7 @@ import {
   THROW_CLASS,
   FOV_TRANSFORMS,
   DAMAGE_TYPE,
+  DEFAULT_MARTIAL_DAMAGE_TYPE,
   STATUS_IDS,
   STACKING_RULE,
   SLOT,
@@ -89,7 +90,7 @@ setStatusDamageAdapter(({ statusId, target, amount, type, turn }) => {
     defender: target,
     turn,
     base: 0,
-    prePackets: [{ type: type || "physical", amount: dmg }],
+    prePackets: [{ type: type || DEFAULT_MARTIAL_DAMAGE_TYPE, amount: dmg }],
     tags: ["status", statusId, "dot"],
   });
   return ctx?.totalDamage ?? 0;
@@ -3316,7 +3317,11 @@ const Game = (() => {
     shadow: { icon: "⬤", color: "#c084fc" },
     void: { icon: "⬤", color: "#94a3b8" },
     arcane: { icon: "✦", color: "#c4b5fd" },
-    physical: { icon: "🛡", color: "#f4f4f5" },
+    slash: { icon: "🗡", color: "#f4f4f5" },
+    pierce: { icon: "➴", color: "#bae6fd" },
+    blunt: { icon: "⚒", color: "#e7e5e4" },
+    radiant: { icon: "☀", color: "#fde68a" },
+    necrotic: { icon: "☥", color: "#a855f7" },
   };
   const BADGE_BG_COLOR = "rgba(15,23,42,0.85)";
   const DEFAULT_BADGE_ICON = "⬡";

@@ -1,6 +1,8 @@
 // src/content/brands.js
 // @ts-check
 
+import { DAMAGE_TYPE } from "../../js/constants.js";
+
 /**
  * @typedef {{ id: string, name: string, type: string }} AvailableBrand
  */
@@ -13,7 +15,7 @@
  */
 export const AVAILABLE_BRANDS = Object.freeze([
   Object.freeze({ id: "fire_edge", name: "Fire Edge", type: "fire" }),
-  Object.freeze({ id: "edge", name: "Edge", type: "physical" }),
+  Object.freeze({ id: "edge", name: "Edge", type: DAMAGE_TYPE.SLASH }),
   Object.freeze({ id: "sunburst_edge", name: "Sunburst Edge", type: "radiant" }),
   Object.freeze({ id: "umbral_rend", name: "Umbral Rend", type: "void" }),
   Object.freeze({ id: "stormlash", name: "Stormlash", type: "storm" }),
