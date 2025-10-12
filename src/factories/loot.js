@@ -3,6 +3,7 @@
 import { LOOT_TABLES } from "../content/loot.js";
 import { BASE_ITEMS } from "../content/items.js";
 import { applyAffixes } from "../content/affixes.js";
+import { applyAffixesBudgeted } from "../content/affixes.budgeted.js";
 import { registerItem, upsertItem, makeItem } from "../../js/item-system.js";
 import {
   LOOT_AFFIX_CHANCE,
@@ -13,23 +14,31 @@ export function randInt(rng, lo, hi) {
   return lo + Math.floor(rng() * (hi - lo + 1));
 }
 
-export function pickLoot(tableId, rng = Math.random) {
+export function pickLoot(tableId, rng = Math.random, context = {}) {
   const table = LOOT_TABLES[tableId];
   if (!table) throw new Error("Unknown loot table: " + tableId);
   const total = table.reduce((a, x) => a + x.w, 0) || 1;
   let r = Math.floor(rng() * total);
   for (const e of table) {
-    if ((r -= e.w) < 0) return resolveEntry(e, rng);
+    if ((r -= e.w) < 0) return resolveEntry(e, rng, context);
   }
   return null;
 }
 
-function resolveEntry(entry, rng) {
+function resolveEntry(entry, rng, context = {}) {
   if (entry.itemId) {
     // Chance to affix weapons/armors is centrally configured.
     const base = BASE_ITEMS[entry.itemId];
     if (!base) return null;
-    const def = rng() < LOOT_AFFIX_CHANCE ? applyAffixes(base, rng) : base;
+    let def = base;
+    if (rng() < LOOT_AFFIX_CHANCE) {
+      const chapter = context.chapter || context.gameCtx?.chapter || null;
+      if (chapter?.theme) {
+        def = applyAffixesBudgeted(base, chapter.currentBudget, chapter.theme, rng);
+      } else {
+        def = applyAffixes(base, rng);
+      }
+    }
     // Ephemeral registration with unique id using the configured modulus.
     const id =
       def.id +

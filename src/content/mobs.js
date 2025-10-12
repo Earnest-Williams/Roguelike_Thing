@@ -19,6 +19,7 @@ export const MOB_TEMPLATES = {
     },
     equipment: {},
     actions: ["strike"],
+    tags: ["construct", "training", "stationary"],
   },
   "brigand": {
     id: "brigand", name: "Brigand",
@@ -37,6 +38,7 @@ export const MOB_TEMPLATES = {
     },
     loadout: ["short_sword"], // resolved by factory
     actions: ["strike", "move_towards_target"],
+    tags: ["humanoid", "bandit", "melee"],
   },
   "pyromancer": {
     id: "pyromancer", name: "Pyromancer",
@@ -56,5 +58,26 @@ export const MOB_TEMPLATES = {
     loadout: ["flame_sword", "cloak_cold"],
     innate: { affinities: { fire: 0.10 } },
     actions: ["fire_bolt", "strike"],
+    tags: ["humanoid", "caster", "fire"],
+  },
+  "skeleton_warrior": {
+    id: "skeleton_warrior", name: "Skeleton Warrior",
+    baseStats: {
+      str: 10,
+      dex: 8,
+      int: 4,
+      vit: 9,
+      con: 9,
+      will: 7,
+      luck: 4,
+      maxHP: 28,
+      maxStamina: 10,
+      maxMana: 0,
+      baseSpeed: 0.9,
+    },
+    loadout: ["long_sword"],
+    innate: { resists: { poison: 0.25 } },
+    actions: ["strike", "move_towards_target"],
+    tags: ["undead", "melee", "guardian"],
   },
 };

@@ -76,6 +76,7 @@ export function createInitialState() {
     currentEndPos: null,
     isEndRendered: false,
     initRetries: 0,
+    chapter: null,
   };
 }
 

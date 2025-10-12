@@ -9,6 +9,8 @@ import "./channeling-regen.test.js";
 import "./affixes-items.test.js";
 import "./items-brand-catalog.test.js";
 import "./fov.test.js";
+import "./theme-generation.test.js";
+import "./loot-budget.test.js";
 
 import { strict as assert } from "node:assert";
 import { foldModsFromEquipment, foldMods } from "../src/combat/mod-folding.js";

@@ -32,6 +32,7 @@ import {
 } from "./js/utils.js";
 import { CONFIG } from "./src/config.js";
 import { createInitialState } from "./src/game/state.js";
+import { ChapterState } from "./src/game/chapter-state.js";
 import {
   createDefaultModCache,
   createEmptyStatusDerivedMods,
@@ -280,6 +281,35 @@ const Game = (() => {
         };
       })
       .filter(Boolean);
+  }
+
+  function buildCulminationVaultPlacement(theme, endPos) {
+    if (!theme || !endPos) return null;
+    const px = Math.round(endPos.x ?? NaN);
+    const py = Math.round(endPos.y ?? NaN);
+    if (!Number.isFinite(px) || !Number.isFinite(py)) return null;
+    const tags = Array.isArray(theme.culmination?.tags)
+      ? theme.culmination.tags.slice()
+      : [];
+    if (!tags.includes("vault")) tags.push("vault");
+    return {
+      furniture: {
+        id: `chapter_vault:${theme.id}`,
+        kind: "chapter_vault",
+        name: theme.culmination?.name || "Culmination Vault",
+        tags,
+        metadata: {
+          themeId: theme.id,
+          description: theme.culmination?.description || "",
+        },
+      },
+      position: { x: px, y: py },
+      orientation: "none",
+      metadata: {
+        themeId: theme.id,
+        tags,
+      },
+    };
   }
 
   const fovState = gameState.fov;
@@ -4083,6 +4113,8 @@ const Game = (() => {
         simState.loopFn = null;
         Sound.playDoor();
         emit(EVENT.STATUS, { message: "Exit found!", restartVisible: true });
+        // When wiring multi-floor progression, advance the chapter here:
+        // state.chapter?.nextLevel();
         renderScene();
         return;
       }
@@ -4290,9 +4322,19 @@ const Game = (() => {
     currentEndPos = endPos;
     gameState.currentEndPos = currentEndPos;
 
-    mapState.furniture = normalizeFurniturePlacements(
-      dungeonData.furniture || mapState.furniture || [],
-    );
+    const chapter = gameState.chapter;
+    let furniturePlacements = Array.isArray(dungeonData.furniture)
+      ? dungeonData.furniture.slice()
+      : Array.isArray(mapState.furniture)
+      ? mapState.furniture.slice()
+      : [];
+    if (chapter?.isFinalLevel) {
+      const vaultPlacement = buildCulminationVaultPlacement(chapter.theme, endPos);
+      if (vaultPlacement) {
+        furniturePlacements.push(vaultPlacement);
+      }
+    }
+    mapState.furniture = normalizeFurniturePlacements(furniturePlacements);
     rebuildFurnitureIndex();
 
     mapState.explored = Array.from({ length: mapState.height }, () =>
@@ -4349,6 +4391,17 @@ const Game = (() => {
       });
       console.error("Map generation failed after multiple retries.");
       return;
+    }
+
+    if (!gameState.chapter) {
+      gameState.chapter = new ChapterState();
+    }
+    const chapter = gameState.chapter;
+    if (chapter) {
+      emit(EVENT.STATUS, {
+        message: `Chapter Theme: ${chapter.theme.name}`,
+        restartVisible: false,
+      });
     }
 
     simState.isReady = false;
