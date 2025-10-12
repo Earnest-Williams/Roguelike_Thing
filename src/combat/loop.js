@@ -3,7 +3,7 @@
 import { addStatus, hasStatus, rebuildDerived, removeStatusById, tickStatuses } from "./status.js";
 import { gainAP, tickCooldowns, initiativeWithTemporal } from "./time.js";
 import { updateResources, isDefeated, regenTurn } from "./resources.js";
-import { decayAttunements } from "./attunement.js";
+import { tickAttunements } from "./attunement.js";
 import { EVENT, emit } from "../ui/event-log.js";
 import { logTurnEvt } from "./debug-log.js";
 import { tickFreeAction } from "./actor.js";
@@ -14,6 +14,7 @@ export function startTurn(actor) {
   if (!actor.turnFlags || typeof actor.turnFlags !== "object") {
     actor.turnFlags = { moved: false, attacked: false, channeled: false };
   }
+  tickAttunements(actor);
   const actedLastTurn = Boolean(actor._prevTurnDidMove || actor._prevTurnDidAttack);
   const hasChannelingStatus = hasStatus(actor, "channeling");
   const canChannel = Boolean(actor.modCache?.resource?.channeling);
@@ -61,14 +62,13 @@ export function endTurn(actor) {
  * Runs one turn for an actor.
  * Strategy:
  *  1) Advance turn counter
- *  2) Tick statuses (damage over time, expiry) & rebuild status-derived aggregates
- *  3) Rebuild the mod cache so attunement/status effects apply to this turn
- *  4) Refresh resources & decay attunements for the new turn
- *  5) Apply passive regeneration
- *  6) Gain AP
- *  7) Let controller/AI attempt actions while AP available
- *  8) Tick cooldowns
- *  9) Return defeat flag
+ *  2) Run start-of-turn hooks (free action, attunement decay, status ticks, derived rebuild)
+ *  3) Refresh resources for the new turn
+ *  4) Apply passive regeneration
+ *  5) Gain AP
+ *  6) Let controller/AI attempt actions while AP available
+ *  7) Tick cooldowns
+ *  8) Return defeat flag
  *
  * @param {import("./actor.js").Actor} actor
  * @param {(actor: import("./actor.js").Actor)=>void} [actionPlanner]
@@ -82,7 +82,6 @@ export function runTurn(actor, actionPlanner) {
     actor.resources.pools ||= Object.create(null);
   }
   updateResources(actor);
-  decayAttunements(actor);
   regenTurn(actor);
   if (actor?.turnFlags && typeof actor.turnFlags === "object") {
     actor.turnFlags.channeled = false;

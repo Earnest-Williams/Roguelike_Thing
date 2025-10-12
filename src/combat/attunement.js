@@ -105,27 +105,31 @@ export function gainAttunement(actor, type, amount) {
 /**
  * Decay stacks for all types at turn start.
  * @param {any} actor
+ * @param {number} [nTurns]
  */
-export function decayAttunements(actor) {
+export function tickAttunements(actor, nTurns = 1) {
   ensureAttunement(actor);
   const stacks = actor.attunement?.stacks;
   const rules = actor.attunement?.rules;
   if (!stacks || !rules) return;
 
+  const turns = Number(nTurns);
+  if (!Number.isFinite(turns) || turns <= 0) return;
+
   for (const [type, value] of Object.entries(stacks)) {
     const rule = rules[type];
     if (!rule) continue;
 
-    const decayRaw = Number(rule.decayPerTurn);
-    const decay = Number.isFinite(decayRaw) && decayRaw >= 0 ? decayRaw : 0;
     const currentRaw = Number(value);
-
     if (!Number.isFinite(currentRaw) || currentRaw <= 0) {
       delete stacks[type];
       continue;
     }
 
-    const next = Math.max(0, Math.floor(currentRaw - decay));
+    const decayRaw = Number(rule.decayPerTurn);
+    const decayPerTurn = Number.isFinite(decayRaw) && decayRaw >= 0 ? decayRaw : 0;
+    const decayTotal = decayPerTurn * turns;
+    const next = Math.max(0, Math.floor(currentRaw - decayTotal));
     if (next <= 0) {
       delete stacks[type];
     } else {
@@ -134,7 +138,11 @@ export function decayAttunements(actor) {
   }
 }
 
-export const decayPerTurn = decayAttunements;
+export function decayAttunements(actor, nTurns) {
+  tickAttunements(actor, nTurns);
+}
+
+export const decayPerTurn = tickAttunements;
 
 /**
  * Apply outgoing attunement scaling to packets before defenses.

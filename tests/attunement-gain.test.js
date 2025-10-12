@@ -5,6 +5,7 @@ import {
   noteUseGain,
   decayAttunements,
   contributeDerived,
+  tickAttunements,
 } from "../src/combat/attunement.js";
 
 function fakeActorWithRule(type, patch = {}) {
@@ -115,6 +116,16 @@ function fakeActorWithRule(type, patch = {}) {
   decayAttunements(actor);
   assert.ok(!actor.attunement.stacks.fire);
   console.log("✓ decayAttunements removes invalid stack entries");
+})();
+
+(function testTickAttunementsSupportsMultipleTurns() {
+  const actor = fakeActorWithRule("acid", { decayPerTurn: 1.5 });
+  actor.attunement.stacks.acid = 7;
+  tickAttunements(actor, 2);
+  assert.equal(actor.attunement.stacks.acid, 4);
+  tickAttunements(actor, 0);
+  assert.equal(actor.attunement.stacks.acid, 4, "non-positive turns should be ignored");
+  console.log("✓ tickAttunements handles multi-turn decay");
 })();
 
 (function testContributeDerivedAddsPassiveBonuses() {
