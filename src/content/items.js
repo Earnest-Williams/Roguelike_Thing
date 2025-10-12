@@ -77,5 +77,106 @@ export const ITEMS = [
       channeling: true,
     },
   },
+  {
+    id: "prismatic_glaive",
+    name: "Prismatic Glaive",
+    kind: "weapon",
+    equipSlot: "weapon",
+    weaponProfile: { base: [["slash", 5], ["arcane", 4]] },
+    brands: [
+      {
+        id: "sunburst_edge",
+        type: "radiant",
+        flat: 2,
+        pct: 0.05,
+        onHitStatuses: [{ id: "burn", chance: 0.25, stacks: 1, duration: 3 }],
+      },
+      {
+        id: "umbral_rend",
+        type: "void",
+        pct: 0.04,
+        onHitStatuses: [{ id: "slowed", chance: 0.2, stacks: 1, duration: 2 }],
+      },
+    ],
+    polarity: {
+      grant: { order: 0.2, void: 0.2 },
+      onHitBias: { chaos: 0.1, decay: 0.1 },
+    },
+    temporal: { cooldownPct: -0.05 },
+  },
+  {
+    id: "stormvenom_blade",
+    name: "Stormvenom Blade",
+    kind: "weapon",
+    equipSlot: "weapon",
+    weaponProfile: { base: [["slash", 4], ["lightning", 3]] },
+    brands: [
+      {
+        id: "stormlash",
+        type: "storm",
+        pct: 0.06,
+        onHitStatuses: [{ id: "slowed", chance: 0.25, stacks: 1, duration: 2 }],
+      },
+      {
+        id: "venomkiss",
+        type: "toxic",
+        pct: 0.05,
+        onHitStatuses: [{ id: "poisoned", chance: 0.4, stacks: 2, duration: 3 }],
+      },
+    ],
+    temporal: { actionSpeedPct: -0.03 },
+    resource: {
+      costMult: { stamina: 0.9 },
+      gainFlat: { stamina: 1 },
+    },
+    statusMods: [
+      {
+        id: "stormvenom_bundle",
+        kind: "status_interaction",
+        inflictChanceBonus: { poisoned: 0.1, slowed: 0.1 },
+        resistChanceBonus: { stunned: -0.1 },
+        receivedDurationMult: { stunned: -0.25 },
+      },
+    ],
+  },
+  {
+    id: "equilibrium_halberd",
+    name: "Equilibrium Halberd",
+    kind: "weapon",
+    equipSlot: "weapon",
+    weaponProfile: { base: [["physical", 6], ["arcane", 4]] },
+    brands: [
+      {
+        id: "gravity_well",
+        type: "void",
+        pct: 0.05,
+        onHitStatuses: [{ id: "slowed", chance: 0.3, stacks: 1, duration: 2 }],
+      },
+      {
+        id: "aurora_edge",
+        type: "radiant",
+        pct: 0.04,
+        onHitStatuses: [{ id: "burn", chance: 0.2, stacks: 1, duration: 2 }],
+      },
+    ],
+    polarity: {
+      grant: { order: 0.15, growth: 0.1, chaos: 0.1 },
+      onHitBias: { order: 0.1, chaos: 0.1, void: 0.05 },
+    },
+    temporal: { actionSpeedPct: -0.04, cooldownPct: -0.05 },
+    resource: {
+      gainFlat: { stamina: 2 },
+      costMult: { stamina: 0.95 },
+    },
+    statusMods: [
+      {
+        id: "balance_field",
+        kind: "status_interaction",
+        inflictChanceBonus: { stunned: 0.05, slowed: 0.1 },
+        resistChanceBonus: { stunned: 0.05 },
+        receivedDurationMult: { slowed: -0.2 },
+      },
+    ],
+  },
 ];
 
