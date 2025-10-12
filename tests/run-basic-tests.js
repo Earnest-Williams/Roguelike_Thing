@@ -58,8 +58,8 @@ function testResolveWithPolarity() {
     packets: [{ type: "fire", amount: 100 }],
   };
   const result = resolveAttack(ctx);
-  assert.equal(result.totalDamage, 104, "polarity opposition should affect offense/defense multipliers");
-  assert.equal(defender.res.hp, 96, "defender hp reduced by resolved damage");
+  assert.equal(result.totalDamage, 124, "polarity opposition should affect offense/defense multipliers");
+  assert.equal(defender.res.hp, 76, "defender hp reduced by resolved damage");
   console.log("✓ resolveAttack polarity/resist order");
 }
 

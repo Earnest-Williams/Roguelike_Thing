@@ -104,7 +104,7 @@ export function polarityDefenseMult(defender, attacker, cap = 0.5) {
     for (const A of AXES) {
       const w = POLAR_BIAS[A]?.[D] || 0;
       if (!w) continue;
-      score += d * (att[A] || 0) * w;
+      score -= d * (att[A] || 0) * w;
     }
   }
   const bias = defender?.modCache?.defense?.polarity?.defenseBias || {};
