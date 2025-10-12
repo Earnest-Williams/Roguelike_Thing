@@ -461,6 +461,7 @@ export function noteMoved(actor) {
   }
   if (actor) {
     actor._turnDidMove = true;
+    actor._didActionThisTurn = true;
   }
   ensureFreeActionState(actor);
 }
@@ -473,6 +474,7 @@ export function noteAttacked(actor) {
   }
   if (actor) {
     actor._turnDidAttack = true;
+    actor._didActionThisTurn = true;
   }
 }
 

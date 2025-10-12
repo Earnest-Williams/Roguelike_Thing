@@ -1,8 +1,7 @@
 // src/combat/loop.js
 // @ts-check
 import {
-  applyStatuses,
-  applyStatus,
+  applyOneStatusAttempt,
   hasStatus,
   rebuildDerived,
   removeStatusById,
@@ -31,6 +30,7 @@ export function startTurn(actor) {
   }
   actor._turnDidMove = false;
   actor._turnDidAttack = false;
+  actor._didActionThisTurn = false;
   tickStatusesAtTurnStart(actor, actor.turn);
   tickResources(actor);
   logTurnEvt(actor, {
@@ -48,6 +48,7 @@ export function endTurn(actor) {
   }
   const resBucket = actor.modCache?.resource || Object.create(null);
   const idle = !actor._turnDidMove && !actor._turnDidAttack;
+  actor._didActionThisTurn = !idle;
   const flags = actor.turnFlags;
   flags.channeled = Boolean(idle);
   flags.moved = false;
@@ -55,7 +56,15 @@ export function endTurn(actor) {
 
   if (idle) {
     resBucket.channeling = true;
-    applyStatus(actor, "channeling", 1, 1, actor, actor.turn);
+    const result = applyOneStatusAttempt({
+      attacker: actor,
+      defender: actor,
+      attempt: { id: "channeling", stacks: 1, duration: 1 },
+      turn: actor.turn,
+    });
+    if (result && !result.ignored) {
+      actor.statusDerived = rebuildDerived(actor);
+    }
   } else {
     resBucket.channeling = false;
     if (hasStatus(actor, "channeling")) {
