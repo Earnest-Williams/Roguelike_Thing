@@ -48,8 +48,14 @@ import { EXTRA_STATUSES } from "../content/statuses.js";
  *   costMult: Record<string, number>,
  *   actionSpeedPct?: number,
  *   moveAPDelta?: number,
+ *   baseActionAPDelta?: number,
  *   cooldownPct?: number,
  *   cooldownMult?: number,
+ *   castTimeDelta?: number,
+ *   recoveryPct?: number,
+ *   initBonus?: number,
+ *   initiativeFlat?: number,
+ *   accuracyFlat?: number,
  *   resistDelta?: Record<string, number>
  * }} StatusDerived */
 
@@ -152,8 +158,14 @@ function makeDerivedBase() {
     costMult: { hp: 1, stamina: 1, mana: 1 },
     actionSpeedPct: 0,
     moveAPDelta: 0,
+    baseActionAPDelta: 0,
     cooldownPct: 0,
     cooldownMult: 1,
+    castTimeDelta: 0,
+    recoveryPct: 0,
+    initBonus: 0,
+    initiativeFlat: 0,
+    accuracyFlat: 0,
     resistDelta: Object.create(null),
   };
 }
@@ -330,17 +342,44 @@ export function rebuildDerived(actor) {
       Object.assign(derived, result);
     }
   }
+
   contributeDerived(actor, derived);
 
-  derived.actionSpeedPct = derived.temporal.actionSpeedPct || 0;
-  derived.moveAPDelta = derived.temporal.moveAPDelta || 0;
-  derived.cooldownPct = derived.temporal.cooldownPct || 0;
-  derived.cooldownMult = Number.isFinite(derived.temporal.cooldownMult)
-    ? derived.temporal.cooldownMult
+  const temporal = derived.temporal || Object.create(null);
+  derived.actionSpeedPct = Number(temporal.actionSpeedPct || derived.actionSpeedPct || 0);
+  derived.moveAPDelta = Number(temporal.moveAPDelta || derived.moveAPDelta || 0);
+  derived.baseActionAPDelta = Number(
+    temporal.baseActionAPDelta || derived.baseActionAPDelta || 0,
+  );
+  derived.cooldownPct = Number(temporal.cooldownPct || derived.cooldownPct || 0);
+  derived.cooldownMult = Number.isFinite(temporal.cooldownMult)
+    ? temporal.cooldownMult
     : derived.cooldownMult;
-  derived.resistDelta = derived.resistsPct;
+  derived.castTimeDelta = Number(temporal.castTimeDelta || derived.castTimeDelta || 0);
+  derived.recoveryPct = Number(temporal.recoveryPct || derived.recoveryPct || 0);
+  derived.initBonus = Number(temporal.initBonus || derived.initBonus || 0);
+  derived.initiativeFlat = Number(
+    temporal.initiativeFlat || derived.initiativeFlat || derived.initBonus || 0,
+  );
 
-  actor.statusDerived = derived;
+  derived.resistsPct = derived.resistsPct || Object.create(null);
+  derived.resistDelta = derived.resistDelta || Object.create(null);
+  for (const key of Object.keys(derived.resistsPct)) {
+    const raw = Number(derived.resistsPct[key] || 0);
+    const clamped = Math.max(-1, Math.min(1, raw));
+    derived.resistsPct[key] = clamped;
+    if (Object.prototype.hasOwnProperty.call(derived.resistDelta, key)) {
+      const deltaRaw = Number(derived.resistDelta[key] || 0);
+      derived.resistDelta[key] = Math.max(-1, Math.min(1, deltaRaw));
+    } else {
+      derived.resistDelta[key] = clamped;
+    }
+  }
+  for (const key of Object.keys(derived.resistDelta)) {
+    const raw = Number(derived.resistDelta[key] || 0);
+    derived.resistDelta[key] = Math.max(-1, Math.min(1, raw));
+  }
+
   return derived;
 }
 
@@ -458,7 +497,11 @@ export function applyStatuses(ctx, attacker, defender, turn) {
       applied.push(attempt.id);
     }
   }
-  rebuildDerived(defender);
+  if (typeof defender?.onTurnStart === "function") {
+    defender.onTurnStart(defender.turn || 0);
+  } else {
+    defender.statusDerived = rebuildDerived(defender);
+  }
   return applied;
 }
 
@@ -468,13 +511,22 @@ export function applyStatus(target, id, stacks = 1, duration = 1, source, turn) 
   target.turn = now;
   const entry = addStatus(target, id, { stacks, potency: stacks, duration, source });
   if (!entry) return [];
-  rebuildDerived(target);
+  if (typeof target.onTurnStart === "function") {
+    target.onTurnStart(target.turn || 0);
+  } else {
+    target.statusDerived = rebuildDerived(target);
+  }
   return [id];
 }
 
 export function tickStatusesAtTurnStart(actor, turn) {
   tickStatuses(actor, turn);
-  rebuildDerived(actor);
+  if (!actor) return;
+  if (typeof actor.onTurnStart === "function") {
+    actor.onTurnStart(turn);
+  } else {
+    actor.statusDerived = rebuildDerived(actor);
+  }
 }
 
 export function getStatusDefinition(id) {

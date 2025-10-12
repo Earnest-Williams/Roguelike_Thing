@@ -23,8 +23,13 @@ export function startTurn(actor) {
   }
   actor._turnDidMove = false;
   actor._turnDidAttack = false;
-  tickStatuses(actor, actor.turn || 0);
-  rebuildDerived(actor);
+  const turn = actor.turn || 0;
+  tickStatuses(actor, turn);
+  if (typeof actor.onTurnStart === "function") {
+    actor.onTurnStart(turn);
+  } else {
+    actor.statusDerived = rebuildDerived(actor);
+  }
   logTurnEvt(actor, {
     phase: "start_turn",
     actorId: actor.id,
