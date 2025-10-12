@@ -121,11 +121,8 @@ export function generateDungeonTheme(dungeonDepth = 0, rng = Math.random) {
     ...mechanics.flatMap((mechanic) => mechanic.tags || []),
   ]);
 
-  const monsterTags = uniqueTags([
-    ...descriptor.tags,
-    ...mechanics.flatMap((mechanic) => mechanic.tags || []),
-  ]);
-  const affixTags = componentTags;
+  const monsterTags = [...componentTags];
+  const affixTags = [...componentTags];
   const weights = {
     mobTags: buildWeightsFromTags(monsterTags),
     affixTags: buildWeightsFromTags(affixTags),
