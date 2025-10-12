@@ -143,12 +143,27 @@ function buildEchoContext(ctx, echoCfg, fraction) {
     ? Math.max(0, Number(ctx.damageScalar))
     : 1;
 
+  const scaledPacketTotal = sumPacketAmounts(packets);
+  const basePacketTotal = sumPacketAmounts(basePackets);
+  const postDefenseTotal = sumPacketTotals(ctx?.packetsAfterDefense);
+  const desiredTotalDamage = Number.isFinite(postDefenseTotal) && postDefenseTotal > 0
+    ? postDefenseTotal * fraction
+    : basePacketTotal * damageScalarBase * fraction;
+
+  let damageScalar = damageScalarBase;
+  if (scaledPacketTotal > 0 && Number.isFinite(desiredTotalDamage)) {
+    const targetScalar = desiredTotalDamage / scaledPacketTotal;
+    if (Number.isFinite(targetScalar)) {
+      damageScalar = Math.max(0, targetScalar);
+    }
+  }
+
   const echoCtx = {
     ...ctx,
     packets,
     statusAttempts,
     isEcho: true,
-    damageScalar: damageScalarBase,
+    damageScalar,
     skipOnHitStatuses: !echoCfg.copyStatuses,
   };
 
@@ -199,6 +214,30 @@ function scalePacketList(packets, fraction) {
     out.push({ ...pkt, amount: scaled });
   }
   return out;
+}
+
+function sumPacketAmounts(packets) {
+  if (!Array.isArray(packets) || !packets.length) return 0;
+  let total = 0;
+  for (const pkt of packets) {
+    const amount = Number(pkt?.amount);
+    if (Number.isFinite(amount) && amount > 0) {
+      total += amount;
+    }
+  }
+  return total;
+}
+
+function sumPacketTotals(totals) {
+  if (!totals || typeof totals !== "object") return 0;
+  let total = 0;
+  for (const value of Object.values(totals)) {
+    const amount = Number(value);
+    if (Number.isFinite(amount) && amount > 0) {
+      total += amount;
+    }
+  }
+  return total;
 }
 
 function cloneStatusAttempts(attempts) {
