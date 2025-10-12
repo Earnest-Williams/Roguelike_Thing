@@ -4,6 +4,7 @@ import "./temporal-cooldown-tags.test.js";
 import "./attunement-gain.test.js";
 import "./attunement.test.js";
 import "./temporal-echo-haste.test.js";
+import "./channeling-regen.test.js";
 
 import { strict as assert } from "node:assert";
 import { foldModsFromEquipment, foldMods } from "../src/combat/mod-folding.js";
