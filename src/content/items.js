@@ -178,5 +178,112 @@ export const ITEMS = [
       },
     ],
   },
+  {
+    id: "glacier_spear",
+    name: "Glacier Spear",
+    kind: "weapon",
+    equipSlot: "weapon",
+    weaponProfile: { base: [["pierce", 5], ["cold", 4]] },
+    brands: [
+      {
+        id: "frostbite_tip",
+        type: "cold",
+        flat: 2,
+        pct: 0.07,
+        onHitStatuses: [{ id: "slowed", chance: 0.35, stacks: 1, duration: 2 }],
+      },
+    ],
+    attunement: {
+      onUseGain: 1,
+      decayPerTurn: 1,
+      maxStacks: 6,
+      perStack: { damagePct: 0.015 },
+    },
+  },
+  {
+    id: "caustic_falchion",
+    name: "Caustic Falchion",
+    kind: "weapon",
+    equipSlot: "weapon",
+    weaponProfile: { base: [["slash", 5]] },
+    brands: [
+      {
+        id: "corrosion_wave",
+        type: "acid",
+        flat: 1,
+        pct: 0.08,
+        onHitStatuses: [{ id: "poisoned", chance: 0.4, stacks: 1, duration: 3 }],
+      },
+    ],
+    resource: {
+      costMult: { stamina: 0.85 },
+    },
+  },
+  {
+    id: "earthshaker_maul",
+    name: "Earthshaker Maul",
+    kind: "weapon",
+    equipSlot: "weapon",
+    weaponProfile: { base: [["bludgeon", 7]] },
+    brands: [
+      {
+        id: "tectonic_rumble",
+        type: "earth",
+        flat: 3,
+        pct: 0.05,
+        onHitStatuses: [{ id: "stunned", chance: 0.3, stacks: 1, duration: 1 }],
+      },
+    ],
+    temporal: { actionSpeedPct: -0.05 },
+    resource: {
+      costMult: { stamina: 1.1 },
+      gainFlat: { stamina: 2 },
+    },
+  },
+  {
+    id: "voltaic_chakram",
+    name: "Voltaic Chakram",
+    kind: "weapon",
+    equipSlot: "weapon",
+    weaponProfile: { base: [["slash", 3], ["lightning", 5]] },
+    brands: [
+      {
+        id: "lightning_arc",
+        type: "lightning",
+        flat: 2,
+        pct: 0.06,
+        onHitStatuses: [{ id: "stunned", chance: 0.2, stacks: 1, duration: 1 }],
+      },
+      {
+        id: "storm_resonance",
+        type: "storm",
+        pct: 0.03,
+        onHitStatuses: [{ id: "slowed", chance: 0.25, stacks: 1, duration: 2 }],
+      },
+    ],
+    polarity: {
+      grant: { chaos: 0.1, order: 0.1 },
+      onHitBias: { order: 0.1 },
+    },
+  },
+  {
+    id: "tidal_scepter",
+    name: "Tidal Scepter",
+    kind: "weapon",
+    equipSlot: "weapon",
+    weaponProfile: { base: [["arcane", 4], ["water", 4]] },
+    brands: [
+      {
+        id: "undertow_surge",
+        type: "water",
+        flat: 1,
+        pct: 0.07,
+        onHitStatuses: [{ id: "slowed", chance: 0.3, stacks: 1, duration: 2 }],
+      },
+    ],
+    resource: {
+      gainFlat: { mana: 2 },
+    },
+  },
 ];
 
