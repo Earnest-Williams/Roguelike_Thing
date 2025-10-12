@@ -229,12 +229,43 @@ export function applyOutgoingScaling(arg0, arg1) {
 /**
  * Register attunement gains for types that successfully dealt damage.
  * @param {any} attacker
- * @param {Set<string>} usedTypes
+ * @param {Set<string>|string|string[]|Record<string, number>} usedTypes
  */
 export function noteUseGain(attacker, usedTypes) {
-  if (!usedTypes?.size) return;
-  for (const type of usedTypes) {
+  if (!attacker || usedTypes === null || usedTypes === undefined) return;
+  const grant = (type) => {
+    if (typeof type !== "string" || !type) return;
     gainAttunement(attacker, type);
+  };
+
+  if (typeof usedTypes === "string") {
+    grant(usedTypes);
+    return;
+  }
+
+  if (usedTypes instanceof Set) {
+    for (const type of usedTypes) {
+      grant(type);
+    }
+    return;
+  }
+
+  if (Array.isArray(usedTypes)) {
+    for (const type of usedTypes) {
+      grant(type);
+    }
+    return;
+  }
+
+  if (typeof usedTypes === "object") {
+    for (const [type, value] of Object.entries(usedTypes)) {
+      const numeric = Number(value);
+      if (Number.isFinite(numeric)) {
+        if (numeric > 0) grant(type);
+        continue;
+      }
+      if (value) grant(type);
+    }
   }
 }
 

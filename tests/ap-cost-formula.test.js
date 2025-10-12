@@ -9,10 +9,10 @@ import { Actor } from "../src/combat/actor.js";
   });
   actor.statusDerived = {
     moveAPDelta: 1,
-    actionSpeedPct: -0.2,
+    actionSpeedPct: 0.15,
   };
   actor.modCache.temporal.baseActionAPDelta = 1;
-  actor.modCache.temporal.actionSpeedPct = 0.1;
+  actor.modCache.temporal.actionSpeedPct = -0.05;
   const { costAP } = finalAPForAction(actor, 10, ["move"]);
   assert.equal(costAP, 11, "AP cost should include statusDerived + temporal adjustments");
   console.log("✓ finalAPForAction applies statusDerived + temporal modifiers");
