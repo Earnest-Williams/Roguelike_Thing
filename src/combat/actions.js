@@ -107,20 +107,23 @@ function mainHandItem(actor) {
   return entry?.item || entry;
 }
 
-export function tryAttackEquipped(
+export function planEquippedAttack(
   attacker,
   defender,
   distTiles = DEFAULT_MELEE_RANGE_TILES,
 ) {
   const item = mainHandItem(attacker);
-  if (!item) return false;
+  if (!item) return null;
   const mode = pickAttackMode(attacker, defender, item, distTiles);
-  if (!mode) return false;
+  if (!mode) return null;
 
   const key = `${item.id || item.name || "equipped"}:${mode.kind}`;
-  if (!isReady(attacker, key)) return false;
+  if (!isReady(attacker, key)) return null;
 
-  const baseAP = Math.max(MIN_AP_COST, attacker.baseActionAP ?? DEFAULT_BASE_ACTION_AP);
+  const baseAP = Math.max(
+    MIN_AP_COST,
+    attacker.baseActionAP ?? DEFAULT_BASE_ACTION_AP,
+  );
   const action = {
     id: key,
     baseAP,
@@ -134,17 +137,37 @@ export function tryAttackEquipped(
       : [mode.kind || "attack"],
   };
   const baseCosts = action.resourceCost ?? { stamina: 2 };
-  if (!canPay(attacker, { resourceCost: baseCosts, tags: action.tags })) return false;
+  if (!canPay(attacker, { resourceCost: baseCosts, tags: action.tags })) return null;
   const { costAP } = finalAPForAction(attacker, action.baseAP, action.tags);
-  if (!spendAP(attacker, costAP)) return false;
+  const currentAP = typeof attacker.ap === "number" ? attacker.ap : Infinity;
+  if (!Number.isFinite(costAP) || currentAP < costAP) return null;
 
-  const res = performEquippedAttack(attacker, defender, item, distTiles, mode);
+  return { item, mode, key, action, baseCosts, costAP };
+}
+
+export function tryAttackEquipped(
+  attacker,
+  defender,
+  distTiles = DEFAULT_MELEE_RANGE_TILES,
+) {
+  const plan = planEquippedAttack(attacker, defender, distTiles);
+  if (!plan) return false;
+
+  if (!spendAP(attacker, plan.costAP)) return false;
+
+  const res = performEquippedAttack(
+    attacker,
+    defender,
+    plan.item,
+    distTiles,
+    plan.mode,
+  );
   if (!res.ok) return false;
 
   attacker._turnDidAttack = true;
   noteAttacked(attacker);
 
-  startCooldown(attacker, key, action.baseCooldown);
+  startCooldown(attacker, plan.key, plan.action.baseCooldown);
 
   return true;
 }

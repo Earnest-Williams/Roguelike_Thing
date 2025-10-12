@@ -2,7 +2,7 @@
 // @ts-check
 import { createActorFromTemplate, ensureItemsRegistered } from "../factories/index.js";
 import { runTurn } from "../combat/loop.js";
-import { tryAttackEquipped } from "../combat/actions.js";
+import { AIPlanner } from "../combat/ai-planner.js";
 import {
   SIM_DEFAULT_RUN_COUNT,
   SIM_DEFAULT_SEED,
@@ -38,9 +38,9 @@ export function simulate({
     const B = createActorFromTemplate(b);
     let turns=0, dmg=0;
 
-    // naive planners
-    const planA = (actor) => { if (!tryAttackEquipped(actor, B, 1)) {/* could move */} };
-    const planB = (actor) => { if (!tryAttackEquipped(actor, A, 1)) {/* idle */} };
+    // simple planners: evaluate available actions against the opponent
+    const planA = (actor) => AIPlanner.takeTurn(actor, { target: B, distance: 1 });
+    const planB = (actor) => AIPlanner.takeTurn(actor, { target: A, distance: 1 });
 
     let partialTurn = 0;
     while (A.res.hp>0 && B.res.hp>0 && turns<SIM_MAX_TURNS) {
