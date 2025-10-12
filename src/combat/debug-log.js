@@ -25,13 +25,20 @@ export class RingLog {
 }
 
 // Per-actor and global logs (attach to actor on spawn)
+const DEBUG_TURN_CAPACITY = 32;
+
 export function attachLogs(actor, capacity = 64) {
   if (!actor) return actor;
   actor.logs = actor.logs || {};
   actor.logs.attack = actor.logs.attack || new RingLog(capacity);
   actor.logs.status = actor.logs.status || new RingLog(capacity);
   actor.logs.turn = actor.logs.turn || new RingLog(capacity);
-  actor._debug = actor._debug || { turns: [] };
+  const debug = ensureDebug(actor);
+  if (debug.turns instanceof RingLog) {
+    debug.turns.cap = debug.turns.cap || DEBUG_TURN_CAPACITY;
+  } else {
+    debug.turns = new RingLog(DEBUG_TURN_CAPACITY);
+  }
   return actor;
 }
 
@@ -49,22 +56,39 @@ export function noteAttackStep(actor, step) {
   if (!actor) return;
   const dbg = ensureDebug(actor);
   if (!dbg) return;
-  const bucket = dbg.turns;
+  let bucket = dbg.turns;
   const entry = {
     turn: Number.isFinite(actor.turn) ? actor.turn : 0,
     step,
   };
+  if (bucket instanceof RingLog) {
+    bucket.push(entry);
+    return;
+  }
+  if (!Array.isArray(bucket)) {
+    bucket = dbg.turns = [];
+  }
   bucket.push(entry);
-  if (bucket.length > 32) bucket.shift();
+  if (bucket.length > DEBUG_TURN_CAPACITY) bucket.shift();
 }
 
 function ensureDebug(actor) {
   if (!actor) return null;
   if (!actor._debug || typeof actor._debug !== "object") {
-    actor._debug = { turns: [] };
+    actor._debug = { turns: new RingLog(DEBUG_TURN_CAPACITY) };
   }
-  if (!Array.isArray(actor._debug.turns)) {
-    actor._debug.turns = [];
+  const turns = actor._debug.turns;
+  if (turns instanceof RingLog) {
+    return actor._debug;
   }
+  if (Array.isArray(turns)) {
+    const ring = new RingLog(DEBUG_TURN_CAPACITY);
+    for (const entry of turns.slice(-DEBUG_TURN_CAPACITY)) {
+      ring.push(entry);
+    }
+    actor._debug.turns = ring;
+    return actor._debug;
+  }
+  actor._debug.turns = new RingLog(DEBUG_TURN_CAPACITY);
   return actor._debug;
 }
