@@ -25,6 +25,10 @@ export function pickLoot(tableId, rng = Math.random, context = {}) {
   return null;
 }
 
+/**
+ * Resolve a loot table entry into a concrete item, optionally biasing affixes
+ * using the active chapter theme when one is available.
+ */
 function resolveEntry(entry, rng, context = {}) {
   if (entry.itemId) {
     // Chance to affix weapons/armors is centrally configured.

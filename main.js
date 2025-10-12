@@ -4128,17 +4128,17 @@ const Game = (() => {
         const currentPlayerX = player.x;
         const currentPlayerY = player.y;
         const currentPos = { x: currentPlayerX, y: currentPlayerY };
-      if (currentPlayerX === endPos.x && currentPlayerY === endPos.y) {
-        clearTimeout(simState.timeout);
-        simState.timeout = null;
-        simState.loopFn = null;
-        Sound.playDoor();
-        emit(EVENT.STATUS, { message: "Exit found!", restartVisible: true });
-        // When wiring multi-floor progression, advance the chapter here:
-        // state.chapter?.nextLevel();
-        renderScene();
-        return;
-      }
+        if (currentPlayerX === endPos.x && currentPlayerY === endPos.y) {
+          clearTimeout(simState.timeout);
+          simState.timeout = null;
+          simState.loopFn = null;
+          Sound.playDoor();
+          emit(EVENT.STATUS, { message: "Exit found!", restartVisible: true });
+          // When wiring multi-floor progression, advance the chapter here:
+          // state.chapter?.nextLevel();
+          renderScene();
+          return;
+        }
 
         const playerCanAct =
           (player.statusDerived?.canAct ?? true) &&
@@ -4159,16 +4159,16 @@ const Game = (() => {
         }
       }
       const delay = Math.max(16, 1000 / simState.speed);
-    simState.timeout = setTimeout(gameLoop, delay);
+      simState.timeout = setTimeout(gameLoop, delay);
+    }
+    simState.loopFn = gameLoop;
+    gameLoop();
+    state.player = player;
+    state.mobManager = mobManager;
+    state.hasPrevPlayerPos = hasPrevPlayerPos;
+    state.currentEndPos = currentEndPos;
+    state.isEndRendered = isEndRendered;
   }
-  simState.loopFn = gameLoop;
-  gameLoop();
-  state.player = player;
-  state.mobManager = mobManager;
-  state.hasPrevPlayerPos = hasPrevPlayerPos;
-  state.currentEndPos = currentEndPos;
-  state.isEndRendered = isEndRendered;
-}
   function togglePause() {
     simState.isPaused = !simState.isPaused;
     emit(EVENT.STATUS, { paused: simState.isPaused });
@@ -4404,6 +4404,11 @@ const Game = (() => {
     setTimeout(() => simulate(gameState, player.startPos, endPos), 500);
   }
 
+  /**
+   * Reset the dungeon run and roll a fresh chapter theme. The theme instance is
+   * cached on the long-lived game state so once multi-floor progression arrives
+   * we can advance floors without rebuilding the surrounding UI plumbing.
+   */
   function startNewSimulation() {
     if (initRetries > MAX_INIT_RETRIES) {
       emit(EVENT.STATUS, {
@@ -4416,6 +4421,8 @@ const Game = (() => {
 
     if (!gameState.chapter) {
       gameState.chapter = new ChapterState();
+    } else {
+      gameState.chapter.reset();
     }
     const chapter = gameState.chapter;
     if (chapter) {
