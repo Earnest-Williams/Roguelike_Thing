@@ -2,10 +2,10 @@
 // @ts-check
 import { DebugBus } from "../../js/debug/debug-bus.js";
 import { logAttackStep } from "./debug-log.js";
-import { addStatus, applyStatuses } from "./status.js";
+import { applyStatuses } from "./status.js";
 import { applyOutgoingScaling, gainAttunement } from "./attunement.js";
 import { polarityOnHitScalar, polarityDefScalar } from "./polarity.js";
-import { rand } from "./rng.js";
+import { postDamageTemporalResourceHooks } from "./post-damage-hooks.js";
 
 const clone = (value) => {
   try {
@@ -71,6 +71,7 @@ export function resolveAttack(ctx) {
 
   const scalar = Number.isFinite(ctx.damageScalar) ? Math.max(0, ctx.damageScalar) : 1;
   const packetsAfterDefense = collapseByType(defended, scalar);
+  ctx.packetsAfterDefense = packetsAfterDefense;
   const totalDamage = Object.values(packetsAfterDefense).reduce((a, b) => a + b, 0);
   if (defender?.res) {
     defender.res.hp = Math.max(0, defender.res.hp - totalDamage);
@@ -83,40 +84,18 @@ export function resolveAttack(ctx) {
     ? defender.hp
     : debugData.defenderHp.after;
 
-  if (defender?.res?.hp === 0 && attacker?.modCache?.temporal?.onKillHaste) {
-    const hk = attacker.modCache.temporal.onKillHaste;
-    addStatus(attacker, "haste", {
-      duration: hk.duration ?? 2,
-      potency: hk.potency ?? 1,
-    });
-  }
+  const attempts = [...onHitStatuses, ...(ctx.statusAttempts || [])];
+  const appliedStatuses = attempts.length
+    ? applyStatuses({ statusAttempts: attempts }, attacker, defender, ctx.turn)
+    : [];
 
-  let echo = null;
-  if (attacker?.modCache?.temporal?.echo && attacker.modCache.temporal.echo.percent > 0) {
-    const echoCfg = attacker.modCache.temporal.echo;
-    const randomFn = typeof ctx?.rng === "function" ? ctx.rng : (typeof rand === "function" ? rand : Math.random);
-    const chance = Math.min(1, Math.max(0, echoCfg.chance ?? 0));
-    if (randomFn() < chance) {
-      const scaled = {};
-      let echoTotal = 0;
-      for (const [type, amt] of Object.entries(packetsAfterDefense)) {
-        const v = Math.floor(Number(amt) * echoCfg.percent);
-        if (v > 0) {
-          scaled[type] = v;
-          echoTotal += v;
-        }
-      }
-      if (echoTotal > 0 && defender?.res) {
-        defender.res.hp = Math.max(0, defender.res.hp - echoTotal);
-        echo = { packets: scaled, total: echoTotal };
-        debugData.echo = clone(echo);
-        debugData.defenderHp.after = Number.isFinite(defender?.res?.hp)
-          ? defender.res.hp
-          : Number.isFinite(defender?.hp)
-          ? defender.hp
-          : debugData.defenderHp.after;
-      }
-    }
+  debugData.statusAttempts = clone(attempts);
+  debugData.appliedStatuses = clone(appliedStatuses);
+
+  const killed = isDefenderDown(defender);
+  const hookSummary = postDamageTemporalResourceHooks(ctx, { killed }, resolveAttack);
+  if (hookSummary?.hasteApplied || hookSummary?.resourceGains || hookSummary?.echo) {
+    debugData.hooks = clone(hookSummary);
   }
 
   if (attacker) {
@@ -126,17 +105,27 @@ export function resolveAttack(ctx) {
     }
   }
 
-  const attempts = [...onHitStatuses, ...(ctx.statusAttempts || [])];
-  const appliedStatuses = attempts.length
-    ? applyStatuses({ statusAttempts: attempts }, attacker, defender, ctx.turn)
-    : [];
-
-  debugData.statusAttempts = clone(attempts);
-  debugData.appliedStatuses = clone(appliedStatuses);
+  debugData.defenderHp.after = getDefenderHp(defender, debugData.defenderHp.after);
+  if (hookSummary?.echo?.result?.packetsAfterDefense && !debugData.echo) {
+    debugData.echo = clone(hookSummary.echo);
+  }
 
   DebugBus.emit({ type: "attack", payload: debugData });
 
-  return { packetsAfterDefense, totalDamage, appliedStatuses, echo };
+  return { packetsAfterDefense, totalDamage, appliedStatuses, echo: hookSummary?.echo || null };
+}
+
+function getDefenderHp(defender, fallback) {
+  if (Number.isFinite(defender?.res?.hp)) return defender.res.hp;
+  if (Number.isFinite(defender?.hp)) return defender.hp;
+  return fallback;
+}
+
+function isDefenderDown(defender) {
+  if (!defender) return false;
+  if (Number.isFinite(defender?.res?.hp)) return defender.res.hp <= 0;
+  if (Number.isFinite(defender?.hp)) return defender.hp <= 0;
+  return false;
 }
 
 // --- helper functions ---
