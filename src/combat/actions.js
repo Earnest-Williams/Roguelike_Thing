@@ -38,6 +38,7 @@ export function tryMove(actor, dir) {
   actor.x = (actor.x || 0) + dir.dx;
   actor.y = (actor.y || 0) + dir.dy;
   eventGain(actor, { kind: "move" });
+  actor._turnDidMove = true;
   noteMoved(actor);
   return true;
 }
@@ -85,6 +86,7 @@ export function tryAttack(attacker, defender, opts = {}) {
     statusAttempts: [],
   };
   const result = resolveAttack(ctx);
+  attacker._turnDidAttack = true;
   noteAttacked(attacker);
   tryTemporalEcho(ctx, result);
 
@@ -153,6 +155,7 @@ export function tryAttackEquipped(
   const res = performEquippedAttack(attacker, defender, item, distTiles, mode);
   if (!res.ok) return false;
 
+  attacker._turnDidAttack = true;
   noteAttacked(attacker);
 
   startCooldown(attacker, key, action.baseCooldown);
