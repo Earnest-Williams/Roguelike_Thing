@@ -25,8 +25,18 @@ export function postDamageTemporalResourceHooks(ctx, outcome = {}, resolveAttack
   const resource = attacker.modCache?.resource || {};
   const echoCfg = temporal.echo || null;
 
-  const allowOnKill = !ctx?.isEcho || getAllowOnKill(echoCfg);
-  if (outcome?.killed && allowOnKill) {
+  const killAlreadyRewarded = Boolean(ctx?._postDamageKillRewarded);
+  let shouldApplyOnKill = false;
+  if (outcome?.killed && !killAlreadyRewarded) {
+    if (!ctx?.isEcho || getAllowOnKill(echoCfg)) {
+      shouldApplyOnKill = true;
+    }
+    if (ctx && typeof ctx === "object") {
+      ctx._postDamageKillRewarded = true;
+    }
+  }
+
+  if (shouldApplyOnKill) {
     const hasteSummary = maybeApplyOnKillHaste(attacker, temporal.onKillHaste);
     if (hasteSummary) summary.hasteApplied = hasteSummary;
     const gainSummary = maybeApplyOnKillResourceGain(attacker, resource.onKillGain);
