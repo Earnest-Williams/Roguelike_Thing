@@ -373,7 +373,8 @@ export class Actor {
     const sdPct = this.statusDerived?.actionSpeedPct ?? 0;
     const temporalPct = this.modCache?.temporal?.actionSpeedPct ?? 0;
     const pct = sdPct + temporalPct;
-    const mult = this.modCache.speedMult * (1 + pct);
+    const speedScalar = Math.max(MIN_TOTAL_ACTION_COST_MULTIPLIER, 1 - pct);
+    const mult = this.modCache.speedMult * speedScalar;
     return Math.max(MIN_TOTAL_ACTION_COST_MULTIPLIER, mult);
   }
 

@@ -83,30 +83,116 @@ export function registerStatus(def) {
 
 export const defineStatus = registerStatus;
 
-const DEFAULT_STATUSES = {
-  haste: {
+function applyDirectHpLoss(target, amount) {
+  if (!target) return 0;
+  const dmg = Math.max(0, Math.floor(Number(amount) || 0));
+  if (!dmg) return 0;
+
+  if (target.res && Number.isFinite(target.res.hp)) {
+    const next = Math.max(0, target.res.hp - dmg);
+    target.res.hp = next;
+    if (target.resources && typeof target.resources === "object") {
+      target.resources.hp = next;
+      if (target.resources.pools?.hp) {
+        target.resources.pools.hp.cur = next;
+      }
+    }
+    if (Number.isFinite(target.hp)) {
+      target.hp = next;
+    }
+  } else if (Number.isFinite(target?.hp)) {
+    const next = Math.max(0, target.hp - dmg);
+    target.hp = next;
+    if (target.resources && typeof target.resources === "object") {
+      target.resources.hp = next;
+      if (target.resources.pools?.hp) {
+        target.resources.pools.hp.cur = next;
+      }
+    }
+  }
+
+  return dmg;
+}
+
+function dealTypeDamage(target, type, amount) {
+  const dealt = applyDirectHpLoss(target, amount);
+  if (!dealt) return 0;
+  if (target && typeof target === "object") {
+    target.lastDamageType = type || target.lastDamageType || null;
+  }
+  logStatusEvt(target, { action: "dot", type, amount: dealt });
+  return dealt;
+}
+
+function makeHasteStatus() {
+  return {
     id: "haste",
     harmful: false,
     stacking: "refresh",
-    tickEvery: 1,
-    duration: 6,
-    derive(ctx, d) {
-      d.temporal.actionSpeedPct = (d.temporal.actionSpeedPct || 0) + 0.15 * ctx.stacks;
-      return d;
+    tickEvery: 0,
+    duration: 2,
+    derive(ctx, derived) {
+      const stacks = Math.max(1, ctx.stacks || 1);
+      derived.temporal.actionSpeedPct = (derived.temporal.actionSpeedPct || 0) + 0.2 * stacks;
+      return derived;
     },
-  },
-  burning: {
-    id: "burning",
+  };
+}
+
+function makeSlowedStatus() {
+  return {
+    id: "slowed",
+    harmful: true,
+    stacking: "add",
+    tickEvery: 0,
+    duration: 3,
+    derive(ctx, derived) {
+      const stacks = Math.max(1, ctx.stacks || 1);
+      derived.temporal.actionSpeedPct = (derived.temporal.actionSpeedPct || 0) - 0.2 * stacks;
+      return derived;
+    },
+  };
+}
+
+function makeStunnedStatus() {
+  return {
+    id: "stunned",
+    harmful: true,
+    stacking: "max",
+    tickEvery: 0,
+    duration: 1,
+    derive(ctx, derived) {
+      const stacks = Math.max(1, ctx.stacks || 1);
+      derived.temporal.actionSpeedPct = (derived.temporal.actionSpeedPct || 0) - 0.5 * stacks;
+      derived.temporal.moveAPDelta = (derived.temporal.moveAPDelta || 0) + 2 * stacks;
+      return derived;
+    },
+  };
+}
+
+function makeDotStatus(id, damageType) {
+  return {
+    id,
     harmful: true,
     stacking: "add",
     tickEvery: 1,
-    duration: 4,
-    onTick({ target, potency }) {
-      if (target && Number.isFinite(target.hp)) {
-        target.hp = Math.max(0, target.hp - potency);
-      }
+    duration: 3,
+    onTick(ctx) {
+      const potency = Number.isFinite(ctx?.potency)
+        ? Math.max(1, Math.floor(ctx.potency))
+        : Math.max(1, Math.floor(ctx.stacks || 1));
+      dealTypeDamage(ctx.target, damageType, potency);
     },
-  },
+  };
+}
+
+const DEFAULT_STATUSES = {
+  haste: makeHasteStatus(),
+  slowed: makeSlowedStatus(),
+  stunned: makeStunnedStatus(),
+  burn: makeDotStatus("burn", "fire"),
+  burning: makeDotStatus("burning", "fire"),
+  poisoned: makeDotStatus("poisoned", "poison"),
 };
 
 for (const def of Object.values(DEFAULT_STATUSES)) {

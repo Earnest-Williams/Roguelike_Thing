@@ -13,20 +13,23 @@ import { rand } from "./rng.js";
 export function finalAPForAction(actor, baseAP, tags = []) {
   const tagList = Array.isArray(tags) ? tags : [];
   const status = actor?.statusDerived || { moveAPDelta: 0, actionSpeedPct: 0 };
-  const mcTemporal = actor?.modCache?.temporal || {};
-  const temporal = actor?.temporal ? { ...mcTemporal, ...actor.temporal } : mcTemporal;
+  const baseTemporal = actor?.modCache?.temporal || {};
+  const temporal = actor?.temporal ? { ...baseTemporal, ...actor.temporal } : baseTemporal;
 
   const moveDelta =
     (tagList.includes("move") ? Number(temporal.moveAPDelta || 0) : 0) + Number(status.moveAPDelta || 0);
-  const baseDelta = Number(temporal.baseActionAPDelta || 0);
-  const baseMult = Number.isFinite(temporal.baseActionAPMult) ? temporal.baseActionAPMult : 1;
+  const baseDelta = Number(temporal.baseActionAPDelta || 0) + Number(status.baseActionAPDelta || 0);
+  const baseMult = Number.isFinite(temporal.baseActionAPMult) ? Number(temporal.baseActionAPMult) : 1;
   const speedPct = Number(temporal.actionSpeedPct || 0) + Number(status.actionSpeedPct || 0);
-  const speedScalar = Math.max(0.1, 1 - speedPct);
 
-  const base = Math.max(1, Math.floor(Number(baseAP) || 0) + moveDelta + baseDelta);
-  const scaled = Math.max(1, Math.round(base * baseMult * speedScalar));
+  const baseValue = Number(baseAP);
+  const baseAmount = Number.isFinite(baseValue) ? baseValue : 0;
+  const speedScalar = Math.max(0, 1 - speedPct);
+  const core = Math.max(1, (baseAmount + baseDelta) * baseMult);
+  const scaled = Math.max(1, Math.round(core * speedScalar));
+  const costAP = Math.max(1, Math.round(scaled + moveDelta));
 
-  return { costAP: scaled };
+  return { costAP };
 }
 
 /**
@@ -171,19 +174,31 @@ export function isOnCooldown(actor, actionId) {
 
 export function startCooldown(actor, actionId, baseTurns, tags = []) {
   if (!actor || !actionId) return 0;
-  const mcTemporal = actor.modCache?.temporal || {};
-  const temporal = actor.temporal ? { ...mcTemporal, ...actor.temporal } : mcTemporal;
-  const perTag =
-    Array.isArray(tags) && tags.length && temporal.cooldownPerTag instanceof Map
-      ? Math.min(
-          ...tags.map((tag) => {
-            const entry = temporal.cooldownPerTag.get(tag);
-            return Number.isFinite(entry) ? Number(entry) : 1;
-          }),
-        )
-      : 1;
-  const mult = Number(temporal.cooldownMult || 1) * Number(perTag || 1);
-  const cd = Math.max(0, Math.round(Number(baseTurns || 0) * mult));
+  const base = Math.max(0, Number(baseTurns) || 0);
+  const baseTemporal = actor.modCache?.temporal || {};
+  const temporal = actor.temporal ? { ...baseTemporal, ...actor.temporal } : baseTemporal;
+  const tagList = Array.isArray(tags) ? tags : [];
+
+  let perTag = 1;
+  if (tagList.length && temporal.cooldownPerTag) {
+    const source = temporal.cooldownPerTag;
+    const pickFor = (tag) => {
+      if (!tag) return 1;
+      if (source instanceof Map) {
+        const entry = source.get(tag);
+        return Number.isFinite(entry) ? Number(entry) : 1;
+      }
+      if (typeof source === "object") {
+        const entry = source[tag];
+        return Number.isFinite(entry) ? Number(entry) : 1;
+      }
+      return 1;
+    };
+    perTag = Math.min(...tagList.map((tag) => pickFor(tag)));
+  }
+
+  const mult = Number.isFinite(temporal.cooldownMult) ? Number(temporal.cooldownMult) : 1;
+  const cd = Math.max(0, Math.round(base * mult * perTag));
   actor.cooldowns ||= new Map();
   actor.cooldowns.set(actionId, cd);
   return cd;

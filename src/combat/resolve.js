@@ -193,14 +193,10 @@ function finalizeAttack(ctx, resolveFn) {
   }
 
   if (attacker) {
-    const usedTypes = new Set();
     for (const [type, dealt] of Object.entries(ctx?.packetsAfterDefense || {})) {
       if (Number.isFinite(dealt) && dealt > 0) {
-        usedTypes.add(type);
+        noteUseGain(attacker, type);
       }
-    }
-    if (usedTypes.size) {
-      noteUseGain(attacker, usedTypes);
     }
   }
 

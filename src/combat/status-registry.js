@@ -29,10 +29,11 @@ function loseHP(actor, amount) {
 }
 
 function dealTypeDamage(actor, type, amount) {
-  if (!actor || !Number.isFinite(amount) || amount <= 0) return;
-  loseHP(actor, amount);
+  if (!actor) return;
+  const dmg = Math.max(1, Math.floor(Number(amount) || 0));
+  loseHP(actor, dmg);
   if (actor.logs?.status) {
-    actor.logs.status.push({ kind: "status_tick", type, amount });
+    actor.logs.status.push({ kind: "status_tick", type, amount: dmg });
   }
 }
 
@@ -42,7 +43,8 @@ registerStatus({
   tickEvery: 1,
   duration: 4,
   onTick(ctx) {
-    dealTypeDamage(ctx.target, "fire", Math.max(1, ctx.stacks));
+    const potency = Number.isFinite(ctx?.potency) ? ctx.potency : ctx.stacks;
+    dealTypeDamage(ctx.target, "fire", potency);
   },
 });
 
@@ -52,7 +54,8 @@ registerStatus({
   tickEvery: 1,
   duration: 6,
   onTick(ctx) {
-    dealTypeDamage(ctx.target, "poison", Math.max(1, ctx.stacks));
+    const potency = Number.isFinite(ctx?.potency) ? ctx.potency : ctx.stacks;
+    dealTypeDamage(ctx.target, "poison", potency);
   },
 });
 
@@ -65,7 +68,6 @@ registerStatus({
   derive(ctx, d) {
     const stacks = Math.max(1, ctx.stacks);
     d.temporal.actionSpeedPct = (d.temporal.actionSpeedPct || 0) - 0.2 * stacks;
-    d.temporal.moveAPDelta = (d.temporal.moveAPDelta || 0) + 2 * stacks;
     return d;
   },
 });
@@ -77,7 +79,7 @@ registerStatus({
   derive(ctx, d) {
     const stacks = Math.max(1, ctx.stacks);
     d.temporal.actionSpeedPct = (d.temporal.actionSpeedPct || 0) - 0.5 * stacks;
-    d.temporal.moveAPDelta = (d.temporal.moveAPDelta || 0) + 3 * stacks;
+    d.temporal.moveAPDelta = (d.temporal.moveAPDelta || 0) + 2 * stacks;
     return d;
   },
 });
