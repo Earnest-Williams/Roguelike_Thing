@@ -1,9 +1,10 @@
 // src/combat/resolve.js
 // @ts-check
 import { logAttackStep } from "./debug-log.js";
-import { applyStatuses } from "./status.js";
+import { addStatus, applyStatuses } from "./status.js";
 import { applyOutgoingScaling, gainAttunement } from "./attunement.js";
 import { polarityOnHitScalar, polarityDefScalar } from "./polarity.js";
+import { rand } from "./rng.js";
 
 export function resolveAttack(ctx) {
   const { attacker, defender } = ctx;
@@ -29,14 +30,44 @@ export function resolveAttack(ctx) {
   log({ step: "defense", packets: defended });
 
   const scalar = Number.isFinite(ctx.damageScalar) ? Math.max(0, ctx.damageScalar) : 1;
-  const collapsed = collapseByType(defended, scalar);
-  const totalDamage = Object.values(collapsed).reduce((a, b) => a + b, 0);
+  const packetsAfterDefense = collapseByType(defended, scalar);
+  const totalDamage = Object.values(packetsAfterDefense).reduce((a, b) => a + b, 0);
   if (defender?.res) {
     defender.res.hp = Math.max(0, defender.res.hp - totalDamage);
   }
 
+  if (defender?.res?.hp === 0 && attacker?.modCache?.temporal?.onKillHaste) {
+    const hk = attacker.modCache.temporal.onKillHaste;
+    addStatus(attacker, "haste", {
+      duration: hk.duration ?? 2,
+      potency: hk.potency ?? 1,
+    });
+  }
+
+  let echo = null;
+  if (attacker?.modCache?.temporal?.echo && attacker.modCache.temporal.echo.percent > 0) {
+    const echoCfg = attacker.modCache.temporal.echo;
+    const randomFn = typeof ctx?.rng === "function" ? ctx.rng : (typeof rand === "function" ? rand : Math.random);
+    const chance = Math.min(1, Math.max(0, echoCfg.chance ?? 0));
+    if (randomFn() < chance) {
+      const scaled = {};
+      let echoTotal = 0;
+      for (const [type, amt] of Object.entries(packetsAfterDefense)) {
+        const v = Math.floor(Number(amt) * echoCfg.percent);
+        if (v > 0) {
+          scaled[type] = v;
+          echoTotal += v;
+        }
+      }
+      if (echoTotal > 0 && defender?.res) {
+        defender.res.hp = Math.max(0, defender.res.hp - echoTotal);
+        echo = { packets: scaled, total: echoTotal };
+      }
+    }
+  }
+
   if (attacker) {
-    for (const [type, amt] of Object.entries(collapsed)) {
+    for (const [type, amt] of Object.entries(packetsAfterDefense)) {
       if (!amt || amt <= 0) continue;
       gainAttunement(attacker, type);
     }
@@ -47,7 +78,7 @@ export function resolveAttack(ctx) {
     ? applyStatuses({ statusAttempts: attempts }, attacker, defender, ctx.turn)
     : [];
 
-  return { packetsAfterDefense: collapsed, totalDamage, appliedStatuses };
+  return { packetsAfterDefense, totalDamage, appliedStatuses, echo };
 }
 
 // --- helper functions ---
