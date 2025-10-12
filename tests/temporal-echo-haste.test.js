@@ -2,6 +2,9 @@ import { strict as assert } from "node:assert";
 import { Actor } from "../src/combat/actor.js";
 import { resolveAttack } from "../src/combat/resolve.js";
 
+const originalRandom = Math.random;
+Math.random = () => 0;
+
 (function testEchoAndHaste() {
   const attacker = new Actor({
     id: "attacker",
@@ -37,7 +40,6 @@ import { resolveAttack } from "../src/combat/resolve.js";
     attacker,
     defender,
     packets: [{ type: "physical", amount: 10 }],
-    rng: () => 0,
   });
 
   assert(echo && echo.total === 5, "echo should repeat half of the damage");
@@ -46,3 +48,5 @@ import { resolveAttack } from "../src/combat/resolve.js";
   assert.equal(hasHaste, true, "haste should be applied on kill");
   console.log("✓ temporal echo + on-kill haste");
 })();
+
+Math.random = originalRandom;
