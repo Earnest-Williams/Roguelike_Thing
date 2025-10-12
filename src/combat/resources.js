@@ -1,259 +1,249 @@
 // src/combat/resources.js
 // @ts-check
 
-import {
-  BASE_PASSIVE_REGEN,
-  CHANNELING_REGEN_MULT,
-  HEALTH_FLOOR,
-  RESOURCE_FLOOR,
-} from "../../constants.js";
-import { hasStatus } from "./status.js";
+import { HEALTH_FLOOR } from "../../constants.js";
+
+const RESOURCE_KEYS = ["hp", "stamina", "mana"];
 
 /**
- * @typedef {Object} ResourceState
- * @property {number} cur
- * @property {number} max
- * @property {number} regenPerTurn
- * @property {number} [onMoveGain]
- * @property {number} [onHitGain]
- * @property {number} [onCritGain]
- * @property {number} [onKillGain]
- * @property {Record<string, number>} [spendMultipliers]
- * @property {number} [minToUse]
- * @property {number} [baseMax]
+ * Ensure actor.resources / actor.res exist and share the same reference.
+ * @param {any} actor
+ * @returns {Record<string, number>}
  */
-
-/**
- * @typedef {{ kind: "move"|"hit"|"crit"|"kill", amount?: number }} ResourceEvent
- */
-
-/**
- * Applies per-turn regeneration and clamps values.
- * Call after statuses tick (or before, by your chosen order—see loop below).
- * @param {import("./actor.js").Actor} actor
- */
-export function updateResources(actor) {
-  if (!actor) return;
-
-  const pool = ensureResourcePool(actor);
-  const baseStats = actor.base ?? actor.baseStats ?? {};
-  const base = BASE_PASSIVE_REGEN;
-  const sd = actor.statusDerived || {};
-  const mods = actor.modCache?.resource || {};
-
-  const regenFlat = {
-    hp: (sd.regenFlat?.hp ?? 0) + (sd.regen?.hp ?? 0) + (mods.regenFlat?.hp ?? 0),
-    stamina: (sd.regenFlat?.stamina ?? 0) + (sd.regen?.stamina ?? 0) + (mods.regenFlat?.stamina ?? 0),
-    mana: (sd.regenFlat?.mana ?? 0) + (sd.regen?.mana ?? 0) + (mods.regenFlat?.mana ?? 0),
-  };
-  const regenPct = {
-    hp: (sd.regenPct?.hp ?? 0) + (mods.regenPct?.hp ?? 0),
-    stamina: (sd.regenPct?.stamina ?? 0) + (mods.regenPct?.stamina ?? 0),
-    mana: (sd.regenPct?.mana ?? 0) + (mods.regenPct?.mana ?? 0),
-  };
-
-  const baseStamina = pickFirstFinite(baseStats.maxStamina, actor.baseStats?.maxStamina);
-  const staminaMaxBase = baseStamina + (mods.maxFlat?.stamina ?? 0);
-  const staminaMax = Math.max(
-    0,
-    Math.round(staminaMaxBase * (1 + (mods.maxPct?.stamina ?? 0))),
-  );
-
-  const baseMana = pickFirstFinite(baseStats.maxMana, actor.baseStats?.maxMana);
-  const manaMaxBase = baseMana + (mods.maxFlat?.mana ?? 0);
-  const manaMax = Math.max(
-    0,
-    Math.round(manaMaxBase * (1 + (mods.maxPct?.mana ?? 0))),
-  );
-
-  const baseHP = pickFirstFinite(baseStats.maxHP, actor.baseStats?.maxHP);
-  const hpMaxBase = baseHP + (mods.maxFlat?.hp ?? 0);
-  const hpMax = Math.max(
-    0,
-    Math.round(hpMaxBase * (1 + (mods.maxPct?.hp ?? 0))),
-  );
-
-  const channelingActive = hasStatus(actor, "channeling") && actor.modCache?.resource?.channeling;
-  const channelingMult = channelingActive ? CHANNELING_REGEN_MULT : 1;
-
-  const hpGain = (base.hp + regenFlat.hp + hpMax * (regenPct.hp ?? 0)) * channelingMult;
-  const hpCap = hpMax || baseHP;
-  pool.hp = clamp(pool.hp + hpGain, HEALTH_FLOOR, Number.isFinite(hpCap) ? hpCap : pool.hp);
-
-  const staminaGain = (base.stamina + regenFlat.stamina + staminaMax * (regenPct.stamina ?? 0)) * channelingMult;
-  const staminaCap = staminaMax || baseStamina;
-  pool.stamina = clamp(
-    pool.stamina + staminaGain,
-    RESOURCE_FLOOR,
-    Number.isFinite(staminaCap) ? staminaCap : pool.stamina,
-  );
-
-  const manaGain = (base.mana + regenFlat.mana + manaMax * (regenPct.mana ?? 0)) * channelingMult;
-  const manaCap = manaMax || baseMana;
-  pool.mana = clamp(
-    pool.mana + manaGain,
-    RESOURCE_FLOOR,
-    Number.isFinite(manaCap) ? manaCap : pool.mana,
-  );
-
-  actor.res = pool;
-  actor.resources = pool;
-  if (typeof actor.hp === "number") actor.hp = pool.hp;
-  if (typeof actor.stamina === "number") actor.stamina = pool.stamina;
-  if (typeof actor.mana === "number") actor.mana = pool.mana;
-}
-
-function clamp(v, lo, hi) {
-  return Math.max(lo, Math.min(hi, v));
-}
-
-/**
- * Returns true when actor is out (dead/defeated).
- * @param {import("./actor.js").Actor} actor
- */
-export function isDefeated(actor) {
-  if (!actor) return false;
-  const pool = actor.resources || actor.res;
-  const hp = Number.isFinite(pool?.hp) ? pool.hp : 0;
-  return hp <= HEALTH_FLOOR;
-}
-
-function ensureResourcePool(actor) {
-  if (!actor) return { hp: 0, stamina: 0, mana: 0 };
-
-  const baseStats = actor.base ?? actor.baseStats ?? {};
-  const source =
-    (actor.resources && typeof actor.resources === "object" && actor.resources)
-    || (actor.res && typeof actor.res === "object" && actor.res)
-    || { hp: 0, stamina: 0, mana: 0 };
-
-  source.hp = pickFirstFinite(source.hp, actor.res?.hp, actor.resources?.hp, baseStats.maxHP, actor.baseStats?.maxHP);
-  source.stamina = pickFirstFinite(
-    source.stamina,
-    actor.res?.stamina,
-    actor.resources?.stamina,
-    baseStats.maxStamina,
-    actor.baseStats?.maxStamina,
-  );
-  source.mana = pickFirstFinite(source.mana, actor.res?.mana, actor.resources?.mana, baseStats.maxMana, actor.baseStats?.maxMana);
-
-  if (!source.pools || typeof source.pools !== "object") {
-    source.pools = Object.create(null);
+function ensureResourceBucket(actor) {
+  if (!actor) return Object.create(null);
+  if (!actor.resources || typeof actor.resources !== "object") {
+    actor.resources = Object.create(null);
   }
-  actor.resources = source;
-  actor.res = source;
-  return source;
+  if (!actor.res || actor.res !== actor.resources) {
+    actor.res = actor.resources;
+  }
+  actor.resources.pools = actor.resources.pools || Object.create(null);
+  actor.max = actor.max || Object.create(null);
+  return actor.resources;
 }
 
-function pickFirstFinite(...values) {
-  for (const value of values) {
-    if (Number.isFinite(value)) return value;
+/**
+ * Pull the base max for a pool from actor stats.
+ * @param {any} actor
+ * @param {"hp"|"stamina"|"mana"} key
+ */
+function baseMaxFor(actor, key) {
+  if (!actor) return 0;
+  const capKey = `max${key[0].toUpperCase()}${key.slice(1)}`;
+  const baseStats = actor.base ?? actor.baseStats ?? Object.create(null);
+  if (Number.isFinite(baseStats[capKey])) return Number(baseStats[capKey]);
+  if (Number.isFinite(actor.baseStats?.[capKey])) return Number(actor.baseStats[capKey]);
+  if (Number.isFinite(actor.max?.[key])) return Number(actor.max[key]);
+  if (Number.isFinite(actor.resources?.pools?.[key]?.max)) {
+    return Number(actor.resources.pools[key].max);
   }
   return 0;
 }
 
 /**
+ * Compute per-turn regen for a single pool.
+ * @param {number} cur
+ * @param {number} max
+ * @param {{ regenFlat?:Record<string,number>, regenPct?:Record<string,number> }} res
+ * @param {{ regenFlat?:Record<string,number>, regenPct?:Record<string,number> }} sd
+ * @param {"hp"|"stamina"|"mana"} key
+ */
+function regenFor(cur, max, res, sd, key) {
+  const flat = (res.regenFlat?.[key] || 0) + (sd?.regenFlat?.[key] || 0);
+  const pct = (res.regenPct?.[key] || 0) + (sd?.regenPct?.[key] || 0);
+  const amount = flat + max * pct;
+  return Math.max(0, amount);
+}
+
+function perTagCostFor(per, tag, key) {
+  if (!per) return 0;
+  if (per instanceof Map) {
+    const entry = per.get(tag);
+    if (entry && Number.isFinite(entry[key])) return Number(entry[key]);
+    return 0;
+  }
+  if (typeof per === "object" && per[tag]) {
+    const entry = per[tag];
+    if (Number.isFinite(entry?.[key])) return Number(entry[key]);
+  }
+  return 0;
+}
+
+/**
+ * Compute the effective cost for a pool.
+ * @param {any} actor
+ * @param {string} key
+ * @param {number} baseCost
+ * @param {Iterable<string>} [tags]
+ */
+function computeCost(actor, key, baseCost, tags = []) {
+  const resMods = actor?.modCache?.resource || Object.create(null);
+  const sd = actor?.statusDerived || Object.create(null);
+  let cost = Math.max(0, Number(baseCost) || 0);
+  const resMult = Number.isFinite(resMods.costMult?.[key]) ? resMods.costMult[key] : 1;
+  const resFlat = Number(resMods.costFlat?.[key] || 0);
+  const sdMult = Number.isFinite(sd.costMult?.[key]) ? sd.costMult[key] : 1;
+  const sdFlat = Number(sd.costFlat?.[key] || 0);
+  cost = cost * resMult * sdMult + resFlat + sdFlat;
+  for (const tag of tags) {
+    cost += perTagCostFor(resMods.costPerTag, tag, key);
+    cost += perTagCostFor(sd.costPerTag, tag, key);
+  }
+  return Math.max(0, cost);
+}
+
+/**
+ * Apply resource costs to an action given base cost and tags.
+ * Multiplies by costMult, adds costFlat, and costPerTag when present.
+ * @param {any} actor
+ * @param {Record<string, number>} baseCosts
+ * @param {Iterable<string>} [tags]
+ */
+export function spendResources(actor, baseCosts, tags = []) {
+  if (!actor || !baseCosts) return;
+  const store = ensureResourceBucket(actor);
+  const tagList = Array.isArray(tags) ? tags : Array.from(tags || []);
+  for (const [key, base] of Object.entries(baseCosts)) {
+    const normalizedKey = /** @type {"hp"|"stamina"|"mana"} */ (key);
+    const cost = computeCost(actor, normalizedKey, base, tagList);
+    if (!Number.isFinite(cost) || cost <= 0) continue;
+    const cur = Number(store[normalizedKey] || 0);
+    const next = Math.max(0, cur - cost);
+    store[normalizedKey] = next;
+    if (store.pools?.[normalizedKey]) {
+      store.pools[normalizedKey].cur = next;
+    }
+  }
+}
+
+/**
+ * Tick all resources at turn start (after statuses are rebuilt).
+ * Honors channeling flag (actor.modCache.resource.channeling) for bonus regen.
+ * @param {any} actor
+ */
+export function tickResources(actor) {
+  if (!actor) return;
+  const store = ensureResourceBucket(actor);
+  const res = actor?.modCache?.resource || Object.create(null);
+  const sd = actor?.statusDerived || Object.create(null);
+  const maxFlat = res.maxFlat || Object.create(null);
+  const maxPct = res.maxPct || Object.create(null);
+  const channelingBonusMap = sd?.channelingRegenPct || Object.create(null);
+  const channelingActive = Boolean(res.channeling);
+
+  for (const key of RESOURCE_KEYS) {
+    const baseMax = baseMaxFor(actor, key);
+    const max = Math.max(0, baseMax * (1 + (maxPct[key] || 0)) + (maxFlat[key] || 0));
+    actor.max[key] = max;
+    const cur = Number.isFinite(store[key]) ? Number(store[key]) : max;
+    if (store.pools?.[key]) {
+      store.pools[key].max = max;
+    }
+    const channelingBonus = channelingActive
+      ? 1 + (Number.isFinite(channelingBonusMap[key]) ? channelingBonusMap[key] : 0.1)
+      : 1;
+    const gain = regenFor(cur, max, res, sd, key) * channelingBonus;
+    const next = Math.min(max, Math.max(0, cur + gain));
+    store[key] = next;
+    if (store.pools?.[key]) {
+      store.pools[key].cur = next;
+    }
+  }
+
+  actor.hp = store.hp;
+  actor.stamina = store.stamina;
+  actor.mana = store.mana;
+}
+
+/**
+ * Compatibility wrapper for legacy callers.
+ * @param {any} actor
+ */
+export function updateResources(actor) {
+  tickResources(actor);
+}
+
+/**
+ * Legacy regen wrapper for compatibility with tests/utilities.
+ * @param {any} actor
+ */
+export function regenTurn(actor) {
+  tickResources(actor);
+}
+
+/**
  * Returns true when the actor can afford an action's resource cost.
- * @param {import("./actor.js").Actor} actor
- * @param {{ resourceCost?: Record<string, number>, tags?: string[] }} action
+ * @param {any} actor
+ * @param {{ resourceCost?: Record<string, number>, tags?: Iterable<string> }} action
  */
 export function canPay(actor, action) {
-  const pools = actor?.resources?.pools || {};
-  const need = action?.resourceCost || {};
-  const tags = Array.isArray(action?.tags) ? action.tags : [];
-  for (const [pool, baseCost] of Object.entries(need)) {
-    const state = pools[pool];
-    if (!state) return false;
-    const mult = tags.reduce(
-      (acc, tag) => acc * (state.spendMultipliers?.[tag] || 1),
-      1,
-    );
-    const base = Number(baseCost || 0);
-    const cost = Math.ceil(base * mult);
-    if (
-      Number.isFinite(state.minToUse) &&
-      Number(state.minToUse || 0) > Number(state.cur || 0)
-    ) {
-      return false;
-    }
-    if (cost > 0 && Number(state.cur || 0) < cost) return false;
+  if (!actor) return false;
+  const costs = action?.resourceCost || Object.create(null);
+  const tags = action?.tags ? Array.from(action.tags) : [];
+  const store = ensureResourceBucket(actor);
+  for (const [key, base] of Object.entries(costs)) {
+    const normalizedKey = /** @type {"hp"|"stamina"|"mana"} */ (key);
+    const cost = computeCost(actor, normalizedKey, base, tags);
+    if (cost <= 0) continue;
+    const cur = Number(store[normalizedKey] || 0);
+    if (cur < cost) return false;
   }
   return true;
 }
 
 /**
- * Applies the action's resource cost to the actor.
- * @param {import("./actor.js").Actor} actor
- * @param {{ resourceCost?: Record<string, number>, tags?: string[] }} action
+ * Applies the action's resource cost to the actor using spendResources().
+ * @param {any} actor
+ * @param {{ resourceCost?: Record<string, number>, tags?: Iterable<string> }} action
  */
 export function spend(actor, action) {
-  const pools = actor?.resources?.pools || {};
-  const need = action?.resourceCost || {};
-  const tags = Array.isArray(action?.tags) ? action.tags : [];
-  for (const [pool, baseCost] of Object.entries(need)) {
-    const state = pools[pool];
-    if (!state) continue;
-    const mult = tags.reduce(
-      (acc, tag) => acc * (state.spendMultipliers?.[tag] || 1),
-      1,
-    );
-    const base = Number(baseCost || 0);
-    const cost = Math.ceil(base * mult);
-    if (cost <= 0) continue;
-    const next = Math.max(0, Number(state.cur || 0) - cost);
-    state.cur = next;
-  }
-}
-
-/**
- * Applies per-turn resource regeneration, clamping to max.
- * @param {import("./actor.js").Actor} actor
- */
-export function regenTurn(actor) {
-  if (!actor?.resources?.pools) return;
-  const channelingActive = hasStatus(actor, "channeling") && actor.modCache?.resource?.channeling;
-  const mult = channelingActive ? CHANNELING_REGEN_MULT : 1;
-  for (const state of Object.values(actor.resources.pools)) {
-    if (!state) continue;
-    const gain = Number(state.regenPerTurn || 0) * mult;
-    const next = Number(state.cur || 0) + gain;
-    const max = state.max ?? Number.MAX_SAFE_INTEGER;
-    state.cur = Math.min(max, Math.max(0, next));
-  }
+  const costs = action?.resourceCost || Object.create(null);
+  const tags = action?.tags ? Array.from(action.tags) : [];
+  spendResources(actor, costs, tags);
 }
 
 /**
  * Applies event-based resource gains (on move/hit/crit/kill).
- * @param {import("./actor.js").Actor} actor
- * @param {ResourceEvent} evt
+ * Maintains legacy pool structure for modules still using it.
+ * @param {any} actor
+ * @param {{ kind: "move"|"hit"|"crit"|"kill", amount?: number }} evt
  */
 export function eventGain(actor, evt) {
   if (!actor?.resources?.pools || !evt) return;
   for (const state of Object.values(actor.resources.pools)) {
     if (!state) continue;
-    let gain = 0;
+    let gain = Number(evt.amount || 0);
     switch (evt.kind) {
       case "move":
-        gain += state.onMoveGain || 0;
+        gain += Number(state.onMoveGain || 0);
         break;
       case "hit":
-        gain += state.onHitGain || 0;
+        gain += Number(state.onHitGain || 0);
         break;
       case "crit":
-        gain += state.onCritGain || 0;
+        gain += Number(state.onCritGain || 0);
         break;
       case "kill":
-        gain += state.onKillGain || 0;
+        gain += Number(state.onKillGain || 0);
         break;
       default:
         break;
     }
-    if (evt.amount) gain += evt.amount;
-    if (gain) {
-      const next = Number(state.cur || 0) + gain;
-      const max = state.max ?? Number.MAX_SAFE_INTEGER;
-      state.cur = Math.min(max, Math.max(0, next));
-    }
+    if (!gain) continue;
+    const cur = Number(state.cur || 0);
+    const max = Number.isFinite(state.max) ? Number(state.max) : Number.POSITIVE_INFINITY;
+    state.cur = Math.min(max, Math.max(0, cur + gain));
   }
 }
 
+/**
+ * Returns true when actor is out (dead/defeated).
+ * @param {any} actor
+ */
+export function isDefeated(actor) {
+  if (!actor) return false;
+  const store = actor.resources || actor.res;
+  const hp = Number.isFinite(store?.hp) ? Number(store.hp) : 0;
+  return hp <= HEALTH_FLOOR;
+}
