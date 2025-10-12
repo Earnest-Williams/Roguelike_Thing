@@ -1,80 +1,18 @@
-
----
-
-## 🧭 **Proposed `TASKS.md` (independent version)**
-
-```markdown
 # Task Tracker
 
-Structured list of development goals, bug fixes, and expansion milestones for Roguelike_Thing.
+Structured backlog of actionable follow-ups identified during the latest code review.
 
----
+## 🚨 High priority
 
-## ⚙️ 1. Core Simulation
+- [ ] Add an `npm test` script that proxies to `tests/run-basic-tests.js` so CI and contributors can run the regression suite with a standard command.
+- [ ] Promote the manual/performance harnesses to automated coverage (or document their usage) so key scenarios are exercised during routine runs.
 
-- [ ] Implement **attunement decay loop**:
-  - Gain and per-turn loss of elemental alignment.
-  - Write test to ensure stack behavior matches spec.
+## ⚔️ Combat & systems
 
-- [ ] Finalize **polarity interaction**:
-  - Clamp opposition and bias values within safe ranges.
-  - Unit tests for opposed vs. neutral matchups.
+- [ ] Consolidate the browser status registry with `src/combat/status-registry.js` to avoid diverging definitions between the Node tests and the in-browser client.
+- [ ] Expand the simulation harness with scripted matchups (e.g. boss templates, mixed loadouts) and assert expected win rates alongside the existing brigand-vs-dummy baseline.
 
-- [ ] Improve **status tick and rebuild**:
-  - Confirm `tickStatusesAtTurnStart` updates derived modifiers accurately.
-  - Add developer log output for active effects.
+## 🖥 Front-end & tooling
 
-- [ ] Refine **resource regeneration**:
-  - Test stationary channeling bonuses and regen multipliers.
-  - Add stamina/mana change indicators in debug output.
-
----
-
-## 🎨 2. Rendering Layer
-
-- [ ] Finalize `IRenderer` interface under `/js/render/types.ts`.
-- [ ] Implement both `canvas-renderer` and `null-renderer` using same API.
-- [ ] Add combat log, status icons, and viewport feedback.
-- [ ] Integrate lighting and field-of-view, reducing flicker near player.
-
----
-
-## 🧱 3. Content Expansion
-
-- [ ] Create 10+ elemental weapon effects (fire, cold, shock, acid, etc.).
-- [ ] Add example items combining multiple modifiers.
-- [ ] Add 5+ unique status effects (burn, bleed, poison, haste, stun).
-- [ ] Add initial enemy and spell definitions for combat testing.
-
----
-
-## 🧪 4. Testing
-
-- [ ] Unit test: attack resolution total matches expected per type.
-- [ ] Unit test: folded modifier aggregation accuracy.
-- [ ] Integration test: multi-turn status tick/expire cycle.
-- [ ] Regression test: equip/unequip rebuild consistency.
-
----
-
-## 🧰 5. Cleanup and Documentation
-
-- [ ] Fix duplicate `clamp01` definition.
-- [ ] Rename `calcCircumCirc` → `calcCircumCircle`.
-- [ ] Remove outdated hybrid-generator comments.
-- [ ] Expand top-level documentation and module docstrings.
-- [ ] Add `/docs/architecture.png` showing system relationships.
-
----
-
-## 📅 6. Future Milestones
-
-- [ ] Procedural item generator using internal power budgets.
-- [ ] AI that responds to alignment and polarity differences.
-- [ ] Temporal echo re-application system.
-- [ ] Player progression: skill scaling and stat growth.
-- [ ] Save/load serialization and replay logging.
-
----
-
-_Last updated: October 2025_
+- [ ] Extract the large inline module in `index.html` into dedicated files under `src/` or `js/` to simplify maintenance and enable bundling/minification workflows.
+- [ ] Provide a documented command (CLI script or npm task) for running `simulate` comparisons without editing test files, enabling quick balance spot-checks from the shell.
