@@ -3,7 +3,7 @@
 import { DebugBus } from "../../js/debug/debug-bus.js";
 import { logAttackStep } from "./debug-log.js";
 import { applyStatuses } from "./status.js";
-import { applyOutgoingScaling, gainAttunement } from "./attunement.js";
+import { applyOutgoingScaling, noteUseGain } from "./attunement.js";
 import { polarityOnHitScalar, polarityDefScalar } from "./polarity.js";
 import { postDamageTemporalResourceHooks } from "./post-damage-hooks.js";
 
@@ -105,9 +105,13 @@ export function resolveAttack(ctx) {
   }
 
   if (attacker) {
+    const usedTypes = new Set();
     for (const [type, amt] of Object.entries(packetsAfterDefense)) {
       if (!amt || amt <= 0) continue;
-      gainAttunement(attacker, type);
+      usedTypes.add(type);
+    }
+    if (usedTypes.size) {
+      noteUseGain(attacker, usedTypes);
     }
   }
 
