@@ -426,6 +426,7 @@ export function rebuildDerived(actor) {
 }
 
 export const rebuildStatusDerived = rebuildDerived;
+export const rebuildStatusDerivedCore = rebuildDerived;
 
 /**
  * Compatibility helper: apply multiple statuses using legacy context.
@@ -604,6 +605,8 @@ export function tickStatusesAtTurnStart(actor, turn) {
 export function getStatusDefinition(id) {
   return _registry.get(id) || null;
 }
+
+export const getStatusDefinitionCore = getStatusDefinition;
 
 function ensureHasteCtl(actor) {
   if (!actor._onKillHasteCtl || typeof actor._onKillHasteCtl !== "object") {
