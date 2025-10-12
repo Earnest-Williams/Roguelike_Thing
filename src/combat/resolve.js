@@ -84,7 +84,13 @@ export function resolveAttack(ctx) {
     ? defender.hp
     : debugData.defenderHp.after;
 
-  const attempts = [...onHitStatuses, ...(ctx.statusAttempts || [])];
+  const onHitList = ctx?.skipOnHitStatuses ? [] : onHitStatuses;
+  const ctxAttempts = Array.isArray(ctx?.statusAttempts)
+    ? ctx.statusAttempts
+    : ctx?.statusAttempts
+    ? [ctx.statusAttempts]
+    : [];
+  const attempts = [...onHitList, ...ctxAttempts];
   const appliedStatuses = attempts.length
     ? applyStatuses({ statusAttempts: attempts }, attacker, defender, ctx.turn)
     : [];
