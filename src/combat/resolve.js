@@ -24,6 +24,10 @@ const clone = (value) => {
 
 export function resolveAttack(ctx) {
   const { attacker, defender } = ctx;
+  const baseAcc = Number.isFinite(ctx?.baseAccuracy) ? Number(ctx.baseAccuracy) : 0;
+  const accBonus = attacker?.statusDerived?.accuracyFlat || 0;
+  const finalAcc = Math.max(0, baseAcc + accBonus);
+  ctx.finalAccuracy = finalAcc;
   const packetsIn = (ctx.packets || []).map((p) => ({ ...p }));
   const onHitStatuses = [];
   const log = (d) => logAttackStep(attacker, d);
@@ -42,6 +46,7 @@ export function resolveAttack(ctx) {
     steps: [],
     defenderHp: { before: defenderHpBefore, after: defenderHpBefore },
   };
+  debugData.accuracy = { base: baseAcc, bonus: accBonus, final: finalAcc };
   const pushStep = (step, packets) => {
     debugData.steps.push({ step, packets: clone(packets) });
   };
@@ -230,12 +235,15 @@ function applyPolarityAttack(attacker, defender, packets) {
 function applyDefense(defender, packets) {
   const imm = defender?.modCache?.immunities || new Set();
   const res = defender?.modCache?.resists || {};
+  const statusRes = defender?.statusDerived?.resistsPct || {};
   const scalar = polarityDefScalar(defender);
   const out = [];
   for (const p of packets) {
     if (imm.has(p.type)) continue;
-    const r = Math.min(0.95, Math.max(0, res[p.type] || 0));
-    const amt = Math.floor(p.amount * (1 - r) * scalar);
+    const baseResist = Number(res[p.type] || 0);
+    const derivedResist = Number(statusRes[p.type] || 0);
+    const totalResist = Math.max(-1, Math.min(0.95, baseResist + derivedResist));
+    const amt = Math.floor(p.amount * (1 - totalResist) * scalar);
     if (amt > 0) out.push({ type: p.type, amount: amt });
   }
   return out;

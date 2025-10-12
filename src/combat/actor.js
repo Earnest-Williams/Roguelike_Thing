@@ -308,6 +308,11 @@ export class Actor {
     this.cooldowns = Object.create(null);
   }
 
+  onTurnStart(turn) {
+    this.turn = turn | 0;
+    this.statusDerived = rebuildDerived(this);
+  }
+
   /**
    * Replaces modCache after folding (call fold in mod-folding).
    * @param {ModCache} folded
