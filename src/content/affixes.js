@@ -5,6 +5,7 @@ export const AFFIX_POOLS = {
   prefix: [
     { id:"searing",  apply:i=>addBrand(i, "fire", { flat:2, pct:0.05 }), w:3 },
     { id:"freezing", apply:i=>addBrand(i, "cold", { flat:2, pct:0.05 }), w:3 },
+    { id:"drenching", apply:i=>addBrand(i, "water", { flat:2, pct:0.05 }), w:3 },
     { id:"crackling",apply:i=>addBrand(i, "lightning", { flat:1, pct:0.08 }), w:2 },
     { id:"corroding", apply:i=>addBrand(i, "acid", { flat:1, pct:0.06, onHitStatuses:[{ id:"poisoned", chance:0.2, stacks:1, potency:2 }] }), w:2 },
     { id:"venom_laced", apply:i=>addBrand(i, "toxic", { pct:0.08, onHitStatuses:[{ id:"poisoned", chance:0.35, stacks:1 }] }), w:2 },
