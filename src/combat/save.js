@@ -2,6 +2,12 @@
 // @ts-check
 import { normalizePolaritySigned } from "./polarity.js";
 
+/**
+ * Convert an actor into a lightweight JSON-friendly blob containing just the
+ * runtime state required to resume combat (resources, statuses, etc.).
+ *
+ * @param {import("./actor.js").Actor | null | undefined} actor
+ */
 export function serializeActor(actor) {
   if (!actor) return null;
   const statusBlob = Array.isArray(actor.statuses)
@@ -26,6 +32,13 @@ export function serializeActor(actor) {
   };
 }
 
+/**
+ * Merge a serialized blob back onto an actor instance. The function mutates the
+ * provided actor and returns it for convenience so callers can chain updates.
+ *
+ * @param {import("./actor.js").Actor | null | undefined} actor
+ * @param {ReturnType<typeof serializeActor>} blob
+ */
 export function hydrateActor(actor, blob) {
   if (!actor || !blob) return actor;
   actor.hp = blob.hp;
@@ -52,6 +65,13 @@ export function hydrateActor(actor, blob) {
   return actor;
 }
 
+/**
+ * Clone the nested resource pool dictionary while preserving plain object
+ * semantics. Used by serialization helpers so we never leak references between
+ * saved blobs and live actors.
+ *
+ * @param {Record<string, { cur?: number, max?: number }> | null | undefined} pools
+ */
 function clonePools(pools) {
   const out = Object.create(null);
   if (!pools) return out;

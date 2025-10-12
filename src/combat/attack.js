@@ -3,6 +3,13 @@
 import { DEFAULT_MARTIAL_DAMAGE_TYPE } from "../../js/constants.js";
 import { resolveAttack as resolveAttackNew } from "./resolve.js";
 
+/**
+ * Normalize an arbitrary packets payload into the canonical array structure
+ * expected by the modern resolution pipeline.
+ *
+ * @param {any} prePackets
+ * @returns {Array<{ type: string, amount: number }>}
+ */
 function normalizePrePackets(prePackets) {
   const packets = [];
   if (!prePackets) return packets;
@@ -26,6 +33,14 @@ function normalizePrePackets(prePackets) {
   return packets;
 }
 
+/**
+ * Compatibility wrapper that accepts legacy attack contexts lacking explicit
+ * packet arrays. When packets are already present the call is forwarded
+ * untouched to the new resolver, otherwise the function constructs base packets
+ * using classic fields like `physicalBase`.
+ *
+ * @param {any} ctx
+ */
 export function resolveAttack(ctx) {
   if (!ctx) throw new Error("resolveAttack requires a context");
   if (Array.isArray(ctx.packets)) {

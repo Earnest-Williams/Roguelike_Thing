@@ -9,6 +9,11 @@ import { foldModsFromEquipment } from "../combat/mod-folding.js";
 
 // One-time registration (idempotent safe-guard)
 let _registered = false;
+
+/**
+ * Register the base item catalogue with the shared item system. Safe to call
+ * multiple times thanks to the `_registered` flag and upsert fallback.
+ */
 export function ensureItemsRegistered() {
   if (_registered) return;
   for (const id of Object.keys(BASE_ITEMS)) {
@@ -27,11 +32,24 @@ export function ensureItemsRegistered() {
   _registered = true;
 }
 
+/**
+ * Create a concrete item instance by id, ensuring the registry has been seeded
+ * beforehand so tests and simulations can call into the factories directly.
+ *
+ * @param {string} id
+ */
 export function createItem(id) {
   ensureItemsRegistered();
   return makeItem(id);
 }
 
+/**
+ * Instantiate an actor from a template id, equipping any loadout entries and
+ * folding innate modifiers so the resulting actor is battle-ready.
+ *
+ * @param {string} tid
+ * @returns {Actor}
+ */
 export function createActorFromTemplate(tid) {
   ensureItemsRegistered();
   const t = MOB_TEMPLATES[tid];
@@ -61,7 +79,12 @@ export function createActorFromTemplate(tid) {
   return a;
 }
 
-/** choose a legal slot by item.equipSlots */
+/**
+ * Choose a legal equipment slot for an item by iterating a preferred order and
+ * checking its `canEquipTo` guard. Returns `null` when no slot is valid.
+ *
+ * @param {ReturnType<typeof makeItem>} item
+ */
 function chooseSlotFor(item) {
   const pref = [
     SLOT.RightHand,

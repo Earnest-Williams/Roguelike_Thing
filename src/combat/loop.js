@@ -14,6 +14,13 @@ import { EVENT, emit } from "../ui/event-log.js";
 import { logTurnEvt } from "./debug-log.js";
 import { tickFreeAction } from "./actor.js";
 
+/**
+ * Prepare an actor for the upcoming turn by refreshing derived state and
+ * running maintenance hooks. This includes ticking statuses, resources, and
+ * bookkeeping flags so planners have consistent data before acting.
+ *
+ * @param {import("./actor.js").Actor | null | undefined} actor
+ */
 export function startTurn(actor) {
   if (!actor) return;
   tickFreeAction(actor);
@@ -41,6 +48,12 @@ export function startTurn(actor) {
   });
 }
 
+/**
+ * Finalize a turn after actions have been attempted. Handles channeling state,
+ * updates resource caches, and records high-level flags for next turn logic.
+ *
+ * @param {import("./actor.js").Actor | null | undefined} actor
+ */
 export function endTurn(actor) {
   if (!actor) return;
   if (!actor.turnFlags || typeof actor.turnFlags !== "object") {
@@ -120,6 +133,14 @@ export function runTurn(actor, actionPlanner) {
   return isDefeated(actor);
 }
 
+/**
+ * Roll initiative for a new combat round by sampling each actor's initiative
+ * die and storing the result on the actor. Consumers can then sort by the
+ * `initRoll` value to build the timeline for the round.
+ *
+ * @param {Array<import("./actor.js").Actor | null | undefined>} actors
+ * @param {() => number} [rng]
+ */
 export function onNewRound(actors, rng = Math.random) {
   if (!Array.isArray(actors)) return;
   for (const actor of actors) {

@@ -10,6 +10,14 @@ import {
   SIM_PARTIAL_TURN_CREDIT,
 } from "./config.js";
 
+/**
+ * Build a fast deterministic pseudo-random-number generator. The implementation
+ * comes from Tommy Ettinger's mulberry32 algorithm which offers good
+ * statistical distribution for simulation work while remaining tiny.
+ *
+ * @param {number} seed - Unsigned 32-bit seed used to initialize the stream.
+ * @returns {() => number} Function returning a float in the range [0, 1).
+ */
 export function mulberry32(seed) {
   return function() {
     seed |= 0; seed = seed + 0x6D2B79F5 | 0;
@@ -20,8 +28,22 @@ export function mulberry32(seed) {
 }
 
 /**
- * Runs N fights of A vs B with a simple planner.
- * Returns stats: { winsA, winsB, turnsAvg, dpsAvg }
+ * Runs a batch of automated combat simulations and returns aggregate stats.
+ *
+ * @param {{
+ *   a?: string,
+ *   b?: string,
+ *   N?: number,
+ *   seed?: number,
+ * }} [options] - Actor template ids, iteration count, and RNG seed.
+ * @returns {{
+ *   winsA: number,
+ *   winsB: number,
+ *   turnsAvg: number,
+ *   dpsAvg: number,
+ *   N: number,
+ *   seed: number,
+ * }} Aggregate win/loss counts and DPS information.
  */
 export function simulate({
   a = "brigand",

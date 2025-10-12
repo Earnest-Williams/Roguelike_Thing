@@ -25,9 +25,12 @@ import { noteAttacked, noteMoved } from "./actor.js";
  */
 
 /**
- * Move action (example). Returns boolean success.
+ * Attempt to move an actor by the provided delta, spending the appropriate AP
+ * for the "move" action archetype. Returns `true` on success.
+ *
  * @param {Actor} actor
  * @param {{dx:number, dy:number}} dir
+ * @returns {boolean}
  */
 export function tryMove(actor, dir) {
   const base = Math.max(MIN_AP_COST, BASE_MOVE_AP_COST);
@@ -44,10 +47,14 @@ export function tryMove(actor, dir) {
 }
 
 /**
- * Attack action (example). Applies cooldown and spends AP.
+ * Resolve a basic attack between two actors using scalar options. This is
+ * primarily used in tests/examples where we want a predictable attack profile
+ * without the full equipment pipeline.
+ *
  * @param {Actor} attacker
  * @param {Actor} defender
  * @param {{label?:string, base?:number, type?:string, key?:string, baseCooldown?:number, baseAP?:number}} [opts]
+ * @returns {boolean}
  */
 export function tryAttack(attacker, defender, opts = {}) {
   const key = opts.key || "basic_attack";
@@ -99,6 +106,12 @@ export function tryAttack(attacker, defender, opts = {}) {
   return true;
 }
 
+/**
+ * Grab the primary hand item from an actor. Falls back to the off-hand to keep
+ * single-weapon builds functional when the dominant slot is empty.
+ *
+ * @param {Actor | null | undefined} actor
+ */
 function mainHandItem(actor) {
   if (!actor?.equipment) return null;
   const right = actor.equipment[SLOT.RightHand] || actor.equipment.RightHand;
@@ -108,6 +121,15 @@ function mainHandItem(actor) {
   return entry?.item || entry;
 }
 
+/**
+ * Build the data required to perform an equipped attack including AP cost,
+ * cooldown, and resolved attack mode. Returns `null` when the actor cannot
+ * attack (no item, on cooldown, insufficient resources, etc.).
+ *
+ * @param {Actor} attacker
+ * @param {Actor} defender
+ * @param {number} [distTiles]
+ */
 export function planEquippedAttack(
   attacker,
   defender,
@@ -146,6 +168,15 @@ export function planEquippedAttack(
   return { item, mode, key, action, baseCosts, costAP };
 }
 
+/**
+ * Execute an equipped attack using the preconditions validated by
+ * `planEquippedAttack`. Returns a boolean indicating whether the attack was
+ * launched (regardless of hit/miss outcome).
+ *
+ * @param {Actor} attacker
+ * @param {Actor} defender
+ * @param {number} [distTiles]
+ */
 export function tryAttackEquipped(
   attacker,
   defender,
