@@ -1,7 +1,7 @@
 // src/combat/resources.js
 // @ts-check
 
-import { HEALTH_FLOOR } from "../../constants.js";
+import { HEALTH_FLOOR } from "../../js/constants.js";
 
 const RESOURCE_KEYS = ["hp", "stamina", "mana"];
 

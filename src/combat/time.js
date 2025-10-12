@@ -1,7 +1,7 @@
 // src/combat/time.js
 // @ts-check
 
-import { BASE_AP_GAIN_PER_TURN } from "../../constants.js";
+import { BASE_AP_GAIN_PER_TURN } from "../../js/constants.js";
 import { rand } from "./rng.js";
 
 /**

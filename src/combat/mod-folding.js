@@ -10,8 +10,8 @@ const SLOT_RULES = {
 };
 
 /**
- * @typedef {import("../../item-system.js").Item} Item
- * @typedef {import("../../item-system.js").ItemStack} ItemStack
+ * @typedef {import("../../js/item-system.js").Item} Item
+ * @typedef {import("../../js/item-system.js").ItemStack} ItemStack
  */
 
 /**

@@ -3,7 +3,7 @@
 import { LOOT_TABLES } from "../content/loot.js";
 import { BASE_ITEMS } from "../content/items.js";
 import { applyAffixes } from "../content/affixes.js";
-import { registerItem, upsertItem, makeItem } from "../../item-system.js";
+import { registerItem, upsertItem, makeItem } from "../../js/item-system.js";
 import {
   LOOT_AFFIX_CHANCE,
   DYNAMIC_ID_RANDOMIZATION_MODULUS,

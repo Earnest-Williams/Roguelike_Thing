@@ -123,3 +123,90 @@ export const ALL_SLOTS_ORDER = Object.freeze([
   SLOT.Backpack,
   SLOT.Quiver,
 ]);
+
+// MERGED CONSTANTS FROM ROOT
+export const DEFAULT_STATUS_DURATION_TURNS = 5;
+export const DEFAULT_STATUS_STACKS = 1;
+export const MIN_STATUS_STACKS = 1;
+export const STATUS_TICK_DELTA_TURNS = 1;
+
+export const BURN_MAX_STACKS = 10;
+export const HASTE_MAX_STACKS = 1;
+export const FATIGUE_MAX_STACKS = 5;
+export const CHILLED_MAX_STACKS = 3;
+export const REGENERATION_MAX_STACKS = 1;
+export const ADRENALINE_MAX_STACKS = 1;
+export const EXHAUSTED_MAX_STACKS = 1;
+export const BLEED_DURATION_TURNS = 3;
+
+export const BASE_DAMAGE_MULTIPLIER = 1.0;
+export const BASE_SPEED_MULTIPLIER = 1.0;
+
+export const MAX_RESIST_CAP = 0.9;
+export const MIN_AFFINITY_CAP = -0.9;
+export const MAX_AFFINITY_CAP = 0.9;
+
+export const MIN_SPEED_MULTIPLIER = 0.2;
+export const MAX_SPEED_MULTIPLIER = 5;
+
+export const BASE_AP_GAIN_PER_TURN = 100;
+export const MIN_AP_COST = 1;
+export const COOLDOWN_PROGRESS_PER_TURN = 1;
+export const COOLDOWN_MIN_TURNS = 0;
+
+export const DEFAULT_MOVE_COST_MULTIPLIER = 1.0;
+export const DEFAULT_ACTION_COST_MULTIPLIER = 1.0;
+export const DEFAULT_COOLDOWN_MULTIPLIER = 1.0;
+export const DEFAULT_REGEN_HP_PER_TURN = 0;
+export const DEFAULT_REGEN_STAMINA_PER_TURN = 0;
+export const DEFAULT_REGEN_MANA_PER_TURN = 0;
+
+export const BURN_TICK_DAMAGE_PER_STACK = 1;
+export const BLEED_TICK_DAMAGE_PER_STACK = 1;
+export const HASTE_SPEED_MULTIPLIER_PER_STACK = 0.85;
+export const HASTE_COOLDOWN_MULTIPLIER = 0.9;
+export const FATIGUE_ACTION_COST_MULTIPLIER_PER_STACK = 1.05;
+export const CHILLED_FACTOR_PER_STACK = 1.1;
+export const REGENERATION_HP_PER_TURN = 1;
+export const ADRENALINE_ACTION_COST_MULTIPLIER = 0.85;
+export const ADRENALINE_COOLDOWN_MULTIPLIER = 0.85;
+export const ADRENALINE_STAMINA_REGEN_PER_TURN = 1;
+export const EXHAUSTED_ACTION_COST_MULTIPLIER = 1.25;
+export const EXHAUSTED_STAMINA_REGEN_PER_TURN = -1;
+export const HEALTH_FLOOR = 0;
+
+export const RESOURCE_FLOOR = 0;
+
+export const BASE_PASSIVE_REGEN_HP = 0;
+export const BASE_PASSIVE_REGEN_STAMINA = 1;
+export const BASE_PASSIVE_REGEN_MANA = 1;
+export const BASE_PASSIVE_REGEN = Object.freeze({
+  hp: BASE_PASSIVE_REGEN_HP,
+  stamina: BASE_PASSIVE_REGEN_STAMINA,
+  mana: BASE_PASSIVE_REGEN_MANA,
+});
+
+export const CHANNELING_REGEN_MULT = 1.5;
+
+export const DEFAULT_AP_CAP = 100;
+export const DEFAULT_BASE_ACTION_AP = 100;
+export const MIN_TOTAL_ACTION_COST_MULTIPLIER = 0.05;
+export const MIN_TOTAL_COOLDOWN_MULTIPLIER = 0.05;
+
+export const BASE_MOVE_AP_COST = 50;
+export const DEFAULT_ATTACK_BASE_DAMAGE = 5;
+export const MIN_ATTACK_DAMAGE = 1;
+export const DEFAULT_ATTACK_BASE_COOLDOWN = 1;
+export const DEFAULT_RELOAD_TIME_TURNS = 1;
+export const DEFAULT_MELEE_RANGE_TILES = 1;
+
+export const SIMPLE_PLANNER_FALLBACK_BASE_DAMAGE = 8;
+export const SIMPLE_PLANNER_FALLBACK_BASE_COOLDOWN = 2;
+
+export const POLAR_BIAS = Object.freeze({
+  order: Object.freeze({ chaos: 0.1, decay: 0.1 }),
+  growth: Object.freeze({ decay: 0.1, void: -0.05 }),
+  chaos: Object.freeze({ order: 0.1, void: -0.05 }),
+  decay: Object.freeze({ growth: 0.1, order: 0.1, void: -0.05 }),
+  void: Object.freeze({ order: -0.05, growth: -0.05, chaos: -0.05, decay: -0.05 }),
+});

@@ -6,7 +6,7 @@ import { runTurn } from "../src/combat/loop.js";
 import { simplePlanner } from "../src/combat/loop.sample-planner.js";
 import { foldModsFromEquipment } from "../src/combat/mod-folding.js";
 import { makeItem } from "../js/item-system.js";
-import { SLOT } from "../constants.js";
+import { SLOT } from "../js/constants.js";
 
 function assert(cond, msg) {
   if (!cond) throw new Error(msg);

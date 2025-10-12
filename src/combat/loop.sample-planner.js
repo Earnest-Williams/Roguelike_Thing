@@ -8,7 +8,7 @@ import {
   DEFAULT_MELEE_RANGE_TILES,
   SIMPLE_PLANNER_FALLBACK_BASE_COOLDOWN,
   SIMPLE_PLANNER_FALLBACK_BASE_DAMAGE,
-} from "../../constants.js";
+} from "../../js/constants.js";
 
 /**
  * Simple greedy planner: attack if we can afford it, otherwise move.

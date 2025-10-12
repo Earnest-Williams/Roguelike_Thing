@@ -3,7 +3,7 @@
 import { Actor } from "../src/combat/actor.js";
 import { runTurn } from "../src/combat/loop.js";
 import { tryAttack } from "../src/combat/actions.js";
-import { BASE_PASSIVE_REGEN } from "../constants.js";
+import { BASE_PASSIVE_REGEN } from "../js/constants.js";
 
 function assert(cond, msg) {
   if (!cond) {

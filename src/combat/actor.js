@@ -9,14 +9,14 @@ import {
   MIN_TOTAL_ACTION_COST_MULTIPLIER,
   MIN_TOTAL_COOLDOWN_MULTIPLIER,
   SLOT,
-} from "../../constants.js";
+} from "../../js/constants.js";
 import { normalizePolaritySigned } from "./polarity.js";
 import { rebuildModCache } from "./mod-folding.js";
 import { rebuildDerived } from "./status.js";
 
 /**
- * @typedef {import("../../item-system.js").Item} Item
- * @typedef {import("../../item-system.js").ItemStack} ItemStack
+ * @typedef {import("../../js/item-system.js").Item} Item
+ * @typedef {import("../../js/item-system.js").ItemStack} ItemStack
  */
 
 /**

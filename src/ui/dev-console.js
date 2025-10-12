@@ -22,7 +22,7 @@ import { createActorFromTemplate, createItem } from "../factories/index.js";
 import { pickLoot } from "../factories/loot.js";
 import { applyStatuses } from "../combat/status.js";
 import { performEquippedAttack } from "../game/combat-glue.js";
-import { SLOT } from "../../constants.js";
+import { SLOT } from "../../js/constants.js";
 import { emit, EVENT } from "./event-log.js";
 
 export function attachDevConsole(ctx) {

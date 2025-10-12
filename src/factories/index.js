@@ -2,8 +2,8 @@
 // @ts-check
 import { BASE_ITEMS } from "../content/items.js";
 import { MOB_TEMPLATES } from "../content/mobs.js";
-import { SLOT } from "../../constants.js";
-import { makeItem, registerItem, upsertItem } from "../../item-system.js";
+import { SLOT } from "../../js/constants.js";
+import { makeItem, registerItem, upsertItem } from "../../js/item-system.js";
 import { Actor } from "../combat/actor.js";
 import { foldModsFromEquipment } from "../combat/mod-folding.js";
 
