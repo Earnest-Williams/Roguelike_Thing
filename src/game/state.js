@@ -5,6 +5,11 @@ import {
 
 const INVALID_POSITION_COORD = -1;
 
+/**
+ * Build the long-lived global game state object. The structure mirrors what
+ * the renderer and simulation expect so we can safely reset the state without
+ * leaking old references.
+ */
 export function createInitialState() {
   return {
     player: null,

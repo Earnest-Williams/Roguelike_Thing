@@ -16,6 +16,9 @@ const ring = [];
 
 /** @param {string} type @param {any} payload */
 export function emit(type, payload) {
+  // Events are stored in a small ring buffer for debugging/UX widgets. We keep
+  // this implementation minimal so it can be used from both game logic and the
+  // browser console without worrying about reentrancy.
   const entry = { t: Date.now(), type, payload };
   ring.push(entry);
   if (ring.length > EVENT_LOG_RING_MAX) ring.shift();
@@ -30,6 +33,8 @@ export function emit(type, payload) {
  * @param {(entry: { t: number, type: string, payload: any }) => void} fn
  */
 export function subscribe(type, fn) {
+  // Subscribers receive the raw entry object. Returning an unsubscribe function
+  // keeps cleanup ergonomic for UI components.
   if (!subs.has(type)) subs.set(type, new Set());
   subs.get(type).add(fn);
   return () => subs.get(type)?.delete(fn);
@@ -39,5 +44,7 @@ export function subscribe(type, fn) {
  * @param {number} [n]
  */
 export function latest(n = EVENT_LOG_LATEST_DEFAULT) {
+  // Copy the newest N entries so callers can safely mutate the returned array
+  // without corrupting the ring buffer.
   return ring.slice(Math.max(0, ring.length - n));
 }

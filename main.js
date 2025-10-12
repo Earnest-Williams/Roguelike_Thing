@@ -83,6 +83,8 @@ import { setStatusDamageAdapter } from "./src/content/statuses.js";
 
 Sound.init();
 
+// Route periodic status damage through the full attack resolution pipeline so that
+// damage numbers, resistances, and triggers work exactly like direct attacks.
 setStatusDamageAdapter(({ statusId, target, amount, type, turn }) => {
   const dmg = Math.max(0, Math.floor(Number(amount) || 0));
   if (!target || dmg <= 0) return 0;
@@ -98,6 +100,8 @@ setStatusDamageAdapter(({ statusId, target, amount, type, turn }) => {
 });
 
 function computeActorDelay(actor) {
+  // Mobs can modify their base delay via status effects. We clamp to a minimum
+  // positive delay so that buggy or extreme modifiers never freeze the timeline.
   if (!actor) return 1;
   const base = typeof actor.baseDelay === "number" ? actor.baseDelay : 1;
   const pct = actor.statusDerived?.actionSpeedPct ?? 0;
@@ -106,6 +110,8 @@ function computeActorDelay(actor) {
 }
 
 function handleDeath(gameCtx, actor) {
+  // Centralized death handling ensures UI, mob management, and state bookkeeping
+  // stay consistent regardless of what triggered the fatal blow.
   if (!actor || actor.hp > 0) return false;
   if (actor.__dead) return true;
   actor.__dead = true;
@@ -136,6 +142,8 @@ function handleDeath(gameCtx, actor) {
 globalThis.__applyStatusesImpl = applyStatuses;
 
 class RingBuffer {
+  // Lightweight fixed-size log used by debugging helpers so we can inspect the
+  // most recent combat/status events without spamming the console.
   constructor(capacity = 64) {
     this.capacity = capacity;
     this.buffer = [];
@@ -152,6 +160,8 @@ class RingBuffer {
 }
 
 function attachDebug(mob) {
+  // Inject a circular log onto a mob at runtime. This is intentionally opt-in so
+  // it can be attached from dev tools without altering game logic.
   if (!mob || mob.__log) return;
   const rb = new RingBuffer(128);
   mob.__log = {
@@ -177,6 +187,8 @@ window.applyStatuses = applyStatuses;
 window.resolveAttack = resolveAttack;
 
 const Game = (() => {
+  // Everything inside this closure runs once on boot and wires together DOM
+  // elements, rendering systems, and the persistent `gameState` object.
   const gameState = createInitialState();
 
   const viewportEl =
@@ -254,6 +266,8 @@ const Game = (() => {
   const mapState = gameState.map;
 
   function rebuildFurnitureIndex(furniturePlacements = mapState.furniture) {
+    // Furniture placement lookups are hot paths, so we rebuild a map keyed by
+    // tile position whenever the placement array changes.
     mapState.furnitureIndex = new Map();
     if (!Array.isArray(furniturePlacements)) return;
     for (const placement of furniturePlacements) {
@@ -267,6 +281,8 @@ const Game = (() => {
   }
 
   function normalizeFurniturePlacements(placements) {
+    // Ensure every placement contains rounded integer coordinates so both
+    // rendering and collision code can assume consistent data.
     if (!Array.isArray(placements)) return [];
     return placements
       .map((placement) => {
@@ -284,6 +300,8 @@ const Game = (() => {
   }
 
   function buildCulminationVaultPlacement(theme, endPos) {
+    // Late-game themes can inject a special vault at the dungeon exit; we build
+    // a synthetic furniture placement so level generation stays declarative.
     if (!theme || !endPos) return null;
     const px = Math.round(endPos.x ?? NaN);
     const py = Math.round(endPos.y ?? NaN);
@@ -443,6 +461,9 @@ const Game = (() => {
   // This represents the carried inventory. Capacity is enforced by the equipped Backpack.
 
   class Inventory {
+    // The Inventory object acts as the canonical source for carried item
+    // capacity. The UI consumes its stacks array directly, so we keep the API
+    // intentionally tiny and predictable.
     constructor(slotCount = 20) {
       this.capacitySlots = slotCount; // UI slots; you can raise this later
       this.stacks = Array.from({ length: slotCount }, () => null);
