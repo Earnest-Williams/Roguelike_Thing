@@ -3,8 +3,8 @@
 import { rebuildDerived, tickStatuses } from "./status.js";
 import { gainAP, tickCooldowns, initiativeWithTemporal } from "./time.js";
 import { updateResources, isDefeated, regenTurn } from "./resources.js";
-import { EVENT, emit } from "../ui/event-log.js";
 import { decayAttunements } from "./attunement.js";
+import { EVENT, emit } from "../ui/event-log.js";
 import { logTurnEvt } from "./debug-log.js";
 import { tickFreeAction } from "./actor.js";
 
@@ -14,7 +14,6 @@ export function startTurn(actor) {
   if (!actor.turnFlags || typeof actor.turnFlags !== "object") {
     actor.turnFlags = { moved: false, attacked: false, channeled: false };
   }
-  decayAttunements(actor);
   tickStatuses(actor, actor.turn || 0);
   rebuildDerived(actor);
   logTurnEvt(actor, {
@@ -49,9 +48,9 @@ export function endTurn(actor) {
  * Runs one turn for an actor.
  * Strategy:
  *  1) Advance turn counter
- *  2) Decay attunements for the new turn
- *  3) Tick statuses (damage over time, expiry) & rebuild status-derived aggregates
- *  4) Rebuild the mod cache so attunement/status effects apply to this turn
+ *  2) Tick statuses (damage over time, expiry) & rebuild status-derived aggregates
+ *  3) Rebuild the mod cache so attunement/status effects apply to this turn
+ *  4) Refresh resources & decay attunements for the new turn
  *  5) Apply passive regeneration
  *  6) Gain AP
  *  7) Let controller/AI attempt actions while AP available
@@ -70,6 +69,7 @@ export function runTurn(actor, actionPlanner) {
     actor.resources.pools ||= Object.create(null);
   }
   updateResources(actor);
+  decayAttunements(actor);
   regenTurn(actor);
   if (actor?.turnFlags && typeof actor.turnFlags === "object") {
     actor.turnFlags.channeled = false;
