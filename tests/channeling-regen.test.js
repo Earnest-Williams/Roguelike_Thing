@@ -36,9 +36,11 @@ function approxEqual(actual, expected, message) {
   const actor = makeChannelingActor();
 
   actor.turn = 1;
+  const staminaBefore = actor.res.stamina;
+  const manaBefore = actor.res.mana;
   startTurn(actor);
-  approxEqual(actor.res.stamina, 5, "baseline regen should apply without channeling status");
-  approxEqual(actor.res.mana, 3, "baseline mana regen should apply without channeling status");
+  approxEqual(actor.res.stamina, staminaBefore + 1, "baseline regen should apply without channeling status");
+  approxEqual(actor.res.mana, manaBefore + 1, "baseline mana regen should apply without channeling status");
 
   endTurn(actor);
   assert.ok(hasStatus(actor, "channeling"), "idle actors gain the channeling status at end of turn");
@@ -46,8 +48,8 @@ function approxEqual(actual, expected, message) {
   actor.turn = 2;
   startTurn(actor);
   assert.ok(hasStatus(actor, "channeling"), "channeling persists into the next turn if uninterrupted");
-  approxEqual(actor.res.stamina, 5 + 1.1, "channeling multiplies stamina regen");
-  approxEqual(actor.res.mana, 3 + 1.1, "channeling multiplies mana regen");
+  approxEqual(actor.res.stamina, staminaBefore + 1 + 1.1, "channeling multiplies stamina regen");
+  approxEqual(actor.res.mana, manaBefore + 1 + 1.1, "channeling multiplies mana regen");
 })();
 
 (function testChannelingBreaksAfterActing() {

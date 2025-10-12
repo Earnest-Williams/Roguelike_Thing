@@ -71,34 +71,40 @@ function mergePolarity(into, add) {
 }
 
 function mergePolarityBias(dst = Object.create(null), src = Object.create(null)) {
-  if (!dst || !src) return dst;
+  if (!src) return dst || Object.create(null);
+  const target = dst || Object.create(null);
   const baseAll = Number(src.all || 0);
   if (Number.isFinite(baseAll) && baseAll !== 0) {
-    dst.all = (dst.all || 0) + baseAll;
+    target.all = (target.all || 0) + baseAll;
   }
   if (src.vs && typeof src.vs === "object") {
-    dst.vs = dst.vs || Object.create(null);
+    target.vs = target.vs || Object.create(null);
     for (const [axis, value] of Object.entries(src.vs)) {
       const amount = Number(value);
       if (!Number.isFinite(amount) || amount === 0) continue;
-      dst.vs[axis] = (dst.vs[axis] || 0) + amount;
+      target.vs[axis] = (target.vs[axis] || 0) + amount;
     }
   }
   for (const axis of Object.keys(src)) {
     if (axis === "all" || axis === "vs") continue;
     const amount = Number(src[axis]);
     if (!Number.isFinite(amount) || amount === 0) continue;
-    dst[axis] = (dst[axis] || 0) + amount;
+    target[axis] = (target[axis] || 0) + amount;
   }
-  return dst;
+  return target;
 }
 
 function addGrantVector(actor, grant) {
-  if (!actor || !grant || typeof grant !== "object") return;
+  if (!actor || !grant) return;
+  if (!actor.polarity || typeof actor.polarity !== "object") {
+    actor.polarity = { grant: Object.create(null) };
+  }
+  actor.polarity.grant ||= Object.create(null);
   actor.polarityGrant = actor.polarityGrant || Object.create(null);
   for (const [axis, value] of Object.entries(grant)) {
     const amount = Number(value);
     if (!Number.isFinite(amount) || amount === 0) continue;
+    actor.polarity.grant[axis] = (actor.polarity.grant[axis] || 0) + amount;
     actor.polarityGrant[axis] = (actor.polarityGrant[axis] || 0) + amount;
   }
 }
@@ -1373,27 +1379,20 @@ export function foldModsFromEquipment(actor) {
     // Polarity grant/bias
     if (item.polarity?.grant) {
       addGrantVector(actor, item.polarity.grant);
+      mc.polarity.grant ||= Object.create(null);
       for (const [axis, value] of Object.entries(item.polarity.grant)) {
         const amount = Number(value);
         if (!Number.isFinite(amount) || amount === 0) continue;
         mc.polarity.grant[axis] = (mc.polarity.grant[axis] || 0) + amount;
-        if (mc.offense?.polarity?.grant) {
-          mc.offense.polarity.grant[axis] = (mc.offense.polarity.grant[axis] || 0) + amount;
-        }
-        if (mc.defense?.polarity?.grant) {
-          mc.defense.polarity.grant[axis] = (mc.defense.polarity.grant[axis] || 0) + amount;
-        }
       }
     }
     if (item.polarity?.onHitBias) {
-      mc.polarity.onHitBias = mergePolarityBias(mc.polarity.onHitBias, item.polarity.onHitBias);
       mc.offense.polarity.onHitBias = mergePolarityBias(
         mc.offense.polarity.onHitBias,
         item.polarity.onHitBias,
       );
     }
     if (item.polarity?.defenseBias) {
-      mc.polarity.defenseBias = mergePolarityBias(mc.polarity.defenseBias, item.polarity.defenseBias);
       mc.defense.polarity.defenseBias = mergePolarityBias(
         mc.defense.polarity.defenseBias,
         item.polarity.defenseBias,

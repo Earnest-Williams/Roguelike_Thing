@@ -42,12 +42,9 @@ for (let t = 0; t < 3; t++) {
 assert(a.ap <= a.apCap, "AP does not exceed cap");
 assert(b.res.hp < initialDummyHP, "Dummy should take damage during the loop");
 
-assert.equal(typeof a.cooldowns, "object", "Cooldowns should use a plain object map");
-const swingReadyAt = a.cooldowns?.swing;
-assert(
-  swingReadyAt === undefined,
-  "Cooldown entries should expire once the turn threshold is reached",
-);
+assert(a.cooldowns instanceof Map, "Cooldowns should use a Map for storage");
+const swingReadyAt = a.cooldowns.get?.("swing");
+assert(swingReadyAt === undefined, "Cooldown entries should expire once the turn threshold is reached");
 
 assert(a.res.stamina === a.base.maxStamina, "Stamina regen plus adrenaline bonus should top off at the cap");
 

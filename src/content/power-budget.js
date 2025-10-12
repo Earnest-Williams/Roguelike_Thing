@@ -36,9 +36,8 @@ export function computeItemPower(it) {
   if (Array.isArray(it.offense?.brands)) {
     for (const brand of it.offense.brands) {
       if (!brand) continue;
-      const flat = Number(brand.flat ?? brand.amount ?? 0);
-      if (Number.isFinite(flat)) add(flat * 2);
-      const pct = Number(brand.pct ?? brand.percent ?? 0);
+      add((Number(brand.flat ?? brand.amount) || 0) * 2);
+      const pct = Number(brand.pct ?? brand.percent);
       if (Number.isFinite(pct)) add(Math.round(pct * 80));
     }
   }
@@ -47,15 +46,11 @@ export function computeItemPower(it) {
     add(Math.round(Math.abs(Number(it.temporal.actionSpeedPct)) * 150));
   }
   if (it.temporal?.cooldownMult && Number(it.temporal.cooldownMult) < 1) {
-    const mult = 1 - Number(it.temporal.cooldownMult);
-    add(Math.round(mult * 140));
+    add(Math.round((1 - Number(it.temporal.cooldownMult)) * 140));
   }
-  if (it.temporal?.echo) {
-    add(10);
-  }
+  if (it.temporal?.echo) add(10);
   if (it.resource?.manaCostMult && Number(it.resource.manaCostMult) < 1) {
-    const mult = 1 - Number(it.resource.manaCostMult);
-    add(Math.round(mult * 120));
+    add(Math.round((1 - Number(it.resource.manaCostMult)) * 120));
   }
 
   return Math.max(0, Math.round(power));

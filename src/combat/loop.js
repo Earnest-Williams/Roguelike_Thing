@@ -17,24 +17,21 @@ import { tickFreeAction } from "./actor.js";
 export function startTurn(actor) {
   if (!actor) return;
   tickFreeAction(actor);
+  actor.__turnCounter = (actor.__turnCounter ?? 0) + 1;
+  actor.turn = actor.__turnCounter;
   if (!actor.turnFlags || typeof actor.turnFlags !== "object") {
     actor.turnFlags = { moved: false, attacked: false, channeled: false };
   }
   tickAttunements(actor);
-  const turn = Number.isFinite(actor.turn) ? actor.turn : 0;
-  tickStatusesAtTurnStart(actor, turn);
-  tickResources(actor);
   const actedLastTurn = Boolean(actor._prevTurnDidMove || actor._prevTurnDidAttack);
   const canChannel = Boolean(actor.modCache?.resource?.channeling);
   if ((actedLastTurn || !canChannel) && hasStatus(actor, "channeling")) {
     removeStatusById(actor, "channeling");
-    actor.statusDerived = rebuildDerived(actor);
-  }
-  if (actor.modCache?.resource) {
-    actor.modCache.resource.channeling = false;
   }
   actor._turnDidMove = false;
   actor._turnDidAttack = false;
+  tickStatusesAtTurnStart(actor, actor.turn);
+  tickResources(actor);
   logTurnEvt(actor, {
     phase: "start_turn",
     actorId: actor.id,
@@ -93,8 +90,6 @@ export function endTurn(actor) {
  * @param {(actor: import("./actor.js").Actor)=>void} [actionPlanner]
  */
 export function runTurn(actor, actionPlanner) {
-  const turn = actor ? (actor.__turnCounter = (actor.__turnCounter ?? 0) + 1) : 0;
-  if (actor) actor.turn = turn;
   startTurn(actor);
   if (actor) {
     actor.resources ||= { pools: Object.create(null) };

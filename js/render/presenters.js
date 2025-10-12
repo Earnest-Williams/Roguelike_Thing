@@ -238,6 +238,16 @@ export function buildMinimapPresentation({
   };
 }
 
+export function presentDebug(actor) {
+  if (!actor?._debug?.turns?.length) return "";
+  const latest = actor._debug.turns[actor._debug.turns.length - 1];
+  try {
+    return JSON.stringify(latest, null, 2);
+  } catch (err) {
+    return String(latest);
+  }
+}
+
 export function drawHUD(ctx, actor) {
   if (!actor) return "";
   const attEntries = Object.entries(actor.attunement?.stacks || {})

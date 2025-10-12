@@ -5,27 +5,26 @@ import { BASE_AP_GAIN_PER_TURN } from "../../constants.js";
 import { rand } from "./rng.js";
 
 /**
- * Computes the final AP cost for an action, factoring in temporal/status modifiers.
+ * Computes the final AP cost (and potential refund) for an action.
  * @param {import("./actor.js").Actor} actor
  * @param {number} baseAP
  * @param {string[]} [tags]
  */
 export function finalAPForAction(actor, baseAP, tags = []) {
   const tagList = Array.isArray(tags) ? tags : [];
-  const temporal = actor?.modCache?.temporal || Object.create(null);
-  const sd = actor?.statusDerived || { moveAPDelta: 0, actionSpeedPct: 0 };
+  const status = actor?.statusDerived || { moveAPDelta: 0, actionSpeedPct: 0 };
+  const mcTemporal = actor?.modCache?.temporal || {};
+  const temporal = actor?.temporal ? { ...actor.temporal, ...mcTemporal } : mcTemporal;
 
-  const base = Math.max(0, Math.floor(Number(baseAP) || 0));
-  const moveDelta = (tagList.includes("move") ? Number(temporal.moveAPDelta || 0) : 0)
-    + Number(sd.moveAPDelta || 0);
+  const moveDelta =
+    (tagList.includes("move") ? Number(temporal.moveAPDelta || 0) : 0) + Number(status.moveAPDelta || 0);
   const baseDelta = Number(temporal.baseActionAPDelta || 0);
-  const baseMult = Number.isFinite(temporal.baseActionAPMult)
-    ? temporal.baseActionAPMult
-    : 1;
-  const speedPct = Number(temporal.actionSpeedPct || 0) + Number(sd.actionSpeedPct || 0);
+  const baseMult = Number.isFinite(temporal.baseActionAPMult) ? temporal.baseActionAPMult : 1;
+  const speedPct = Number(temporal.actionSpeedPct || 0) + Number(status.actionSpeedPct || 0);
+  const speedScalar = Math.max(0.1, 1 + speedPct);
 
-  const preCost = Math.max(1, base + moveDelta + baseDelta);
-  const scaled = Math.max(1, Math.round(preCost * baseMult * (1 + speedPct)));
+  const base = Math.max(1, Math.floor(Number(baseAP) || 0) + moveDelta + baseDelta);
+  const scaled = Math.max(1, Math.round(base * baseMult * speedScalar));
 
   return { costAP: scaled };
 }
@@ -35,8 +34,16 @@ export function finalAPForAction(actor, baseAP, tags = []) {
  * @param {import("./actor.js").Actor} actor
  * @param {number} baseCooldown
  */
-export function finalCooldown(actor, baseCooldown, tags = []) {
-  return computeCooldownTurns(actor, baseCooldown, tags);
+export function finalCooldown(actor, baseCooldown) {
+  const base = Math.max(0, Math.floor(Number(baseCooldown) || 0));
+  const mcTemporal = actor?.modCache?.temporal || Object.create(null);
+  const temporalSource = actor?.temporal ? { ...actor.temporal, ...mcTemporal } : mcTemporal;
+  const temporalPct = Number(temporalSource.cooldownPct || 0);
+  const sd = actor?.statusDerived || {};
+  const scalarPct = 1 + temporalPct + Number(sd.cooldownPct || 0);
+  const scalarMult = Number.isFinite(sd.cooldownMult) ? sd.cooldownMult : 1;
+  const scalar = Math.max(0, scalarPct) * Math.max(0, scalarMult);
+  return Math.max(0, Math.ceil(base * scalar));
 }
 
 /**
@@ -101,20 +108,33 @@ export function spendAP(actor, costAP) {
  * We model this by accumulating fractional progress.
  * @param {import("./actor.js").Actor} actor
  */
-export function beginCooldown(actor, actionId, baseCooldown, tags = []) {
-  startCooldown(actor, actionId, baseCooldown, tags);
+export function beginCooldown(actor, actionId, baseCooldown) {
+  if (!actor || !actionId) return;
+  const turns = finalCooldown(actor, baseCooldown);
+  if (turns <= 0) {
+    if (actor.cooldowns instanceof Map) {
+      actor.cooldowns.delete(actionId);
+    } else if (actor.cooldowns && typeof actor.cooldowns === "object") {
+      delete actor.cooldowns[actionId];
+    }
+    return;
+  }
+  if (!(actor.cooldowns instanceof Map)) {
+    actor.cooldowns = new Map();
+  }
+  actor.cooldowns.set(actionId, Math.max(0, Math.floor(turns)));
 }
 
 export function tickCooldowns(actor) {
   if (!actor?.cooldowns) return;
   if (actor.cooldowns instanceof Map) {
-    for (const [key, value] of [...actor.cooldowns.entries()]) {
-      const current = Number(value);
-      if (!Number.isFinite(current)) {
+    for (const [key, value] of actor.cooldowns.entries()) {
+      const num = Number(value);
+      if (!Number.isFinite(num)) {
         actor.cooldowns.delete(key);
         continue;
       }
-      const next = current - 1;
+      const next = num - 1;
       if (next > 0) {
         actor.cooldowns.set(key, next);
       } else {
@@ -123,18 +143,18 @@ export function tickCooldowns(actor) {
     }
     return;
   }
-  const store = actor.cooldowns;
-  for (const key of Object.keys(store)) {
-    const value = Number(store[key]);
+  const keys = Object.keys(actor.cooldowns);
+  for (const key of keys) {
+    const value = Number(actor.cooldowns[key]);
     if (!Number.isFinite(value)) {
-      delete store[key];
+      delete actor.cooldowns[key];
       continue;
     }
     const next = value - 1;
     if (next > 0) {
-      store[key] = next;
+      actor.cooldowns[key] = next;
     } else {
-      delete store[key];
+      delete actor.cooldowns[key];
     }
   }
 }
@@ -149,82 +169,58 @@ export function isOnCooldown(actor, actionId) {
   return Number.isFinite(value) && value > 0;
 }
 
-export function startCooldown(actor, key, baseTurns, tags = []) {
-  if (!actor || !key) return 0;
-  const turns = computeCooldownTurns(actor, baseTurns, tags);
-  if (turns <= 0) {
-    if (actor.cooldowns instanceof Map) {
-      actor.cooldowns.delete(key);
-    } else if (actor.cooldowns && typeof actor.cooldowns === "object") {
-      delete actor.cooldowns[key];
-    }
-    return 0;
-  }
-  if (!(actor.cooldowns instanceof Map)) {
-    const existing = actor.cooldowns && typeof actor.cooldowns === "object"
-      ? Object.entries(actor.cooldowns)
-      : [];
-    actor.cooldowns = new Map(existing);
-  }
-  actor.cooldowns.set(key, turns);
-  return turns;
+export function startCooldown(actor, actionId, baseTurns, tags = []) {
+  if (!actor || !actionId) return 0;
+  const mcTemporal = actor.modCache?.temporal || {};
+  const temporal = actor.temporal ? { ...actor.temporal, ...mcTemporal } : mcTemporal;
+  const perTag =
+    Array.isArray(tags) && tags.length && temporal.cooldownPerTag instanceof Map
+      ? Math.min(
+          ...tags.map((tag) => {
+            const entry = temporal.cooldownPerTag.get(tag);
+            return Number.isFinite(entry) ? Number(entry) : 1;
+          }),
+        )
+      : 1;
+  const mult = Number(temporal.cooldownMult || 1) * Number(perTag || 1);
+  const cd = Math.max(0, Math.round(Number(baseTurns || 0) * mult));
+  actor.cooldowns ||= new Map();
+  actor.cooldowns.set(actionId, cd);
+  return cd;
 }
 
 export function isReady(actor, key) {
   return !isOnCooldown(actor, key);
 }
 
-function computeCooldownTurns(actor, baseTurns, tags = []) {
-  const tagList = Array.isArray(tags) ? tags : [];
-  const temporal = actor?.modCache?.temporal || Object.create(null);
-  const sd = actor?.statusDerived || Object.create(null);
-  const base = Math.max(0, Math.floor(Number(baseTurns) || 0));
-  if (!base) return 0;
-
-  const perTag = temporal.cooldownPerTag instanceof Map && tagList.length
-    ? Math.min(
-        ...tagList.map((tag) => {
-          const value = temporal.cooldownPerTag.get(tag);
-          return Number.isFinite(value) ? Number(value) : 1;
-        }),
-      )
-    : 1;
-  const temporalMult = Number.isFinite(temporal.cooldownMult) ? temporal.cooldownMult : 1;
-  const sdMult = Number.isFinite(sd.cooldownMult) ? sd.cooldownMult : 1;
-  const pctScalar = 1 + Number(temporal.cooldownPct || 0) + Number(sd.cooldownPct || 0);
-  const total = base * temporalMult * sdMult * perTag * pctScalar;
-  return Math.max(0, Math.round(total));
-}
-
 export function rollEchoOnce(attacker, ctx, resolveAttackFn) {
-  if (!attacker || !ctx || ctx.isEcho) return null;
-  const temporal = attacker.modCache?.temporal || Object.create(null);
+  if (!attacker || !ctx) return null;
+  const mcTemporal = attacker.modCache?.temporal || {};
+  const temporal = attacker.temporal ? { ...attacker.temporal, ...mcTemporal } : mcTemporal;
   const echoCfg = temporal.echo;
-  if (!echoCfg) return null;
-
+  if (!echoCfg || ctx.isEcho) return null;
   const chance = clampChance(echoCfg);
-  if (chance <= 0) return null;
-  const rngFn = typeof ctx.rng === "function" ? ctx.rng : randOrMathRandom;
-  if (chance < 1 && !rollChance(rngFn, chance)) {
-    return { triggered: false, chance, fraction: clampFraction(echoCfg) };
-  }
-
+  const rng = typeof ctx.rng === "function" ? ctx.rng : randOrMathRandom;
+  if (!(chance >= 1 || (chance > 0 && rng() < chance))) return null;
   const fraction = clampFraction(echoCfg);
-  if (fraction <= 0) return { triggered: false, chance, fraction };
-
+  if (fraction <= 0) return null;
   const echoCtx = buildEchoContext(ctx, echoCfg, fraction);
-  if (!echoCtx) return { triggered: false, chance, fraction };
-
-  echoCtx.attacker = attacker;
-  const resolver = typeof resolveAttackFn === "function" ? resolveAttackFn : ctx?.resolveAttackFn;
-  const result = resolver ? resolver(echoCtx) : null;
+  if (!echoCtx) return null;
+  const resolveFn = typeof resolveAttackFn === "function"
+    ? resolveAttackFn
+    : typeof ctx.resolveAttack === "function"
+    ? ctx.resolveAttack
+    : typeof ctx.resolveFn === "function"
+    ? ctx.resolveFn
+    : null;
+  const result = resolveFn ? resolveFn(echoCtx) : null;
   return {
     triggered: true,
     fraction,
     chance,
     allowOnKill: getAllowOnKill(echoCfg),
     totalDamage: Number(result?.totalDamage || 0),
-    result: result || null,
+    result,
   };
 }
 
@@ -233,13 +229,8 @@ function randOrMathRandom() {
   return Math.random();
 }
 
-function rollChance(rngFn, chance) {
-  const fn = typeof rngFn === "function" ? rngFn : randOrMathRandom;
-  return fn() < chance;
-}
-
 function clampChance(cfg) {
-  const raw = pickFirstNumber(
+  const raw = pickNumber(
     cfg?.chancePct,
     cfg?.chance,
     cfg?.probability,
@@ -251,7 +242,7 @@ function clampChance(cfg) {
 }
 
 function clampFraction(cfg) {
-  const raw = pickFirstNumber(
+  const raw = pickNumber(
     cfg?.fraction,
     cfg?.percent,
     cfg?.pct,
@@ -264,31 +255,19 @@ function clampFraction(cfg) {
   return Math.max(0, Math.min(1, raw));
 }
 
-function getAllowOnKill(cfg) {
-  if (!cfg || cfg.allowOnKill === undefined || cfg.allowOnKill === null) return true;
-  return Boolean(cfg.allowOnKill);
-}
-
 function buildEchoContext(ctx, echoCfg, fraction) {
-  const basePackets = extractPacketsForEcho(ctx);
-  const packets = scalePacketList(basePackets, fraction);
+  const packets = scalePacketList(extractPacketsForEcho(ctx), fraction);
   if (!packets.length) return null;
-
-  const statusAttempts = echoCfg.copyStatuses
-    ? cloneStatusAttempts(ctx?.statusAttempts)
-    : [];
-
+  const statusAttempts = echoCfg.copyStatuses ? cloneStatusAttempts(ctx?.statusAttempts) : [];
   const damageScalarBase = Number.isFinite(ctx?.damageScalar)
     ? Math.max(0, Number(ctx.damageScalar))
     : 1;
-
   const scaledPacketTotal = sumPacketAmounts(packets);
-  const basePacketTotal = sumPacketAmounts(basePackets);
+  const basePacketTotal = sumPacketAmounts(extractPacketsForEcho({ packets: ctx.packets }));
   const postDefenseTotal = sumPacketTotals(ctx?.packetsAfterDefense);
   const desiredTotalDamage = Number.isFinite(postDefenseTotal) && postDefenseTotal > 0
     ? postDefenseTotal * fraction
     : basePacketTotal * damageScalarBase * fraction;
-
   let damageScalar = damageScalarBase;
   if (scaledPacketTotal > 0 && Number.isFinite(desiredTotalDamage)) {
     const targetScalar = desiredTotalDamage / scaledPacketTotal;
@@ -296,32 +275,25 @@ function buildEchoContext(ctx, echoCfg, fraction) {
       damageScalar = Math.max(0, targetScalar);
     }
   }
-
   const echoCtx = {
     ...ctx,
     packets,
     statusAttempts,
     isEcho: true,
-    allowOnKill: getAllowOnKill(echoCfg),
     damageScalar,
     skipOnHitStatuses: !echoCfg.copyStatuses,
   };
-
   if (!echoCfg.copyResourceCosts) {
     if ("resourceCosts" in echoCtx) delete echoCtx.resourceCosts;
   } else if (ctx?.resourceCosts && typeof ctx.resourceCosts === "object") {
     const scaledCosts = scaleResourceCosts(ctx.resourceCosts, fraction);
     if (scaledCosts) {
       echoCtx.resourceCosts = scaledCosts;
-    } else if ("resourceCosts" in echoCtx) {
-      delete echoCtx.resourceCosts;
     }
   }
-
-  if ("packetsAfterDefense" in echoCtx) delete echoCtx.packetsAfterDefense;
-  if ("totalDamage" in echoCtx) delete echoCtx.totalDamage;
-  if ("appliedStatuses" in echoCtx) delete echoCtx.appliedStatuses;
-
+  delete echoCtx.packetsAfterDefense;
+  delete echoCtx.totalDamage;
+  delete echoCtx.appliedStatuses;
   return echoCtx;
 }
 
@@ -339,40 +311,119 @@ function extractPacketsForEcho(ctx) {
 }
 
 function scalePacketList(packets, fraction) {
-  return packets.map((p) => ({ ...p, amount: p.amount * fraction }));
+  if (!Array.isArray(packets) || !packets.length) return [];
+  const f = Math.max(0, Math.min(1, fraction || 0));
+  if (f === 0) return [];
+  const out = [];
+  for (const pkt of packets) {
+    if (!pkt || typeof pkt !== "object") continue;
+    const amount = Number(pkt.amount);
+    if (!Number.isFinite(amount)) continue;
+    const scaled = roundDamage(amount * f);
+    if (scaled <= 0) continue;
+    out.push({ ...pkt, amount: scaled });
+  }
+  return out;
 }
 
 function sumPacketAmounts(packets) {
-  return packets.reduce((acc, pkt) => acc + (Number(pkt.amount) || 0), 0);
+  if (!Array.isArray(packets) || !packets.length) return 0;
+  let total = 0;
+  for (const pkt of packets) {
+    const amount = Number(pkt?.amount);
+    if (Number.isFinite(amount) && amount > 0) total += amount;
+  }
+  return total;
 }
 
-function sumPacketTotals(map) {
-  if (!map || typeof map !== "object") return 0;
+function sumPacketTotals(totals) {
+  if (!totals || typeof totals !== "object") return 0;
   let total = 0;
-  for (const value of Object.values(map)) {
-    const num = Number(value);
-    if (Number.isFinite(num)) total += num;
+  for (const value of Object.values(totals)) {
+    const amount = Number(value);
+    if (Number.isFinite(amount) && amount > 0) total += amount;
   }
   return total;
 }
 
 function cloneStatusAttempts(attempts) {
-  if (!Array.isArray(attempts)) return [];
-  return attempts.map((attempt) => (attempt ? { ...attempt } : attempt));
+  if (!attempts) return [];
+  if (Array.isArray(attempts)) {
+    return attempts
+      .map((attempt) => (attempt && typeof attempt === "object" ? { ...attempt } : null))
+      .filter(Boolean);
+  }
+  if (typeof attempts === "object") {
+    return [{ ...attempts }];
+  }
+  return [];
 }
 
 function scaleResourceCosts(costs, fraction) {
   if (!costs || typeof costs !== "object") return null;
-  const out = {};
-  for (const [key, value] of Object.entries(costs)) {
-    const num = Number(value);
-    if (!Number.isFinite(num)) continue;
-    out[key] = num * fraction;
-  }
-  return Object.keys(out).length ? out : null;
+  const clone = cloneObject(costs);
+  if (!clone || typeof clone !== "object") return null;
+  applyResourceCostScale(clone, Math.max(0, Math.min(1, fraction || 0)));
+  return clone;
 }
 
-function pickFirstNumber(...values) {
+function applyResourceCostScale(node, fraction) {
+  if (!node || typeof node !== "object") return;
+  if (Array.isArray(node)) {
+    for (let i = 0; i < node.length; i += 1) {
+      const value = node[i];
+      if (typeof value === "number" && Number.isFinite(value)) {
+        node[i] = roundNumber(value * fraction);
+      } else if (value && typeof value === "object") {
+        applyResourceCostScale(value, fraction);
+      }
+    }
+    return;
+  }
+  for (const [key, value] of Object.entries(node)) {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      node[key] = roundNumber(value * fraction);
+      continue;
+    }
+    if (value && typeof value === "object") {
+      applyResourceCostScale(value, fraction);
+    }
+  }
+}
+
+function roundDamage(value) {
+  if (!Number.isFinite(value)) return 0;
+  const rounded = Math.round(value);
+  return rounded > 0 ? rounded : 0;
+}
+
+function roundNumber(value) {
+  if (!Number.isFinite(value)) return 0;
+  return Math.round(value);
+}
+
+function cloneObject(obj) {
+  if (!obj || typeof obj !== "object") return obj;
+  if (typeof structuredClone === "function") {
+    try {
+      return structuredClone(obj);
+    } catch (err) {
+      // ignore
+    }
+  }
+  try {
+    return JSON.parse(JSON.stringify(obj));
+  } catch (err) {
+    return obj;
+  }
+}
+
+function getAllowOnKill(cfg) {
+  if (!cfg || cfg.allowOnKill === undefined || cfg.allowOnKill === null) return true;
+  return Boolean(cfg.allowOnKill);
+}
+
+function pickNumber(...values) {
   for (const value of values) {
     if (value === undefined || value === null) continue;
     const num = Number(value);

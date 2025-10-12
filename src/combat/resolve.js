@@ -5,7 +5,7 @@ import { logAttackStep, noteAttackStep } from "./debug-log.js";
 import { applyStatuses, tryApplyHaste } from "./status.js";
 import { applyOutgoingScaling, noteUseGain } from "./attunement.js";
 import { polarityDefenseMult, polarityOffenseMult } from "./polarity.js";
-import { spendResources } from "./resources.js";
+import { spendResources, applyOnKillResourceGain } from "./resources.js";
 import { rollEchoOnce } from "./time.js";
 
 const clone = (value) => {
@@ -25,6 +25,8 @@ const clone = (value) => {
 
 export function resolveAttack(ctx) {
   const { attacker, defender } = ctx;
+  ctx.attacker = attacker;
+  ctx.defender = defender;
   const tags = ctx?.tags instanceof Set ? ctx.tags : Array.isArray(ctx?.tags) ? ctx.tags : [];
 
   if (attacker?.resources) {
@@ -39,14 +41,20 @@ export function resolveAttack(ctx) {
   const finalAcc = Math.max(0, baseAcc + accBonus);
   ctx.finalAccuracy = finalAcc;
   const packetsIn = (ctx.packets || []).map((p) => ({ ...p }));
+  ctx.packets = packetsIn;
   const onHitStatuses = [];
-  const log = (d) => logAttackStep(attacker, d);
+  const log = (d) => {
+    logAttackStep(attacker, d);
+    noteAttackStep(attacker, d);
+  };
 
   const defenderHpBefore = Number.isFinite(defender?.res?.hp)
     ? defender.res.hp
     : Number.isFinite(defender?.hp)
     ? defender.hp
     : null;
+
+  ctx.defenderHpBefore = defenderHpBefore;
 
   const debugData = {
     turn: ctx.turn ?? attacker?.turn ?? defender?.turn ?? 0,
@@ -64,21 +72,13 @@ export function resolveAttack(ctx) {
   let packets = applyConversions(attacker, packetsIn);
   log({ step: "conversions", packets });
   pushStep("conversions", packets);
-  noteAttackStep(attacker, { stage: "conversions", packets: clone(packets) });
   packets = applyBrands(attacker, packets, onHitStatuses);
   log({ step: "brands", packets });
   pushStep("brands", packets);
-  noteAttackStep(attacker, { stage: "brands", packets: clone(packets) });
-
-  applyOutgoingScaling({ attacker, packets, target: defender });
-  log({ step: "attunement", packets });
-  pushStep("attunement", packets);
-  noteAttackStep(attacker, { stage: "attunement", packets: clone(packets) });
 
   packets = applyAffinities(attacker, packets);
   log({ step: "affinities", packets });
   pushStep("affinities", packets);
-  noteAttackStep(attacker, { stage: "affinities", packets: clone(packets) });
 
   const polOff = polarityOffenseMult(attacker, defender);
   const polDef = polarityDefenseMult(defender, attacker);
@@ -86,7 +86,6 @@ export function resolveAttack(ctx) {
   packets = applyPolarityAttack(packets, polOff);
   log({ step: "polarity_attack", packets });
   pushStep("polarity_attack", packets);
-  noteAttackStep(attacker, { stage: "polarity_attack", packets: clone(packets) });
 
   const sdMult = 1 + (attacker?.statusDerived?.damagePct || 0);
   const mcMult = attacker?.modCache?.dmgMult ?? 1;
@@ -99,21 +98,23 @@ export function resolveAttack(ctx) {
     });
     log({ step: "status_damage", packets });
     pushStep("status_damage", packets);
-    noteAttackStep(attacker, { stage: "status_damage", packets: clone(packets) });
   }
 
   const defended = applyDefense(defender, packets, polDef);
   log({ step: "defense", packets: defended });
   pushStep("defense", defended);
-  noteAttackStep(attacker, { stage: "defense", packets: clone(defended) });
 
   const scalar = Number.isFinite(ctx.damageScalar) ? Math.max(0, ctx.damageScalar) : 1;
   const packetsAfterDefense = collapseByType(defended, scalar);
   ctx.packetsAfterDefense = packetsAfterDefense;
   const totalDamage = Object.values(packetsAfterDefense).reduce((a, b) => a + b, 0);
-  noteAttackStep(attacker, { stage: "after_defense_collapse", packets: clone(packetsAfterDefense) });
   debugData.afterDefense = clone(packetsAfterDefense);
   debugData.totalDamage = totalDamage;
+  debugData.defenderHp.after = Number.isFinite(defender?.res?.hp)
+    ? defender.res.hp
+    : Number.isFinite(defender?.hp)
+    ? defender.hp
+    : debugData.defenderHp.after;
 
   const onHitList = ctx?.skipOnHitStatuses ? [] : onHitStatuses;
   const ctxAttempts = Array.isArray(ctx?.statusAttempts)
@@ -129,74 +130,29 @@ export function resolveAttack(ctx) {
   debugData.statusAttempts = clone(attempts);
   debugData.appliedStatuses = clone(appliedStatuses);
 
+  ctx.packetsAfterDefense = packetsAfterDefense;
   ctx.totalDamage = totalDamage;
   ctx.appliedStatuses = appliedStatuses;
-  const outcome = finalizeAttack(ctx);
+  const outcome = finalizeAttack(ctx, resolveAttack);
+
+  pushStep("finalize", ctx.packetsAfterDefense);
+
+  if (outcome?.hooks) {
+    debugData.hooks = clone(outcome.hooks);
+    if (outcome.hooks.echo?.result?.packetsAfterDefense && !debugData.echo) {
+      debugData.echo = clone(outcome.hooks.echo);
+    }
+  }
 
   debugData.defenderHp.after = getDefenderHp(defender, debugData.defenderHp.after);
-  if (outcome.echo && !debugData.echo) {
-    debugData.echo = clone(outcome.echo);
-  }
-  if (outcome.hasteApplied || outcome.resourceGains) {
-    debugData.hooks = clone({
-      hasteApplied: outcome.hasteApplied,
-      resourceGains: outcome.resourceGains,
-    });
-  }
 
   DebugBus.emit({ type: "attack", payload: debugData });
-
-  return outcome;
-}
-
-function finalizeAttack(ctx) {
-  const attacker = ctx?.attacker || null;
-  const defender = ctx?.defender || null;
-  const packetsAfterDefense = ctx?.packetsAfterDefense || Object.create(null);
-  const totalDamage = Number(ctx?.totalDamage || 0);
-  const appliedStatuses = Array.isArray(ctx?.appliedStatuses)
-    ? ctx.appliedStatuses
-    : [];
-
-  if (defender) {
-    if (Number.isFinite(defender?.res?.hp)) {
-      defender.res.hp = Math.max(0, defender.res.hp - totalDamage);
-    } else if (Number.isFinite(defender?.hp)) {
-      defender.hp = Math.max(0, defender.hp - totalDamage);
-    }
-  }
-
-  if (attacker) {
-    for (const [type, dealt] of Object.entries(packetsAfterDefense)) {
-      const amount = Number(dealt);
-      if (!Number.isFinite(amount) || amount <= 0) continue;
-      noteUseGain(attacker, type);
-    }
-  }
-
-  const allowOnKill = ctx?.allowOnKill !== undefined ? Boolean(ctx.allowOnKill) : true;
-  const killed = allowOnKill ? isDefenderDown(defender) : false;
-
-  let hasteApplied = null;
-  let resourceGains = null;
-  if (killed && attacker) {
-    hasteApplied = applyOnKillHaste(attacker, attacker.modCache?.temporal?.onKillHaste);
-    resourceGains = applyOnKillResourceGain(attacker, attacker.modCache?.resource?.onKillGain);
-  }
-
-  let echo = null;
-  if (!ctx?.isEcho && attacker) {
-    const echoCtx = { ...ctx, allowOnKill: undefined };
-    echo = rollEchoOnce(attacker, echoCtx, resolveAttack);
-  }
 
   return {
     packetsAfterDefense,
     totalDamage,
     appliedStatuses,
-    hasteApplied,
-    resourceGains,
-    echo,
+    echo: outcome?.echo || null,
   };
 }
 
@@ -206,134 +162,108 @@ function getDefenderHp(defender, fallback) {
   return fallback;
 }
 
-function applyOnKillHaste(attacker, hasteCfg) {
-  if (!attacker || !hasteCfg) return null;
-  if (!canGrantOnKillHaste(attacker, hasteCfg)) return null;
-
-  const statusId = String(hasteCfg.statusId || hasteCfg.status || hasteCfg.id || "haste");
-  const stacksRaw = pickNumber(hasteCfg.stacks, hasteCfg.stack, hasteCfg.amount, hasteCfg.value);
-  const stacks = Number.isFinite(stacksRaw) ? Math.max(1, Math.floor(stacksRaw)) : 1;
-  const durationRaw = pickNumber(
-    hasteCfg.duration,
-    hasteCfg.turns,
-    hasteCfg.baseDuration,
-    hasteCfg.time,
-    hasteCfg.length,
-  );
-  const duration = Number.isFinite(durationRaw) ? Math.max(1, Math.floor(durationRaw)) : 1;
-  const potency = pickNumber(hasteCfg.potency, hasteCfg.power, hasteCfg.strength);
-
-  const applied = tryApplyHaste(attacker, duration, {
-    statusId,
-    stacks,
-    potency,
-    source: "onKillHaste",
-  });
-  if (!applied) return null;
-
-  stampOnKillHasteICD(attacker, hasteCfg);
-  return applied;
-}
-
-function applyOnKillResourceGain(attacker, gains) {
-  if (!attacker || !gains || typeof gains !== "object") return null;
-  attacker.resources = attacker.resources || Object.create(null);
-  attacker.resources.pools = attacker.resources.pools || Object.create(null);
-  attacker.res = attacker.res || attacker.resources;
-  const pools = attacker.resources.pools;
-  const applied = Object.create(null);
-
-  for (const [pool, raw] of Object.entries(gains)) {
-    const amount = Number(raw);
-    if (!Number.isFinite(amount) || amount === 0) continue;
-    if (pool === "hp") {
-      const before = Number(attacker.res?.hp ?? attacker.hp ?? 0);
-      const max = Number.isFinite(attacker.max?.hp) ? attacker.max.hp : before;
-      const after = Math.max(0, Math.min(max, before + amount));
-      if (attacker.res) attacker.res.hp = after;
-      attacker.hp = after;
-      const delta = after - before;
-      if (delta !== 0) applied[pool] = delta;
-      continue;
-    }
-
-    if (!pools[pool]) {
-      pools[pool] = {
-        cur: 0,
-        max: Math.max(0, amount),
-        regenPerTurn: 0,
-        spendMultipliers: {},
-        minToUse: 0,
-      };
-    }
-    const bucket = pools[pool];
-    const before = Number(bucket.cur ?? 0);
-    const max = Number.isFinite(bucket.max) ? bucket.max : before;
-    const after = Math.max(0, Math.min(max, before + amount));
-    bucket.cur = after;
-    if (attacker.res && pool in attacker.res) {
-      attacker.res[pool] = after;
-    }
-    if (attacker.resources && pool in attacker.resources) {
-      attacker.resources[pool] = after;
-    }
-    if (pool === "stamina" && typeof attacker.stamina === "number") {
-      attacker.stamina = after;
-    } else if (pool === "mana" && typeof attacker.mana === "number") {
-      attacker.mana = after;
-    }
-    const delta = after - before;
-    if (delta !== 0) applied[pool] = delta;
-  }
-
-  return Object.keys(applied).length ? applied : null;
-}
-
-function pickNumber(...values) {
-  for (const value of values) {
-    if (value === undefined || value === null) continue;
-    const num = Number(value);
-    if (Number.isFinite(num)) return num;
-  }
-  return NaN;
-}
-
-function canGrantOnKillHaste(actor, cfg) {
-  if (!actor || !cfg) return false;
-  const nowTurn = Number.isFinite(actor.turn) ? actor.turn : 0;
-  const state = ensureHasteCtl(actor);
-  if (cfg.oncePerTurn && state.lastTurn === nowTurn) return false;
-  if (Number.isFinite(cfg.cooldownTurns)) {
-    const cd = Math.max(0, Math.floor(cfg.cooldownTurns));
-    if (nowTurn < state.nextReadyAt) return false;
-    state.cooldown = cd;
-  }
-  return true;
-}
-
-function stampOnKillHasteICD(actor, cfg) {
-  if (!actor || !cfg) return;
-  const state = ensureHasteCtl(actor);
-  const nowTurn = Number.isFinite(actor.turn) ? actor.turn : 0;
-  state.lastTurn = nowTurn;
-  if (Number.isFinite(cfg.cooldownTurns)) {
-    const cd = Math.max(0, Math.floor(cfg.cooldownTurns));
-    state.nextReadyAt = nowTurn + cd;
-  }
-}
-
-function ensureHasteCtl(actor) {
-  if (!actor._onKillHasteCtl || typeof actor._onKillHasteCtl !== "object") {
-    actor._onKillHasteCtl = { lastTurn: -Infinity, nextReadyAt: -Infinity, cooldown: 0 };
-  }
-  return actor._onKillHasteCtl;
-}
-
 function isDefenderDown(defender) {
   if (!defender) return false;
   if (Number.isFinite(defender?.res?.hp)) return defender.res.hp <= 0;
   if (Number.isFinite(defender?.hp)) return defender.hp <= 0;
   return false;
+}
+
+function finalizeAttack(ctx, resolveFn) {
+  const attacker = ctx?.attacker;
+  const defender = ctx?.defender;
+
+  if (attacker) {
+    applyOutgoingScaling(attacker, ctx);
+  }
+
+  const totalDamage = Number(ctx?.totalDamage || 0);
+  if (defender && Number.isFinite(totalDamage) && totalDamage > 0) {
+    if (Number.isFinite(defender?.res?.hp)) {
+      defender.res.hp = Math.max(0, defender.res.hp - totalDamage);
+      if (defender.resources && Number.isFinite(defender.resources.hp)) {
+        defender.resources.hp = defender.res.hp;
+      }
+      if (Number.isFinite(defender.hp)) {
+        defender.hp = defender.res.hp;
+      }
+    } else if (Number.isFinite(defender?.hp)) {
+      defender.hp = Math.max(0, defender.hp - totalDamage);
+    }
+  }
+
+  if (attacker) {
+    const usedTypes = new Set();
+    for (const [type, dealt] of Object.entries(ctx?.packetsAfterDefense || {})) {
+      if (Number.isFinite(dealt) && dealt > 0) {
+        usedTypes.add(type);
+      }
+    }
+    if (usedTypes.size) {
+      noteUseGain(attacker, usedTypes);
+    }
+  }
+
+  const temporal = attacker?.modCache?.temporal || Object.create(null);
+  const resource = attacker?.modCache?.resource || Object.create(null);
+  const echoCfg = temporal.echo || null;
+
+  const defenderWasAlive = Number.isFinite(ctx?.defenderHpBefore)
+    ? ctx.defenderHpBefore > 0
+    : true;
+  const killedNow = defenderWasAlive && isDefenderDown(defender) && totalDamage > 0;
+
+  let hasteSummary = null;
+  let resourceGains = null;
+  if (killedNow) {
+    const allowOnKill = echoCfg?.allowOnKill ?? true;
+    const eligible = !ctx?.isEcho || allowOnKill;
+    if (eligible) {
+      if (temporal.onKillHaste) {
+        const hasteApplied = tryApplyHaste(attacker, temporal.onKillHaste);
+        if (hasteApplied) {
+          hasteSummary = {
+            statusId: hasteApplied.id,
+            stacks: hasteApplied.stacks,
+            duration: Number.isFinite(hasteApplied.endsAt)
+              ? Math.max(0, hasteApplied.endsAt - (attacker?.turn ?? 0))
+              : undefined,
+            potency: hasteApplied.potency,
+          };
+        }
+      }
+      if (resource.onKillGain) {
+        resourceGains = applyOnKillResourceGain(attacker, resource.onKillGain);
+      }
+    }
+  }
+
+  let echoResult = null;
+  if (attacker && echoCfg && !ctx?.isEcho) {
+    echoResult = rollEchoOnce(attacker, ctx, resolveFn);
+  }
+
+  const hooks = {};
+  if (hasteSummary) hooks.hasteApplied = hasteSummary;
+  if (resourceGains) hooks.resourceGains = resourceGains;
+  if (echoResult) hooks.echo = echoResult;
+
+  if (attacker) {
+    noteAttackStep(attacker, {
+      step: "finalize",
+      packetsAfterDefense: ctx?.packetsAfterDefense || {},
+      totalDamage: ctx?.totalDamage,
+      killed: killedNow,
+    });
+  }
+
+  return {
+    packetsAfterDefense: ctx?.packetsAfterDefense || {},
+    totalDamage: ctx?.totalDamage || totalDamage,
+    appliedStatuses: ctx?.appliedStatuses || [],
+    echo: echoResult,
+    hooks,
+  };
 }
 
 // --- helper functions ---

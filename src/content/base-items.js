@@ -17,9 +17,7 @@ export const items = {
   conversion_ring: {
     slot: "ring",
     offense: {
-      conversions: [
-        { from: "physical", to: "fire", ratio: 0.5, percent: 0.5, includeBaseOnly: true },
-      ],
+      conversions: [{ from: "physical", to: "fire", pct: 0.5, includeBaseOnly: true }],
     },
   },
   affinity_ring_fire: {

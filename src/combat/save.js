@@ -66,7 +66,13 @@ function serializeCooldowns(cooldowns) {
 }
 
 function hydrateCooldowns(cooldowns) {
-  if (!cooldowns || typeof cooldowns !== "object") return new Map();
-  return new Map(Object.entries(cooldowns));
+  if (!cooldowns) return new Map();
+  if (cooldowns instanceof Map) {
+    return new Map(cooldowns);
+  }
+  if (typeof cooldowns === "object") {
+    return new Map(Object.entries(cooldowns));
+  }
+  return new Map();
 }
 

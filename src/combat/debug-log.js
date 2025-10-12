@@ -49,7 +49,13 @@ export function noteAttackStep(actor, step) {
   if (!actor) return;
   const dbg = ensureDebug(actor);
   if (!dbg) return;
-  dbg.turns.push({ turn: actor.turn ?? 0, step });
+  const bucket = dbg.turns;
+  const entry = {
+    turn: Number.isFinite(actor.turn) ? actor.turn : 0,
+    step,
+  };
+  bucket.push(entry);
+  if (bucket.length > 32) bucket.shift();
 }
 
 function ensureDebug(actor) {
