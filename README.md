@@ -36,7 +36,20 @@ Roguelike_Thing is a deterministic combat sandbox that separates simulation code
    npm run test-basic
    ```
    The script executes `tests/run-basic-tests.js`, which imports targeted spec files and performs additional assertions for the combat, temporal, status, and save pipelines.
-3. **Explore the browser demo.** Serve the repository root (for example with `npx serve .`) and open `index.html` to watch the self-playing dungeon crawl that uses the same combat modules, renderer, and content definitions as the tests.
+3. **Audit key scenarios quickly.** Developers who prefer a zero-config invocation can run the underlying Node entry point directly:
+   ```bash
+   node tests/run-basic-tests.js
+   ```
+   Running the script without the npm wrapper makes it easy to integrate into ad hoc Node REPL sessions or custom harnesses while still executing the bundled spec files.
+4. **Explore the browser demo.** Serve the repository root (for example with `npx serve .`) and open `index.html` to watch the self-playing dungeon crawl that uses the same combat modules, renderer, and content definitions as the tests.
+
+---
+
+## 🔧 Development workflow tips
+
+- **Prefer deterministic seeds while iterating.** Use `setSeed` from `src/combat/rng.js` before running scripted scenarios so repeated runs highlight behavioural deltas.
+- **Trace combat packets in Node.** `tests/combat-sandbox.js` demonstrates how to call `resolveAttack` with logging enabled; copying that pattern into custom scripts is an effective way to debug mitigation math.
+- **Isolate tricky regressions.** When a single mechanic misbehaves, copy the relevant assertion from `tests/run-basic-tests.js` into a dedicated spec under `tests/` and run it with `node tests/<file>.js` for rapid feedback.
 
 ---
 
