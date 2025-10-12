@@ -53,6 +53,7 @@ function mergeRecord(into, add) {
 }
 
 const POLAR_AXES = ["order", "growth", "chaos", "decay", "void"]; // allow "all" separately
+const POLAR_AXES_SET = new Set(POLAR_AXES);
 
 /**
  * Merge polarity bias style maps additively.
@@ -62,7 +63,7 @@ const POLAR_AXES = ["order", "growth", "chaos", "decay", "void"]; // allow "all"
 function mergePolarity(into, add) {
   if (!add) return;
   for (const key of Object.keys(add)) {
-    if (key !== "all" && !POLAR_AXES.includes(key)) continue;
+    if (key !== "all" && !POLAR_AXES_SET.has(key)) continue;
     const amount = Number(add[key]);
     if (!Number.isFinite(amount) || amount === 0) continue;
     into[key] = (into[key] || 0) + amount;

@@ -113,5 +113,5 @@ export function polarityDefenseMult(defender, attacker, cap = 0.5) {
     score += (def[k] || 0) * bias[k];
   }
   score += bias.all || 0;
-  return 1 + clamp(score, -cap, cap);
+  return 1 - clamp(score, -cap, cap);
 }
