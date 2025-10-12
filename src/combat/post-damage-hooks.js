@@ -387,7 +387,7 @@ function ensureHasteCtl(actor) {
 
 function cloneObject(obj) {
   if (!obj || typeof obj !== "object") return obj;
-  return JSON.parse(JSON.stringify(obj));
+  return structuredClone(obj);
 }
 
 function pickNumber(...values) {
