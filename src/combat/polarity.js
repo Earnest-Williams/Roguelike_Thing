@@ -1,7 +1,17 @@
 // src/combat/polarity.js
 // @ts-check
 
-import { POLAR_BIAS } from "./constants.js";
+import { POLAR_BIAS as POLAR_BIAS_SOURCE } from "./constants.js";
+
+const DEFAULT_POLAR_BIAS = Object.freeze({
+  order: Object.freeze({}),
+  growth: Object.freeze({}),
+  chaos: Object.freeze({}),
+  decay: Object.freeze({}),
+  void: Object.freeze({}),
+});
+
+const POLAR_BIAS = POLAR_BIAS_SOURCE ?? DEFAULT_POLAR_BIAS;
 
 /** @typedef {"order"|"growth"|"chaos"|"decay"|"void"} PolarityAxis */
 

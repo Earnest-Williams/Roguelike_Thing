@@ -396,14 +396,33 @@ export class Actor {
   }
 
   /**
-   * Set the actor's baseline polarity vector (signed, normalized).
-   * @param {Partial<Record<"order"|"growth"|"chaos"|"decay"|"void", number>>} vec
+   * Set the actor's baseline polarity vector (signed, normalized) and optionally
+   * configure built-in polarity bias hooks for offense/defense calculations.
+   * @param {(
+   *   Partial<Record<"order"|"growth"|"chaos"|"decay"|"void", number>> & {
+   *     onHitBias?: Partial<Record<"order"|"growth"|"chaos"|"decay"|"void"|"all", number>>;
+   *     defenseBias?: Partial<Record<"order"|"growth"|"chaos"|"decay"|"void"|"all", number>>;
+   *   }
+   * )} config
    */
-  setPolarity(vec) {
+  setPolarity(config) {
+    const { onHitBias, defenseBias, ...vec } = config ?? {};
     this.polarity = normalizePolaritySigned(vec);
     this.polarityRaw = { ...this.polarity };
     this.polarityEffective = { ...this.polarity };
     this.polarityVector = this.polarityEffective;
+
+    if (onHitBias && this.modCache?.offense?.polarity?.onHitBias) {
+      const bias = this.modCache.offense.polarity.onHitBias;
+      for (const key of Object.keys(bias)) delete bias[key];
+      Object.assign(bias, onHitBias);
+    }
+
+    if (defenseBias && this.modCache?.defense?.polarity?.defenseBias) {
+      const bias = this.modCache.defense.polarity.defenseBias;
+      for (const key of Object.keys(bias)) delete bias[key];
+      Object.assign(bias, defenseBias);
+    }
   }
 }
 

@@ -41,17 +41,15 @@ function testResolveWithPolarity() {
     id: "atk",
     baseStats: { str: 10, dex: 10, int: 10, vit: 10, maxHP: 100, maxStamina: 10, maxMana: 10, baseSpeed: 1 },
   });
-  attacker.setPolarity({ order: 1 });
-  attacker.modCache.offense.polarity.onHitBias.order = 0.2;
+  attacker.setPolarity({ order: 1, onHitBias: { order: 0.2 } });
 
   const defender = new Actor({
     id: "def",
     baseStats: { str: 10, dex: 10, int: 10, vit: 10, maxHP: 200, maxStamina: 10, maxMana: 10, baseSpeed: 1 },
   });
-  defender.setPolarity({ chaos: 1 });
+  defender.setPolarity({ chaos: 1, defenseBias: { chaos: -0.1 } });
   defender.modCache.defense.resists.fire = 0.2;
   defender.modCache.resists.fire = 0.2;
-  defender.modCache.defense.polarity.defenseBias.chaos = -0.1;
   defender.res.hp = 200;
 
   const ctx = {
