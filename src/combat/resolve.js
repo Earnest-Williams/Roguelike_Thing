@@ -1,380 +1,735 @@
 // src/combat/resolve.js
 // @ts-check
-import { DebugBus } from "../../js/debug/debug-bus.js";
-import { logAttackStep, noteAttackStep } from "./debug-log.js";
-import { applyStatuses, tryApplyHaste } from "./status.js";
-import { applyOutgoingScaling, noteUseGain } from "./attunement.js";
-import { polarityDefenseMult, polarityOffenseMult } from "./polarity.js";
-import { spendResources, applyOnKillResourceGain } from "./resources.js";
-import { rollEchoOnce } from "./time.js";
+import { applyOneStatusAttempt, rebuildStatusDerived, tryApplyHaste } from "./status.js";
+import { applyOnKillResourceGain } from "./resources.js";
+import { noteUseGain } from "./attunement.js";
+import { polarityOffenseScalar, polarityDefenseScalar } from "./polarity.js";
+import { clamp01 } from "../utils/number.js";
 
-const clone = (value) => {
-  try {
-    if (typeof structuredClone === "function") {
-      return structuredClone(value);
-    }
-  } catch (err) {
-    // fall through to JSON strategy
-  }
-  try {
-    return JSON.parse(JSON.stringify(value));
-  } catch (err) {
-    return value;
-  }
-};
+/**
+ * @typedef {{ type:string, amount:number, __isBase?:boolean }} Packet
+ * @typedef {{
+ *   attacker:any,
+ *   defender:any,
+ *   turn:number,
+ *   prePackets: Packet[],
+ *   packetsAfterOffense: (Packet[] & Record<string, number>) & { byType?: Record<string, number> },
+ *   packetsAfterDefense: (Packet[] & Record<string, number>) & { byType?: Record<string, number> },
+ *   statusAttempts: Array<Record<string, any>>,
+ *   totalDamage:number,
+ *   appliedStatuses:any[],
+ *   hooks?: Record<string, any>,
+ *   echo?: { triggered:boolean, totalDamage?:number, fraction?:number, chance?:number, allowOnKill?:boolean, result?:AttackContext|null }|null,
+ *   rng?: (()=>number)|null,
+ *   isEcho?: boolean,
+ *   hpBefore?: number,
+ *   hpAfter?: number,
+ * }} AttackContext
+ */
 
-export function resolveAttack(ctx) {
-  const { attacker, defender } = ctx;
-  ctx.attacker = attacker;
-  ctx.defender = defender;
-  const tags = ctx?.tags instanceof Set ? ctx.tags : Array.isArray(ctx?.tags) ? ctx.tags : [];
-
-  if (attacker?.resources) {
-    let baseCosts = ctx?.baseCosts;
-    if (baseCosts === undefined) baseCosts = { stamina: 2 };
-    if (baseCosts && Object.keys(baseCosts).length > 0) {
-      spendResources(attacker, baseCosts, tags);
-    }
+/**
+ * Resolve an attack using either the new options signature or the legacy context payload.
+ * @param {any} arg0
+ * @param {any} [arg1]
+ * @param {any} [arg2]
+ * @returns {AttackContext}
+ */
+export function resolveAttack(arg0, arg1, arg2) {
+  const looksLikeLegacy = !!(arg0 && typeof arg0 === "object" && arg0.attacker && arg0.defender && arg1 === undefined);
+  if (arguments.length === 1 || looksLikeLegacy) {
+    return resolveAttackFromLegacyContext(/** @type {{ attacker:any, defender:any }} */ (arg0));
   }
-  const baseAcc = Number.isFinite(ctx?.baseAccuracy) ? Number(ctx.baseAccuracy) : 0;
-  const accBonus = attacker?.statusDerived?.accuracyFlat || 0;
-  const finalAcc = Math.max(0, baseAcc + accBonus);
-  ctx.finalAccuracy = finalAcc;
-  const packetsIn = (ctx.packets || []).map((p) => ({ ...p }));
-  ctx.packets = packetsIn;
-  const onHitStatuses = [];
-  const log = (d) => {
-    logAttackStep(attacker, d);
-    noteAttackStep(attacker, d);
+  return resolveAttackCore(arg0, arg1, arg2 || {});
+}
+
+/**
+ * Compatibility bridge for the old resolveAttack({ attacker, defender, ... }) signature.
+ * @param {{ attacker:any, defender:any, [key:string]:any }} legacy
+ */
+function resolveAttackFromLegacyContext(legacy) {
+  if (!legacy) throw new Error("resolveAttack requires a context");
+  const attacker = legacy.attacker;
+  const defender = legacy.defender;
+  if (!attacker || !defender) {
+    throw new Error("resolveAttack context must include attacker and defender");
+  }
+
+  const options = {
+    turn: legacy.turn,
+    rng: legacy.rng,
+    isEcho: legacy.isEcho,
+    base: legacy.attack?.base ?? legacy.base ?? legacy.physicalBase ?? 0,
+    type: legacy.attack?.type ?? legacy.type,
+    prePackets: legacy.prePackets ?? legacy.packets,
+    statusAttempts: legacy.statusAttempts,
+    conversions: legacy.conversions,
+    brands: legacy.brands,
+    damageScalar: legacy.damageScalar,
+    skipOnHitStatuses: legacy.skipOnHitStatuses,
   };
 
-  const defenderHpBefore = Number.isFinite(defender?.res?.hp)
-    ? defender.res.hp
-    : Number.isFinite(defender?.hp)
-    ? defender.hp
-    : null;
-
-  ctx.defenderHpBefore = defenderHpBefore;
-
-  const debugData = {
-    turn: ctx.turn ?? attacker?.turn ?? defender?.turn ?? 0,
-    attacker: attacker?.id ?? attacker?.name ?? null,
-    defender: defender?.id ?? defender?.name ?? null,
-    inputs: { packets: clone(packetsIn) },
-    steps: [],
-    defenderHp: { before: defenderHpBefore, after: defenderHpBefore },
-  };
-  debugData.accuracy = { base: baseAcc, bonus: accBonus, final: finalAcc };
-  const pushStep = (step, packets) => {
-    debugData.steps.push({ step, packets: clone(packets) });
-  };
-
-  let packets = applyConversions(attacker, packetsIn);
-  log({ step: "conversions", packets });
-  pushStep("conversions", packets);
-  packets = applyBrands(attacker, packets, onHitStatuses);
-  log({ step: "brands", packets });
-  pushStep("brands", packets);
-
-  packets = applyAffinities(attacker, packets);
-  log({ step: "affinities", packets });
-  pushStep("affinities", packets);
-
-  const polOff = polarityOffenseMult(attacker, defender);
-  const polDef = polarityDefenseMult(defender, attacker);
-
-  packets = applyPolarityAttack(packets, polOff);
-  log({ step: "polarity_attack", packets });
-  pushStep("polarity_attack", packets);
-
-  const sdMult = 1 + (attacker?.statusDerived?.damagePct || 0);
-  const mcMult = attacker?.modCache?.dmgMult ?? 1;
-  const outgoingMult = Math.max(0, sdMult * mcMult);
-  if (outgoingMult !== 1) {
-    packets = packets.map((pkt) => {
-      if (!pkt || !pkt.type) return pkt;
-      const amount = Math.max(0, Number(pkt.amount) || 0);
-      return { ...pkt, amount: amount * outgoingMult };
-    });
-    log({ step: "status_damage", packets });
-    pushStep("status_damage", packets);
+  if (Array.isArray(legacy.packets) && legacy.packets.length) {
+    options.base = 0;
   }
 
-  const defended = applyDefense(defender, packets, polDef);
-  log({ step: "defense", packets: defended });
-  pushStep("defense", defended);
+  return resolveAttackCore(attacker, defender, options);
+}
 
-  const scalar = Number.isFinite(ctx.damageScalar) ? Math.max(0, ctx.damageScalar) : 1;
-  const packetsAfterDefense = collapseByType(defended, scalar);
-  ctx.packetsAfterDefense = packetsAfterDefense;
-  const totalDamage = Object.values(packetsAfterDefense).reduce((a, b) => a + b, 0);
-  debugData.afterDefense = clone(packetsAfterDefense);
-  debugData.totalDamage = totalDamage;
-  debugData.defenderHp.after = Number.isFinite(defender?.res?.hp)
-    ? defender.res.hp
-    : Number.isFinite(defender?.hp)
-    ? defender.hp
-    : debugData.defenderHp.after;
+/**
+ * Core resolve pipeline. Builds an AttackContext and mutates defender state accordingly.
+ * @param {any} attacker
+ * @param {any} defender
+ * @param {any} opts
+ * @returns {AttackContext}
+ */
+function resolveAttackCore(attacker, defender, opts = {}) {
+  if (!attacker || !defender) {
+    throw new Error("resolveAttack requires attacker and defender");
+  }
 
-  const onHitList = ctx?.skipOnHitStatuses ? [] : onHitStatuses;
-  const ctxAttempts = Array.isArray(ctx?.statusAttempts)
-    ? ctx.statusAttempts
-    : ctx?.statusAttempts
-    ? [ctx.statusAttempts]
-    : [];
-  const attempts = [...onHitList, ...ctxAttempts];
-  const appliedStatuses = attempts.length
-    ? applyStatuses({ statusAttempts: attempts }, attacker, defender, ctx.turn)
+  const turn = Number.isFinite(opts?.turn)
+    ? Number(opts.turn)
+    : Number.isFinite(attacker?.turn)
+    ? Number(attacker.turn)
+    : 0;
+  attacker.turn = Number.isFinite(attacker.turn) ? attacker.turn : turn;
+  defender.turn = Number.isFinite(defender.turn) ? defender.turn : turn;
+
+  const baseType = typeof opts?.type === "string" && opts.type ? String(opts.type) : "physical";
+  const baseAmountRaw = Number(opts?.base ?? 0);
+  const baseAmount = Number.isFinite(baseAmountRaw) ? Math.max(0, Math.floor(baseAmountRaw)) : 0;
+  const rng = typeof opts?.rng === "function" ? opts.rng : null;
+
+  const initialPackets = normalizePacketList(opts?.prePackets);
+  if (Array.isArray(opts?.packets) && opts.packets.length) {
+    initialPackets.push(...normalizePacketList(opts.packets));
+  }
+  if (baseAmount > 0) {
+    initialPackets.push(createPacket(baseType, baseAmount, true));
+  }
+
+  const attemptSource = Array.isArray(opts?.statusAttempts)
+    ? opts.statusAttempts
+    : opts?.statusAttempts
+    ? [opts.statusAttempts]
     : [];
 
-  debugData.statusAttempts = clone(attempts);
-  debugData.appliedStatuses = clone(appliedStatuses);
-
-  ctx.packetsAfterDefense = packetsAfterDefense;
-  ctx.totalDamage = totalDamage;
-  ctx.appliedStatuses = appliedStatuses;
-  const outcome = finalizeAttack(ctx, resolveAttack);
-
-  pushStep("finalize", ctx.packetsAfterDefense);
-
-  if (outcome?.hooks) {
-    debugData.hooks = clone(outcome.hooks);
-    if (outcome.hooks.echo?.result?.packetsAfterDefense && !debugData.echo) {
-      debugData.echo = clone(outcome.hooks.echo);
-    }
-  }
-
-  debugData.defenderHp.after = getDefenderHp(defender, debugData.defenderHp.after);
-
-  DebugBus.emit({ type: "attack", payload: debugData });
-
-  return {
-    packetsAfterDefense,
-    totalDamage,
-    appliedStatuses,
-    echo: outcome?.echo || null,
+  const ctx /** @type {AttackContext} */ = {
+    attacker,
+    defender,
+    turn,
+    rng,
+    isEcho: Boolean(opts?.isEcho),
+    prePackets: attachPacketAccess(initialPackets),
+    packetsAfterOffense: attachPacketAccess([]),
+    packetsAfterDefense: attachPacketAccess([]),
+    statusAttempts: sanitizeStatusAttempts(attemptSource),
+    totalDamage: 0,
+    appliedStatuses: [],
+    hooks: Object.create(null),
+    echo: null,
+    hpBefore: getCurrentHp(defender),
+    hpAfter: getCurrentHp(defender),
   };
-}
 
-function getDefenderHp(defender, fallback) {
-  if (Number.isFinite(defender?.res?.hp)) return defender.res.hp;
-  if (Number.isFinite(defender?.hp)) return defender.hp;
-  return fallback;
-}
+  // ----- offense stages -----
+  const conversionSources = [];
+  if (Array.isArray(attacker?.modCache?.offense?.conversions)) {
+    conversionSources.push(...attacker.modCache.offense.conversions);
+  }
+  if (Array.isArray(opts?.conversions)) {
+    conversionSources.push(...opts.conversions);
+  }
+  let packets = applyConversions(ctx.prePackets, conversionSources);
 
-function isDefenderDown(defender) {
-  if (!defender) return false;
-  if (Number.isFinite(defender?.res?.hp)) return defender.res.hp <= 0;
-  if (Number.isFinite(defender?.hp)) return defender.hp <= 0;
-  return false;
-}
-
-function finalizeAttack(ctx, resolveFn) {
-  const attacker = ctx?.attacker;
-  const defender = ctx?.defender;
-
-  if (attacker) {
-    applyOutgoingScaling(attacker, ctx);
+  const brandSources = [];
+  if (Array.isArray(attacker?.modCache?.offense?.brands)) {
+    brandSources.push(...attacker.modCache.offense.brands);
+  }
+  if (Array.isArray(attacker?.modCache?.brands)) {
+    brandSources.push(...attacker.modCache.brands);
+  }
+  if (Array.isArray(opts?.brands)) {
+    brandSources.push(...opts.brands);
+  }
+  const brandResult = applyBrands(packets, brandSources);
+  packets = brandResult.packets;
+  if (brandResult.statusAttempts.length) {
+    ctx.statusAttempts.push(...brandResult.statusAttempts);
   }
 
-  const totalDamage = Number(ctx?.totalDamage || 0);
-  if (defender && Number.isFinite(totalDamage) && totalDamage > 0) {
-    if (Number.isFinite(defender?.res?.hp)) {
-      defender.res.hp = Math.max(0, defender.res.hp - totalDamage);
-      if (defender.resources && Number.isFinite(defender.resources.hp)) {
-        defender.resources.hp = defender.res.hp;
+  const affinitySources = [];
+  if (attacker?.modCache?.offense?.affinities) affinitySources.push(attacker.modCache.offense.affinities);
+  if (attacker?.modCache?.affinities) affinitySources.push(attacker.modCache.affinities);
+  if (opts?.affinities) affinitySources.push(opts.affinities);
+  const affinityMap = mergeNumericMaps(affinitySources);
+  packets = scaleByAffinity(packets, affinityMap);
+
+  const attackerForPolarity = opts?.atkPol ? { ...attacker, polarity: opts.atkPol } : attacker;
+  const defenderForPolarity = opts?.defPol ? { ...defender, polarity: opts.defPol } : defender;
+  const offenseScalar = polarityOffenseScalar(attackerForPolarity, defenderForPolarity);
+  const offenseMult = 1 + offenseScalar;
+  if (offenseMult !== 1) {
+    packets = packets.map((pkt) => createPacket(pkt.type, Math.max(0, Math.floor(pkt.amount * offenseMult)), false));
+  }
+
+  ctx.packetsAfterOffense = attachPacketAccess(packets);
+
+  // ----- defense stages -----
+  const resistSources = [];
+  if (defender?.modCache?.resists) resistSources.push(defender.modCache.resists);
+  if (opts?.resists) resistSources.push(opts.resists);
+  const statusDerived = defender?.statusDerived || null;
+  if (statusDerived?.resistDelta) resistSources.push(statusDerived.resistDelta);
+  const resists = mergeResists(...resistSources);
+
+  const immunities = mergeImmunities(defender, opts);
+  const defenseScalar = polarityDefenseScalar(defenderForPolarity, attackerForPolarity);
+  const defenseMult = Math.max(0, 1 + defenseScalar);
+  let defendedPackets = applyDefense(packets, { resists, immunities, defenseMult });
+
+  const damageScalar = Number.isFinite(opts?.damageScalar) ? Math.max(0, Number(opts.damageScalar)) : 1;
+  if (damageScalar !== 1) {
+    defendedPackets = defendedPackets.map((pkt) => createPacket(pkt.type, Math.max(0, Math.floor(pkt.amount * damageScalar)), false));
+  }
+
+  ctx.packetsAfterDefense = attachPacketAccess(defendedPackets);
+  ctx.totalDamage = defendedPackets.reduce((sum, pkt) => sum + Math.max(0, Math.floor(pkt.amount)), 0);
+
+  if (ctx.totalDamage > 0) {
+    applyDamageToTarget(defender, ctx.totalDamage);
+  }
+  ctx.hpAfter = getCurrentHp(defender);
+  const killed = ctx.hpBefore > 0 && ctx.hpAfter <= 0;
+
+  if (!opts?.skipOnHitStatuses && ctx.statusAttempts.length) {
+    const applied = [];
+    for (const attempt of ctx.statusAttempts) {
+      const result = applyOneStatusAttempt({ attacker, defender, attempt, turn, rng: ctx.rng || undefined });
+      if (result && !result.ignored) {
+        applied.push(result);
       }
-      if (Number.isFinite(defender.hp)) {
-        defender.hp = defender.res.hp;
-      }
-    } else if (Number.isFinite(defender?.hp)) {
-      defender.hp = Math.max(0, defender.hp - totalDamage);
+    }
+    if (applied.length) {
+      ctx.appliedStatuses = applied;
+      rebuildStatusDerived(defender);
     }
   }
 
-  if (attacker) {
-    for (const [type, dealt] of Object.entries(ctx?.packetsAfterDefense || {})) {
-      if (Number.isFinite(dealt) && dealt > 0) {
-        noteUseGain(attacker, type);
+  maybeApplyOnKillHaste(attacker, killed, ctx);
+  maybeEcho(attacker, defender, ctx);
+  tickAttunementsAfterHit(attacker, defendedPackets.map((pkt) => pkt.type));
+
+  if (ctx.hooks && !Object.keys(ctx.hooks).length) {
+    ctx.hooks = undefined;
+  }
+
+  return ctx;
+}
+
+// ----- helper functions -----
+
+/** @param {any} target */
+function getCurrentHp(target) {
+  if (!target) return 0;
+  if (Number.isFinite(target?.res?.hp)) return Number(target.res.hp);
+  if (Number.isFinite(target?.resources?.hp)) return Number(target.resources.hp);
+  if (Number.isFinite(target?.hp)) return Number(target.hp);
+  return 0;
+}
+
+/**
+ * @param {any} target
+ * @param {number} amount
+ */
+function applyDamageToTarget(target, amount) {
+  if (!target) return;
+  const dmg = Math.max(0, Math.floor(Number(amount) || 0));
+  if (!dmg) return;
+  if (target.res && Number.isFinite(target.res.hp)) {
+    const next = Math.max(0, Math.floor(target.res.hp - dmg));
+    target.res.hp = next;
+    if (target.resources && typeof target.resources === "object") {
+      target.resources.hp = next;
+      if (target.resources.pools?.hp) {
+        target.resources.pools.hp.cur = next;
+      }
+    }
+    if (Number.isFinite(target.hp)) {
+      target.hp = next;
+    }
+    return;
+  }
+  if (Number.isFinite(target.hp)) {
+    const next = Math.max(0, Math.floor(target.hp - dmg));
+    target.hp = next;
+    if (target.resources && typeof target.resources === "object") {
+      target.resources.hp = next;
+      if (target.resources.pools?.hp) {
+        target.resources.pools.hp.cur = next;
       }
     }
   }
+}
 
-  const temporal = attacker?.modCache?.temporal || Object.create(null);
-  const resource = attacker?.modCache?.resource || Object.create(null);
-  const echoCfg = temporal.echo || null;
-
-  const defenderWasAlive = Number.isFinite(ctx?.defenderHpBefore)
-    ? ctx.defenderHpBefore > 0
-    : true;
-  const killedNow = defenderWasAlive && isDefenderDown(defender) && totalDamage > 0;
-
-  let hasteSummary = null;
-  let resourceGains = null;
-  if (killedNow) {
-    const allowOnKill = echoCfg?.allowOnKill ?? true;
-    const eligible = !ctx?.isEcho || allowOnKill;
-    if (eligible) {
-      if (temporal.onKillHaste) {
-        const hasteApplied = tryApplyHaste(attacker, temporal.onKillHaste);
-        if (hasteApplied) {
-          hasteSummary = {
-            statusId: hasteApplied.id,
-            stacks: hasteApplied.stacks,
-            duration: Number.isFinite(hasteApplied.endsAt)
-              ? Math.max(0, hasteApplied.endsAt - (attacker?.turn ?? 0))
-              : undefined,
-            potency: hasteApplied.potency,
-          };
-        }
-      }
-      if (resource.onKillGain) {
-        resourceGains = applyOnKillResourceGain(attacker, resource.onKillGain);
-      }
-    }
-  }
-
-  let echoResult = null;
-  if (attacker && echoCfg && !ctx?.isEcho) {
-    echoResult = rollEchoOnce(attacker, ctx, resolveFn);
-  }
-
-  const hooks = {};
-  if (hasteSummary) hooks.hasteApplied = hasteSummary;
-  if (resourceGains) hooks.resourceGains = resourceGains;
-  if (echoResult) hooks.echo = echoResult;
-
-  if (attacker) {
-    noteAttackStep(attacker, {
-      step: "finalize",
-      packetsAfterDefense: ctx?.packetsAfterDefense || {},
-      totalDamage: ctx?.totalDamage,
-      killed: killedNow,
-    });
-  }
-
-  return {
-    packetsAfterDefense: ctx?.packetsAfterDefense || {},
-    totalDamage: ctx?.totalDamage || totalDamage,
-    appliedStatuses: ctx?.appliedStatuses || [],
-    echo: echoResult,
-    hooks,
+/**
+ * @param {any} list
+ * @returns {Packet[]}
+ */
+function normalizePacketList(list) {
+  const out = [];
+  if (!list) return out;
+  const push = (type, amount, isBase = false) => {
+    if (!type) return;
+    const numeric = Number(amount);
+    if (!Number.isFinite(numeric) || numeric <= 0) return;
+    out.push(createPacket(String(type), Math.floor(numeric), isBase));
   };
+  if (Array.isArray(list)) {
+    for (const entry of list) {
+      if (!entry) continue;
+      const type = entry.type ?? entry.id ?? null;
+      const amount = entry.amount ?? entry.value ?? entry.flat ?? 0;
+      const isBase = Boolean(entry.__isBase || entry.isBase || entry.base);
+      push(type, amount, isBase);
+    }
+    return out;
+  }
+  if (typeof list === "object") {
+    for (const [type, amount] of Object.entries(list)) {
+      push(type, amount, false);
+    }
+  }
+  return out;
 }
 
-// --- helper functions ---
+/**
+ * @param {string} type
+ * @param {number} amount
+ * @param {boolean} [isBase]
+ * @returns {Packet}
+ */
+function createPacket(type, amount, isBase = false) {
+  const pkt = { type, amount: Math.max(0, Math.floor(amount)) };
+  if (isBase) {
+    pkt.__isBase = true;
+  }
+  return pkt;
+}
 
-function applyConversions(actor, packets) {
-  const convs = actor?.modCache?.offense?.conversions || [];
-  if (!convs.length) return packets;
+/**
+ * @template T extends Packet
+ * @param {T[]} list
+ * @returns {(T[] & Record<string, number>) & { byType?: Record<string, number> }}
+ */
+function attachPacketAccess(list) {
+  const arr = Array.isArray(list) ? list.map((pkt) => ({ ...pkt })) : [];
+  const totals = Object.create(null);
+  for (const pkt of arr) {
+    totals[pkt.type] = (totals[pkt.type] || 0) + Math.max(0, Math.floor(pkt.amount));
+  }
+  for (const [type, amount] of Object.entries(totals)) {
+    arr[type] = amount;
+  }
+  arr.byType = totals;
+  return /** @type {(T[] & Record<string, number>) & { byType?: Record<string, number> }} */ (arr);
+}
+
+/**
+ * @param {any[]} attempts
+ */
+function sanitizeStatusAttempts(attempts) {
+  if (!Array.isArray(attempts)) return [];
+  const out = [];
+  for (const attempt of attempts) {
+    const cloned = cloneStatusAttempt(attempt);
+    if (cloned) out.push(cloned);
+  }
+  return out;
+}
+
+/**
+ * @param {any} attempt
+ */
+function cloneStatusAttempt(attempt) {
+  if (!attempt || typeof attempt !== "object" || !attempt.id) return null;
+  const entry = { id: String(attempt.id) };
+  for (const key of [
+    "chance",
+    "baseChance",
+    "chancePct",
+    "stacks",
+    "duration",
+    "potency",
+    "copy",
+  ]) {
+    if (attempt[key] !== undefined) {
+      entry[key] = attempt[key];
+    }
+  }
+  return entry;
+}
+
+/**
+ * @param {Array<Record<string, any>>} attempts
+ */
+function cloneStatusAttemptList(attempts) {
+  if (!Array.isArray(attempts)) return [];
+  const out = [];
+  for (const attempt of attempts) {
+    const cloned = cloneStatusAttempt(attempt);
+    if (cloned) out.push(cloned);
+  }
+  return out;
+}
+
+/**
+ * @param {Packet[]} packets
+ * @param {any[]} conversions
+ */
+function applyConversions(packets, conversions) {
+  if (!Array.isArray(conversions) || !conversions.length) {
+    return packets.map((pkt) => createPacket(pkt.type, pkt.amount, pkt.__isBase));
+  }
   const out = [];
   for (const pkt of packets) {
-    let remaining = pkt.amount;
-    for (const c of convs) {
-      const sourceType =
-        typeof c.from === "string"
-          ? c.from
-          : typeof c.source === "string"
-          ? c.source
-          : null;
-      if (sourceType && pkt.type !== sourceType) {
-        continue;
-      }
-      const pctRaw =
-        typeof c.pct === "number" && Number.isFinite(c.pct)
-          ? c.pct
-          : typeof c.percent === "number" && Number.isFinite(c.percent)
-          ? c.percent
-          : NaN;
-      if (!Number.isFinite(pctRaw) || pctRaw <= 0 || pctRaw > 1) {
-        continue;
-      }
-      const take = Math.floor(pkt.amount * pctRaw);
-      if (take > 0) {
-        const toType =
-          typeof c.to === "string"
-            ? c.to
-            : typeof c.into === "string"
-            ? c.into
-            : pkt.type;
-        out.push({ type: toType, amount: take });
-        remaining -= take;
-      }
+    const baseAmount = Math.max(0, Number(pkt?.amount) || 0);
+    if (!pkt?.type || baseAmount <= 0) continue;
+    let remaining = baseAmount;
+    for (const conv of conversions) {
+      if (!conv) continue;
+      const from = typeof conv.from === "string"
+        ? conv.from
+        : typeof conv.source === "string"
+        ? conv.source
+        : null;
+      if (from && from !== pkt.type) continue;
+      if (conv.includeBaseOnly && !pkt.__isBase) continue;
+      const pctRaw = pickNumber(conv.pct, conv.percent, conv.ratio);
+      const pct = Number(pctRaw);
+      if (!Number.isFinite(pct) || pct <= 0) continue;
+      const take = Math.floor(remaining * pct);
+      if (take <= 0) continue;
+      const toType = typeof conv.to === "string"
+        ? conv.to
+        : typeof conv.into === "string"
+        ? conv.into
+        : typeof conv.type === "string"
+        ? conv.type
+        : null;
+      if (!toType) continue;
+      out.push(createPacket(String(toType), take, false));
+      remaining -= take;
+      if (remaining <= 0) break;
     }
-    if (remaining > 0) out.push({ type: pkt.type, amount: remaining });
+    if (remaining > 0) {
+      out.push(createPacket(pkt.type, remaining, pkt.__isBase));
+    }
   }
   return out;
 }
 
-function applyBrands(actor, packets, onHitStatuses) {
-  const offenseBrands = actor?.modCache?.offense?.brands || [];
-  // Exclude brands with kind === "brand" here because those are already included in offenseBrands.
-  // Only include other types of brands (e.g., temporary or special brands) in extraBrands.
-  const extraBrands = Array.isArray(actor?.modCache?.brands)
-    ? actor.modCache.brands.filter((b) => b && b.kind !== "brand")
-    : [];
-  const brands = [...offenseBrands, ...extraBrands];
-  return packets.map((pkt) => {
-    let amt = pkt.amount;
-    for (const b of brands) {
-      if (!b) continue;
-      const matchType = typeof b.type === "string" ? b.type : null;
-      if (matchType && matchType !== pkt.type) continue;
-
-      const flatBonus = Number(b.flat ?? b.amount ?? 0) || 0;
-      if (flatBonus) amt += flatBonus;
-
-      const pctBonus =
-        typeof b.pct === "number" && Number.isFinite(b.pct)
-          ? b.pct
-          : typeof b.percent === "number" && Number.isFinite(b.percent)
-          ? b.percent
-          : 0;
-      if (pctBonus) amt = Math.floor(amt * (1 + pctBonus));
-
-      if (Array.isArray(b.onHitStatuses)) onHitStatuses.push(...b.onHitStatuses);
-    }
-    return { ...pkt, amount: amt };
-  });
-}
-
-function applyAffinities(actor, packets) {
-  const aff = actor?.modCache?.affinities || {};
-  return packets.map((p) => {
-    const bonus = aff[p.type] || 0;
-    return bonus ? { ...p, amount: Math.floor(p.amount * (1 + bonus)) } : p;
-  });
-}
-
-function applyPolarityAttack(packets, scalar) {
-  if (!Number.isFinite(scalar) || scalar === 1) return packets;
-  return packets.map((p) => ({ ...p, amount: Math.floor(p.amount * scalar) }));
-}
-
-function applyDefense(defender, packets, polarityScalar) {
-  const imm = defender?.modCache?.immunities || new Set();
-  const res = defender?.modCache?.resists || {};
-  const statusRes = defender?.statusDerived?.resistsPct || {};
+/**
+ * @param {Packet[]} packets
+ * @param {any[]} brands
+ */
+function applyBrands(packets, brands) {
+  if (!Array.isArray(brands) || !brands.length) {
+    return { packets: packets.map((pkt) => createPacket(pkt.type, pkt.amount, pkt.__isBase)), statusAttempts: [] };
+  }
   const out = [];
-  for (const p of packets) {
-    if (imm.has(p.type)) continue;
-    const baseResist = Number(res[p.type] || 0);
-    const derivedResist = Number(statusRes[p.type] || 0);
-    const totalResist = Math.max(-1, Math.min(0.95, baseResist + derivedResist));
-    let amt = Math.floor(p.amount * (1 - totalResist));
-    if (Number.isFinite(polarityScalar) && polarityScalar !== 1) {
-      amt = Math.floor(amt * polarityScalar);
+  const statusAttempts = [];
+  for (const pkt of packets) {
+    const baseAmount = Math.max(0, Number(pkt?.amount) || 0);
+    if (!pkt?.type || baseAmount <= 0) continue;
+    let amount = baseAmount;
+    for (const brand of brands) {
+      if (!brand) continue;
+      const matchType = typeof brand.type === "string"
+        ? brand.type
+        : typeof brand.damageType === "string"
+        ? brand.damageType
+        : typeof brand.element === "string"
+        ? brand.element
+        : null;
+      if (matchType && matchType !== pkt.type) continue;
+      if (brand.includeBaseOnly && !pkt.__isBase) continue;
+      const flat = pickNumber(brand.flat, brand.amount, brand.value, brand.add);
+      if (Number.isFinite(flat) && flat) {
+        amount += Number(flat);
+      }
+      const pctRaw = pickNumber(brand.pct, brand.percent, brand.mult, brand.multiplier);
+      if (Number.isFinite(pctRaw) && pctRaw) {
+        amount = Math.max(0, Math.floor(amount * (1 + Number(pctRaw))));
+      }
+      if (Array.isArray(brand.onHitStatuses)) {
+        for (const attempt of brand.onHitStatuses) {
+          const cloned = cloneStatusAttempt(attempt);
+          if (cloned) statusAttempts.push(cloned);
+        }
+      }
     }
-    if (amt > 0) out.push({ type: p.type, amount: amt });
+    out.push(createPacket(pkt.type, amount, pkt.__isBase));
+  }
+  return { packets: out, statusAttempts };
+}
+
+/**
+ * @param {Packet[]} packets
+ * @param {Record<string, number>} affinities
+ */
+function scaleByAffinity(packets, affinities) {
+  if (!Array.isArray(packets) || !packets.length) return [];
+  const out = [];
+  for (const pkt of packets) {
+    const bonus = Number(affinities?.[pkt.type] ?? 0);
+    if (Number.isFinite(bonus) && bonus !== 0) {
+      const scaled = Math.max(0, Math.floor(pkt.amount * (1 + bonus)));
+      out.push(createPacket(pkt.type, scaled, pkt.__isBase));
+    } else {
+      out.push(createPacket(pkt.type, pkt.amount, pkt.__isBase));
+    }
   }
   return out;
 }
 
-function collapseByType(packets, scalar) {
-  const out = {};
-  for (const p of packets) {
-    const k = p.type;
-    out[k] = (out[k] || 0) + Math.floor(p.amount * scalar);
+/**
+ * @param {Array<Record<string, number>>} sources
+ */
+function mergeNumericMaps(sources) {
+  const out = Object.create(null);
+  for (const source of sources) {
+    if (!source || typeof source !== "object") continue;
+    for (const [key, value] of Object.entries(source)) {
+      const num = Number(value);
+      if (!Number.isFinite(num) || num === 0) continue;
+      out[key] = (out[key] || 0) + num;
+    }
   }
   return out;
 }
+
+/**
+ * @param  {...Record<string, number>} sources
+ */
+function mergeResists(...sources) {
+  const out = Object.create(null);
+  for (const source of sources) {
+    if (!source || typeof source !== "object") continue;
+    for (const [type, value] of Object.entries(source)) {
+      const num = Number(value);
+      if (!Number.isFinite(num) || num === 0) continue;
+      out[type] = (out[type] || 0) + num;
+    }
+  }
+  for (const key of Object.keys(out)) {
+    out[key] = Math.max(0, Math.min(0.95, out[key]));
+  }
+  return out;
+}
+
+/**
+ * @param {any} defender
+ * @param {any} opts
+ */
+function mergeImmunities(defender, opts) {
+  const set = new Set();
+  const push = (source) => {
+    if (!source) return;
+    if (source instanceof Set) {
+      for (const entry of source) {
+        if (entry) set.add(String(entry));
+      }
+      return;
+    }
+    if (Array.isArray(source)) {
+      for (const entry of source) {
+        if (entry) set.add(String(entry));
+      }
+      return;
+    }
+    if (typeof source === "object") {
+      for (const [key, value] of Object.entries(source)) {
+        if (value) set.add(String(key));
+      }
+    }
+  };
+  push(defender?.modCache?.defense?.immunities);
+  push(defender?.modCache?.immunities);
+  push(opts?.immunities);
+  return set;
+}
+
+/**
+ * @param {Packet[]} packets
+ * @param {{ resists: Record<string, number>, immunities: Set<string>, defenseMult?: number, polScalar?: number, defPol?:any, atkPol?:any }} args
+ */
+function applyDefense(packets, { resists, immunities, defenseMult, polScalar, defPol, atkPol }) {
+  let mult = Number.isFinite(defenseMult) ? Number(defenseMult) : NaN;
+  if (!Number.isFinite(mult)) {
+    const scalar = Number.isFinite(polScalar) ? Number(polScalar) : polarityDefenseScalar(defPol, atkPol);
+    mult = 1 + scalar;
+  }
+  const finalMult = mult > 0 ? mult : 0;
+  const out = [];
+  for (const pkt of packets) {
+    if (!pkt?.type) continue;
+    if (immunities && immunities.has(pkt.type)) continue;
+    const resist = clamp01(resists?.[pkt.type] || 0);
+    const scaled = Math.max(0, Math.floor(pkt.amount * (1 - resist) * finalMult));
+    if (scaled > 0) {
+      out.push(createPacket(pkt.type, scaled, false));
+    }
+  }
+  return out;
+}
+
+/**
+ * @param {any} attacker
+ * @param {boolean} killed
+ * @param {AttackContext} ctx
+ */
+function maybeApplyOnKillHaste(attacker, killed, ctx) {
+  if (!attacker || !killed) return;
+  const temporal = attacker?.modCache?.temporal || Object.create(null);
+  const echoCfg = temporal.echo;
+  if (ctx?.isEcho && echoCfg && echoCfg.allowOnKill === false) {
+    return;
+  }
+  let hasteApplied = null;
+  if (temporal.onKillHaste) {
+    hasteApplied = tryApplyHaste(attacker, temporal.onKillHaste);
+    if (hasteApplied) {
+      rebuildStatusDerived(attacker);
+    }
+  }
+  let resourceGains = null;
+  if (attacker?.modCache?.resource?.onKillGain) {
+    resourceGains = applyOnKillResourceGain(attacker, attacker.modCache.resource.onKillGain);
+  }
+  if (hasteApplied) {
+    ctx.hooks ||= Object.create(null);
+    ctx.hooks.hasteApplied = {
+      statusId: hasteApplied.id,
+      stacks: hasteApplied.stacks,
+      duration: Number.isFinite(hasteApplied.endsAt)
+        ? Math.max(0, Math.floor(hasteApplied.endsAt - (attacker?.turn ?? 0)))
+        : undefined,
+      potency: hasteApplied.potency,
+    };
+  }
+  if (resourceGains) {
+    ctx.hooks ||= Object.create(null);
+    ctx.hooks.resourceGains = resourceGains;
+  }
+}
+
+/**
+ * @param {any} attacker
+ * @param {any} defender
+ * @param {AttackContext} ctx
+ */
+function maybeEcho(attacker, defender, ctx) {
+  const temporal = attacker?.modCache?.temporal || Object.create(null);
+  const echoCfg = temporal.echo;
+  if (!echoCfg || ctx.isEcho) return;
+
+  const chance = clamp01(pickNumber(
+    echoCfg.chancePct,
+    echoCfg.chance,
+    echoCfg.probability,
+    echoCfg.rate,
+    echoCfg.prob,
+  ) || 0);
+  const rng = ctx?.rng || Math.random;
+  const roll = typeof rng === "function" ? rng() : Math.random();
+  if (!(chance >= 1 || roll <= chance)) {
+    if (chance > 0) {
+      const summary = { triggered: false, chance, fraction: 0 };
+      ctx.echo = summary;
+      ctx.hooks ||= Object.create(null);
+      ctx.hooks.echo = summary;
+    }
+    return;
+  }
+
+  const fraction = clamp01(pickNumber(
+    echoCfg.fraction,
+    echoCfg.percent,
+    echoCfg.pct,
+    echoCfg.mult,
+    echoCfg.multiplier,
+    echoCfg.damageScalar,
+    echoCfg.damageMult,
+  ) || 0);
+  if (fraction <= 0) {
+    const summary = { triggered: false, chance, fraction };
+    ctx.echo = summary;
+    ctx.hooks ||= Object.create(null);
+    ctx.hooks.echo = summary;
+    return;
+  }
+
+  const basePackets = Array.isArray(ctx.packetsAfterOffense) ? ctx.packetsAfterOffense : [];
+  const scaled = basePackets
+    .map((pkt) => createPacket(pkt.type, Math.max(0, Math.floor(pkt.amount * fraction)), pkt.__isBase))
+    .filter((pkt) => pkt.amount > 0);
+  if (!scaled.length) {
+    const summary = { triggered: false, chance, fraction };
+    ctx.echo = summary;
+    ctx.hooks ||= Object.create(null);
+    ctx.hooks.echo = summary;
+    return;
+  }
+
+  const statusAttempts = echoCfg.copyStatuses ? cloneStatusAttemptList(ctx.statusAttempts) : [];
+  const echoCtx = resolveAttackCore(attacker, defender, {
+    prePackets: scaled,
+    base: 0,
+    type: "physical",
+    statusAttempts,
+    isEcho: true,
+    turn: ctx.turn,
+    rng: ctx.rng,
+    skipOnHitStatuses: !echoCfg.copyStatuses,
+  });
+  const summary = {
+    triggered: true,
+    chance,
+    fraction,
+    allowOnKill: echoCfg.allowOnKill !== false,
+    totalDamage: echoCtx.totalDamage,
+    result: echoCtx,
+  };
+  ctx.echo = summary;
+  ctx.hooks ||= Object.create(null);
+  ctx.hooks.echo = summary;
+}
+
+/**
+ * @param {any} attacker
+ * @param {string[]} types
+ */
+function tickAttunementsAfterHit(attacker, types) {
+  if (!attacker || !Array.isArray(types) || !types.length) return;
+  const used = new Set();
+  for (const type of types) {
+    if (typeof type === "string" && type) {
+      used.add(type);
+    }
+  }
+  if (!used.size) return;
+  noteUseGain(attacker, used);
+}
+
+/**
+ * @param {...any} values
+ */
+function pickNumber(...values) {
+  for (const value of values) {
+    const num = Number(value);
+    if (Number.isFinite(num)) return num;
+  }
+  return undefined;
+}
+

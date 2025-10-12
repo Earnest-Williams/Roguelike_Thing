@@ -2,6 +2,7 @@
 // @ts-check
 
 import { POLAR_BIAS as POLAR_BIAS_SOURCE } from "../../constants.js";
+import { clamp } from "../utils/number.js";
 
 const DEFAULT_POLAR_BIAS = Object.freeze({
   order: Object.freeze({}),
@@ -16,7 +17,6 @@ const POLAR_BIAS = POLAR_BIAS_SOURCE ?? DEFAULT_POLAR_BIAS;
 /** @typedef {"order"|"growth"|"chaos"|"decay"|"void"} PolarityAxis */
 
 const AXES = /** @type {PolarityAxis[]} */ (["order", "growth", "chaos", "decay", "void"]);
-const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
 
 /**
  * Normalize a signed polarity vector to L1=1 while preserving sign per axis.
@@ -114,4 +114,50 @@ export function polarityDefenseMult(defender, attacker, cap = 0.5) {
   }
   score += bias.all || 0;
   return 1 - clamp(score, -cap, cap);
+}
+
+/**
+ * Convenience helper returning the additive offense scalar used by the lightweight resolver.
+ * Accepts either a full attacker actor or a raw polarity map.
+ * @param {any} attackerOrPolarity
+ * @param {any} [defender]
+ * @param {number} [cap]
+ */
+export function polarityOffenseScalar(attackerOrPolarity, defender = null, cap = 0.5) {
+  if (attackerOrPolarity && typeof attackerOrPolarity === "object" && "modCache" in attackerOrPolarity) {
+    const mult = polarityOffenseMult(attackerOrPolarity, defender, cap);
+    return clamp(mult - 1, -cap, cap);
+  }
+  const attacker = {
+    polarity: attackerOrPolarity || Object.create(null),
+    modCache: { offense: { polarity: { grant: Object.create(null), onHitBias: Object.create(null) } } },
+  };
+  const neutralDefender = defender && typeof defender === "object"
+    ? defender
+    : { polarity: Object.create(null), modCache: { defense: { polarity: { grant: Object.create(null), defenseBias: Object.create(null) } } } };
+  const mult = polarityOffenseMult(attacker, neutralDefender, cap);
+  return clamp(mult - 1, -cap, cap);
+}
+
+/**
+ * Convenience helper returning the defensive scalar to subtract from 1 for mitigation.
+ * Accepts either full actor objects or raw polarity maps.
+ * @param {any} defenderOrPolarity
+ * @param {any} [attacker]
+ * @param {number} [cap]
+ */
+export function polarityDefenseScalar(defenderOrPolarity, attacker = null, cap = 0.5) {
+  if (defenderOrPolarity && typeof defenderOrPolarity === "object" && "modCache" in defenderOrPolarity) {
+    const mult = polarityDefenseMult(defenderOrPolarity, attacker, cap);
+    return clamp(mult - 1, -cap, cap);
+  }
+  const defender = {
+    polarity: defenderOrPolarity || Object.create(null),
+    modCache: { defense: { polarity: { grant: Object.create(null), defenseBias: Object.create(null) } } },
+  };
+  const attackerObj = attacker && typeof attacker === "object"
+    ? attacker
+    : { polarity: Object.create(null), modCache: { offense: { polarity: { grant: Object.create(null), onHitBias: Object.create(null) } } } };
+  const mult = polarityDefenseMult(defender, attackerObj, cap);
+  return clamp(mult - 1, -cap, cap);
 }
