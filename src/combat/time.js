@@ -19,14 +19,14 @@ export function finalAPForAction(actor, baseAP, tags = []) {
   const sd = actor?.statusDerived || Object.create(null);
 
   const base = Math.max(0, Math.floor(Number(baseAP) || 0));
+  const baseActionDelta = (temporal.baseActionAPDelta || 0) + (sd.baseActionAPDelta || 0);
   const moveDelta = tagsArr.includes("move")
     ? (temporal.moveAPDelta || 0) + (sd.moveAPDelta || 0)
     : 0;
   const castDelta = tagsArr.includes("cast")
-    ? (temporal.baseActionAPDelta || temporal.castTimeDelta || 0) + (sd.baseActionAPDelta || sd.castTimeDelta || 0)
+    ? (temporal.castTimeDelta || temporal.castAPDelta || 0) + (sd.castTimeDelta || sd.castAPDelta || 0)
     : 0;
-  const baseActionDelta = (temporal.baseActionAPDelta || 0) + (sd.baseActionAPDelta || 0);
-  const additive = Math.max(0, base + moveDelta + castDelta + baseActionDelta);
+  const additive = Math.max(0, base + baseActionDelta + moveDelta + castDelta);
 
   const temporalBaseMult = Number.isFinite(temporal.baseActionAPMult)
     ? temporal.baseActionAPMult
@@ -35,8 +35,8 @@ export function finalAPForAction(actor, baseAP, tags = []) {
     tagsArr.includes("move") && Number.isFinite(temporal.moveAPMult)
       ? temporal.moveAPMult
       : 1;
-  const temporalSpeedScalar = 1 + (temporal.actionSpeedPct || 0);
-  const statusSpeedScalar = 1 + (sd.actionSpeedPct || 0);
+  const temporalSpeedScalar = Math.max(0, 1 - (temporal.actionSpeedPct || 0));
+  const statusSpeedScalar = Math.max(0, 1 - (sd.actionSpeedPct || 0));
   const totalMult = Math.max(0, temporalBaseMult * temporalMoveMult * temporalSpeedScalar * statusSpeedScalar);
   const scaled = Math.max(0, Math.floor(additive * totalMult));
 
