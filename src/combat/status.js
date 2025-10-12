@@ -3,7 +3,7 @@
 
 import { contributeDerived } from "./attunement.js";
 import { logStatusEvt } from "./debug-log.js";
-import { EXTRA_STATUSES } from "../content/statuses.js";
+import { STATUS_DEFINITIONS } from "../content/statuses.js";
 
 /** @typedef {{
  *   id: string,
@@ -62,6 +62,30 @@ import { EXTRA_STATUSES } from "../content/statuses.js";
 const _registry = new Map();
 export const STATUS_REGISTRY = Object.create(null);
 
+function normalizeStacking(value) {
+  if (typeof value !== "string") return "add";
+  const raw = value.toLowerCase();
+  switch (raw) {
+    case "add":
+    case "stack":
+    case "add_stacks":
+      return "add";
+    case "refresh":
+    case "reapply":
+      return "refresh";
+    case "max":
+    case "cap":
+      return "max";
+    case "replace":
+      return "replace";
+    case "independent":
+    case "independent_stacks":
+      return "independent";
+    default:
+      return raw;
+  }
+}
+
 /**
  * Register or overwrite a status definition.
  * @param {StatusDefinition} def
@@ -76,6 +100,7 @@ export function registerStatus(def) {
     duration: 0,
     ...def,
   };
+  normalized.stacking = normalizeStacking(normalized.stacking);
   _registry.set(normalized.id, normalized);
   STATUS_REGISTRY[normalized.id] = normalized;
   return normalized;
@@ -124,84 +149,9 @@ function dealTypeDamage(target, type, amount) {
   return dealt;
 }
 
-function makeHasteStatus() {
-  return {
-    id: "haste",
-    harmful: false,
-    stacking: "refresh",
-    tickEvery: 0,
-    duration: 2,
-    derive(ctx, derived) {
-      const stacks = Math.max(1, ctx.stacks || 1);
-      derived.temporal.actionSpeedPct = (derived.temporal.actionSpeedPct || 0) + 0.2 * stacks;
-      return derived;
-    },
-  };
-}
-
-function makeSlowedStatus() {
-  return {
-    id: "slowed",
-    harmful: true,
-    stacking: "add",
-    tickEvery: 0,
-    duration: 3,
-    derive(ctx, derived) {
-      const stacks = Math.max(1, ctx.stacks || 1);
-      derived.temporal.actionSpeedPct = (derived.temporal.actionSpeedPct || 0) - 0.2 * stacks;
-      return derived;
-    },
-  };
-}
-
-function makeStunnedStatus() {
-  return {
-    id: "stunned",
-    harmful: true,
-    stacking: "max",
-    tickEvery: 0,
-    duration: 1,
-    derive(ctx, derived) {
-      const stacks = Math.max(1, ctx.stacks || 1);
-      derived.temporal.actionSpeedPct = (derived.temporal.actionSpeedPct || 0) - 0.5 * stacks;
-      derived.temporal.moveAPDelta = (derived.temporal.moveAPDelta || 0) + 2 * stacks;
-      return derived;
-    },
-  };
-}
-
-function makeDotStatus(id, damageType) {
-  return {
-    id,
-    harmful: true,
-    stacking: "add",
-    tickEvery: 1,
-    duration: 3,
-    onTick(ctx) {
-      const potency = Number.isFinite(ctx?.potency)
-        ? Math.max(1, Math.floor(ctx.potency))
-        : Math.max(1, Math.floor(ctx.stacks || 1));
-      dealTypeDamage(ctx.target, damageType, potency);
-    },
-  };
-}
-
-const DEFAULT_STATUSES = {
-  haste: makeHasteStatus(),
-  slowed: makeSlowedStatus(),
-  stunned: makeStunnedStatus(),
-  burn: makeDotStatus("burn", "fire"),
-  burning: makeDotStatus("burning", "fire"),
-  poisoned: makeDotStatus("poisoned", "poison"),
-};
-
-for (const def of Object.values(DEFAULT_STATUSES)) {
-  registerStatus(def);
-}
-
-if (EXTRA_STATUSES && typeof EXTRA_STATUSES === "object") {
-  for (const def of Object.values(EXTRA_STATUSES)) {
-    if (def && typeof def === "object") registerStatus(def);
+for (const def of STATUS_DEFINITIONS) {
+  if (def && typeof def === "object") {
+    registerStatus(def);
   }
 }
 
@@ -291,7 +241,8 @@ export function addStatus(target, id, opts = {}) {
   const duration = opts.duration ?? def.duration ?? 0;
   const list = ensureStatusList(target);
   const now = Number.isFinite(target.turn) ? target.turn : 0;
-  const existing = list.find(s => s.id === id) || null;
+  const stackingMode = normalizeStacking(def.stacking);
+  const existing = stackingMode === "independent" ? null : list.find((s) => s.id === id) || null;
   const nextEndsAt = normalizeEndsAt(target, now + duration);
 
   if (!existing) {
@@ -316,7 +267,7 @@ export function addStatus(target, id, opts = {}) {
   }
 
   const entry = existing;
-  switch (def.stacking) {
+  switch (stackingMode) {
     case "replace":
       entry.stacks = stacks;
       entry.potency = potency;
@@ -330,9 +281,12 @@ export function addStatus(target, id, opts = {}) {
       entry.potency += potency;
       break;
     case "add":
-    default:
       entry.stacks += stacks;
       entry.potency += potency;
+      break;
+    default:
+      entry.stacks = stacks;
+      entry.potency = potency;
       break;
   }
   entry.endsAt = Math.max(entry.endsAt, nextEndsAt);
