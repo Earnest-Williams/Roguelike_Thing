@@ -54,11 +54,18 @@ export class ChapterState {
   }
 
   /**
-   * @param {ReturnType<typeof generateDungeonTheme>} theme
+   * Reset the chapter progression back to floor one and optionally seed a
+   * precomputed theme. When `theme` is omitted a fresh theme is generated using
+   * the chapter's deterministic RNG hook so restarts still feel varied while
+   * remaining reproducible in tests.
+   *
+   * @param {ReturnType<typeof generateDungeonTheme>} [theme]
    */
   reset(theme) {
     if (theme) {
       this.theme = theme;
+    } else {
+      this.theme = generateDungeonTheme(this._rng);
     }
     this.levelIndex = 0;
     this.totalLevels = Math.max(1, Math.round(this.theme?.totalLevels || 1));
