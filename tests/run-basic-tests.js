@@ -117,7 +117,9 @@ function testResourceAndSave() {
     baseStats: { str: 8, dex: 8, int: 8, vit: 8, maxHP: 20, maxStamina: 10, maxMana: 5, baseSpeed: 1 },
   });
   hydrateActor(other, blob);
-  assert.deepEqual(Object.entries(other.cooldowns), Object.entries(actor.cooldowns), "cooldowns persist through save/load");
+  const entries = (value) =>
+    value instanceof Map ? Array.from(value.entries()) : Object.entries(value || {});
+  assert.deepEqual(entries(other.cooldowns), entries(actor.cooldowns), "cooldowns persist through save/load");
   console.log("✓ save/hydrate actor state");
 }
 

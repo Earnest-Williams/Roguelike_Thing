@@ -210,6 +210,50 @@ export function spend(actor, action) {
 }
 
 /**
+ * Apply configured on-kill resource gains to an actor.
+ * @param {any} actor
+ * @param {Record<string, number>} gains
+ */
+export function applyOnKillResourceGain(actor, gains) {
+  if (!actor || !gains || typeof gains !== "object") return null;
+  const pools = ensureResourcePools(actor);
+  const applied = Object.create(null);
+  for (const [pool, rawAmount] of Object.entries(gains)) {
+    const amount = Number(rawAmount);
+    if (!Number.isFinite(amount) || amount === 0) continue;
+    if (pool === "hp") {
+      const before = getPrimaryResource(actor, "hp");
+      if (before === null) continue;
+      const max = getPrimaryResourceMax(actor, "hp");
+      const after = clamp(before + amount, 0, max);
+      setPrimaryResource(actor, "hp", after);
+      const delta = after - before;
+      if (delta !== 0) applied[pool] = delta;
+      continue;
+    }
+    const state = pools?.[pool];
+    if (state) {
+      const before = Number(state.cur || 0);
+      const max = Number.isFinite(state.max) ? Number(state.max) : before;
+      const after = clamp(before + amount, 0, max);
+      state.cur = after;
+      syncPrimaryMirror(actor, pool, after);
+      const delta = after - before;
+      if (delta !== 0) applied[pool] = delta;
+      continue;
+    }
+    const before = getPrimaryResource(actor, pool);
+    if (before === null) continue;
+    const max = getPrimaryResourceMax(actor, pool);
+    const after = clamp(before + amount, 0, max);
+    setPrimaryResource(actor, pool, after);
+    const delta = after - before;
+    if (delta !== 0) applied[pool] = delta;
+  }
+  return Object.keys(applied).length ? applied : null;
+}
+
+/**
  * Applies event-based resource gains (on move/hit/crit/kill).
  * Maintains legacy pool structure for modules still using it.
  * @param {any} actor
@@ -241,6 +285,110 @@ export function eventGain(actor, evt) {
     const max = Number.isFinite(state.max) ? Number(state.max) : Number.POSITIVE_INFINITY;
     state.cur = Math.min(max, Math.max(0, cur + gain));
   }
+}
+
+function ensureResourcePools(actor) {
+  if (!actor) return Object.create(null);
+  const store = ensureResourceBucket(actor);
+  if (!store.pools || typeof store.pools !== "object") {
+    store.pools = Object.create(null);
+  }
+  if (actor.res) {
+    actor.res.pools = store.pools;
+  }
+  return store.pools;
+}
+
+function getPrimaryResource(actor, key) {
+  if (!actor) return null;
+  if (actor.res && key in actor.res) {
+    const value = Number(actor.res[key]);
+    if (Number.isFinite(value)) return value;
+  }
+  if (actor.resources && key in actor.resources) {
+    const value = Number(actor.resources[key]);
+    if (Number.isFinite(value)) return value;
+  }
+  return null;
+}
+
+function getPrimaryResourceMax(actor, key) {
+  const pools = actor?.resources?.pools || actor?.res?.pools;
+  const state = pools?.[key];
+  if (state && Number.isFinite(state.max)) {
+    return Number(state.max);
+  }
+  switch (key) {
+    case "hp":
+      return pickNumber(
+        actor?.resources?.hpMax,
+        actor?.res?.hpMax,
+        actor?.base?.maxHP,
+        actor?.baseStats?.maxHP,
+      );
+    case "stamina":
+      return pickNumber(
+        actor?.resources?.staminaMax,
+        actor?.res?.staminaMax,
+        actor?.base?.maxStamina,
+        actor?.baseStats?.maxStamina,
+      );
+    case "mana":
+      return pickNumber(
+        actor?.resources?.manaMax,
+        actor?.res?.manaMax,
+        actor?.base?.maxMana,
+        actor?.baseStats?.maxMana,
+      );
+    default:
+      if (state && Number.isFinite(state.cur)) return Number(state.cur);
+      return pickNumber(actor?.resources?.max?.[key], actor?.res?.max?.[key]);
+  }
+}
+
+function setPrimaryResource(actor, key, value) {
+  if (!actor) return;
+  if (actor.res && key in actor.res) {
+    actor.res[key] = value;
+  }
+  if (actor.resources && key in actor.resources) {
+    actor.resources[key] = value;
+  }
+  if (key === "hp" && typeof actor.hp === "number") {
+    actor.hp = value;
+  } else if (key === "stamina" && typeof actor.stamina === "number") {
+    actor.stamina = value;
+  } else if (key === "mana" && typeof actor.mana === "number") {
+    actor.mana = value;
+  }
+  syncPrimaryMirror(actor, key, value);
+}
+
+function syncPrimaryMirror(actor, key, value) {
+  if (!actor) return;
+  if (actor.resources?.pools?.[key]) {
+    actor.resources.pools[key].cur = value;
+  }
+  if (actor.res?.pools?.[key]) {
+    actor.res.pools[key].cur = value;
+  }
+}
+
+function pickNumber(...values) {
+  for (const value of values) {
+    if (value === undefined || value === null) continue;
+    const num = Number(value);
+    if (Number.isFinite(num)) return num;
+  }
+  return 0;
+}
+
+function clamp(value, min, max) {
+  if (!Number.isFinite(min)) min = Number.NEGATIVE_INFINITY;
+  if (!Number.isFinite(max)) max = Number.POSITIVE_INFINITY;
+  if (value < min) return min;
+  if (value > max) return max;
+  return value;
 }
 
 /**

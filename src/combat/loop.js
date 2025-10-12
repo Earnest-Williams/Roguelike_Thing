@@ -1,6 +1,13 @@
 // src/combat/loop.js
 // @ts-check
-import { applyStatuses, hasStatus, rebuildDerived, removeStatusById, tickStatuses } from "./status.js";
+import {
+  applyStatuses,
+  applyStatus,
+  hasStatus,
+  rebuildDerived,
+  removeStatusById,
+  tickStatusesAtTurnStart,
+} from "./status.js";
 import { gainAP, tickCooldowns, initiativeWithTemporal } from "./time.js";
 import { tickResources, isDefeated } from "./resources.js";
 import { tickAttunements } from "./attunement.js";
@@ -11,25 +18,21 @@ import { tickFreeAction } from "./actor.js";
 export function startTurn(actor) {
   if (!actor) return;
   tickFreeAction(actor);
+  actor.__turnCounter = (actor.__turnCounter ?? 0) + 1;
+  actor.turn = actor.__turnCounter;
   if (!actor.turnFlags || typeof actor.turnFlags !== "object") {
     actor.turnFlags = { moved: false, attacked: false, channeled: false };
   }
   tickAttunements(actor);
   const actedLastTurn = Boolean(actor._prevTurnDidMove || actor._prevTurnDidAttack);
-  const hasChannelingStatus = hasStatus(actor, "channeling");
   const canChannel = Boolean(actor.modCache?.resource?.channeling);
-  if ((actedLastTurn || !canChannel) && hasChannelingStatus) {
+  if ((actedLastTurn || !canChannel) && hasStatus(actor, "channeling")) {
     removeStatusById(actor, "channeling");
   }
   actor._turnDidMove = false;
   actor._turnDidAttack = false;
-  const turn = actor.turn || 0;
-  tickStatuses(actor, turn);
-  if (typeof actor.onTurnStart === "function") {
-    actor.onTurnStart(turn);
-  } else {
-    actor.statusDerived = rebuildDerived(actor);
-  }
+  tickStatusesAtTurnStart(actor, actor.turn);
+  tickResources(actor);
   logTurnEvt(actor, {
     phase: "start_turn",
     actorId: actor.id,
@@ -52,12 +55,7 @@ export function endTurn(actor) {
 
   if (idle) {
     resBucket.channeling = true;
-    applyStatuses(
-      { statusAttempts: [{ id: "channeling", stacks: 1, baseChance: 1, baseDuration: 1 }] },
-      actor,
-      actor,
-      actor.turn,
-    );
+    applyStatus(actor, "channeling", 1, 1, actor, actor.turn);
   } else {
     resBucket.channeling = false;
     if (hasStatus(actor, "channeling")) {
@@ -92,14 +90,11 @@ export function endTurn(actor) {
  * @param {(actor: import("./actor.js").Actor)=>void} [actionPlanner]
  */
 export function runTurn(actor, actionPlanner) {
-  const turn = actor ? (actor.__turnCounter = (actor.__turnCounter ?? 0) + 1) : 0;
-  if (actor) actor.turn = turn;
   startTurn(actor);
   if (actor) {
     actor.resources ||= { pools: Object.create(null) };
     actor.resources.pools ||= Object.create(null);
   }
-  tickResources(actor);
   if (actor?.turnFlags && typeof actor.turnFlags === "object") {
     actor.turnFlags.channeled = false;
   }

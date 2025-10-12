@@ -31,6 +31,7 @@ export function attachLogs(actor, capacity = 64) {
   actor.logs.attack = actor.logs.attack || new RingLog(capacity);
   actor.logs.status = actor.logs.status || new RingLog(capacity);
   actor.logs.turn = actor.logs.turn || new RingLog(capacity);
+  actor._debug = actor._debug || { turns: [] };
   return actor;
 }
 
@@ -43,3 +44,17 @@ export const logStatusEvt = (actor, data) =>
 
 export const logTurnEvt = (actor, data) =>
   actor?.logs?.turn?.push({ kind: "turn_evt", ...data });
+
+export function noteAttackStep(actor, step) {
+  if (!actor) return;
+  if (!actor._debug || typeof actor._debug !== "object") {
+    actor._debug = { turns: [] };
+  }
+  const bucket = actor._debug.turns || (actor._debug.turns = []);
+  const entry = {
+    turn: Number.isFinite(actor.turn) ? actor.turn : 0,
+    step,
+  };
+  bucket.push(entry);
+  if (bucket.length > 32) bucket.shift();
+}

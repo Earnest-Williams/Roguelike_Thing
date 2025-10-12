@@ -1,14 +1,6 @@
 // src/combat/status-registry.js
 // @ts-check
 
-import {
-  STATUS_BURN_BASE_DAMAGE,
-  STATUS_BURN_MAX_STACKS,
-  STATUS_HASTE_ACTION_SPEED_BONUS_PER_STACK,
-  STATUS_SLOWED_ACTION_SPEED_PENALTY_PER_STACK,
-  STATUS_SLOWED_MOVE_AP_DELTA,
-  STATUS_STUNNED_ACTION_SPEED_PENALTY_PER_STACK,
-} from "../config.js";
 import { BLEED_STATUS_DEFINITION } from "../content/statuses.js";
 import { registerStatus } from "./status.js";
 
@@ -36,14 +28,21 @@ function loseHP(actor, amount) {
   actor.hp = next;
 }
 
+function dealTypeDamage(actor, type, amount) {
+  if (!actor || !Number.isFinite(amount) || amount <= 0) return;
+  loseHP(actor, amount);
+  if (actor.logs?.status) {
+    actor.logs.status.push({ kind: "status_tick", type, amount });
+  }
+}
+
 registerStatus({
   id: "burn",
   stacking: "add",
   tickEvery: 1,
-  duration: STATUS_BURN_MAX_STACKS,
+  duration: 4,
   onTick(ctx) {
-    const stacks = Math.max(1, ctx.stacks);
-    loseHP(ctx.target, STATUS_BURN_BASE_DAMAGE + stacks);
+    dealTypeDamage(ctx.target, "fire", Math.max(1, ctx.stacks));
   },
 });
 
@@ -51,14 +50,9 @@ registerStatus({
   id: "poisoned",
   stacking: "add",
   tickEvery: 1,
-  duration: STATUS_BURN_MAX_STACKS,
-  onApply(ctx) {
-    const potency = Math.max(1, ctx.potency || ctx.stacks);
-    if (ctx.status) ctx.status.potency = potency;
-  },
+  duration: 6,
   onTick(ctx) {
-    const potency = Math.max(1, ctx.status?.potency ?? ctx.stacks);
-    loseHP(ctx.target, potency);
+    dealTypeDamage(ctx.target, "poison", Math.max(1, ctx.stacks));
   },
 });
 
@@ -70,9 +64,8 @@ registerStatus({
   duration: 3,
   derive(ctx, d) {
     const stacks = Math.max(1, ctx.stacks);
-    d.temporal.actionSpeedPct = (d.temporal.actionSpeedPct || 0)
-      + STATUS_SLOWED_ACTION_SPEED_PENALTY_PER_STACK * stacks;
-    d.temporal.moveAPDelta = (d.temporal.moveAPDelta || 0) + STATUS_SLOWED_MOVE_AP_DELTA;
+    d.temporal.actionSpeedPct = (d.temporal.actionSpeedPct || 0) - 0.2 * stacks;
+    d.temporal.moveAPDelta = (d.temporal.moveAPDelta || 0) + 2 * stacks;
     return d;
   },
 });
@@ -83,20 +76,19 @@ registerStatus({
   duration: 2,
   derive(ctx, d) {
     const stacks = Math.max(1, ctx.stacks);
-    d.temporal.actionSpeedPct = (d.temporal.actionSpeedPct || 0)
-      + STATUS_STUNNED_ACTION_SPEED_PENALTY_PER_STACK * stacks;
+    d.temporal.actionSpeedPct = (d.temporal.actionSpeedPct || 0) - 0.5 * stacks;
+    d.temporal.moveAPDelta = (d.temporal.moveAPDelta || 0) + 3 * stacks;
     return d;
   },
 });
 
 registerStatus({
-  id: "haste_bonus",
+  id: "haste",
   stacking: "refresh",
-  duration: 4,
+  duration: 2,
   derive(ctx, d) {
     const stacks = Math.max(1, ctx.stacks);
-    d.temporal.actionSpeedPct = (d.temporal.actionSpeedPct || 0)
-      - STATUS_HASTE_ACTION_SPEED_BONUS_PER_STACK * stacks;
+    d.temporal.actionSpeedPct = (d.temporal.actionSpeedPct || 0) + 0.2 * stacks;
     return d;
   },
 });

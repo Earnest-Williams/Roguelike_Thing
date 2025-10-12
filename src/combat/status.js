@@ -519,6 +519,36 @@ export function applyStatus(target, id, stacks = 1, duration = 1, source, turn) 
   return [id];
 }
 
+export function tryApplyHaste(actor, hasteCfg) {
+  if (!actor || !hasteCfg) return null;
+  const config = typeof hasteCfg === "number" ? { duration: hasteCfg } : hasteCfg;
+  if (!canGrantOnKillHaste(actor, config)) return null;
+  const statusId = String(config.statusId || config.status || config.id || "haste");
+  const stacksRaw = pickNumber(config.stacks, config.stack, config.amount, config.value);
+  const stacks = Number.isFinite(stacksRaw) ? Math.max(1, Math.floor(stacksRaw)) : 1;
+  const durationRaw = pickNumber(
+    config.duration,
+    config.turns,
+    config.baseDuration,
+    config.time,
+    config.length,
+  );
+  const duration = Number.isFinite(durationRaw) ? Math.max(1, Math.floor(durationRaw)) : 1;
+  const potency = pickNumber(config.potency, config.power, config.strength);
+
+  const applied = addStatus(actor, statusId, {
+    stacks,
+    potency: Number.isFinite(potency) ? potency : undefined,
+    duration,
+    source: config.source || "onKillHaste",
+  });
+  if (applied) {
+    stampOnKillHasteICD(actor, config);
+    return applied;
+  }
+  return null;
+}
+
 export function tickStatusesAtTurnStart(actor, turn) {
   tickStatuses(actor, turn);
   if (!actor) return;
@@ -531,5 +561,45 @@ export function tickStatusesAtTurnStart(actor, turn) {
 
 export function getStatusDefinition(id) {
   return _registry.get(id) || null;
+}
+
+function ensureHasteCtl(actor) {
+  if (!actor._onKillHasteCtl || typeof actor._onKillHasteCtl !== "object") {
+    actor._onKillHasteCtl = { lastTurn: -Infinity, nextReadyAt: -Infinity };
+  }
+  return actor._onKillHasteCtl;
+}
+
+function canGrantOnKillHaste(actor, cfg) {
+  if (!actor || !cfg) return false;
+  const nowTurn = Number.isFinite(actor.turn) ? actor.turn : 0;
+  const state = ensureHasteCtl(actor);
+  if (cfg.oncePerTurn && state.lastTurn === nowTurn) return false;
+  if (Number.isFinite(cfg.cooldownTurns)) {
+    const cd = Math.max(0, Math.floor(cfg.cooldownTurns));
+    if (nowTurn < state.nextReadyAt) return false;
+    state.cooldown = cd;
+  }
+  return true;
+}
+
+function stampOnKillHasteICD(actor, cfg) {
+  if (!actor || !cfg) return;
+  const state = ensureHasteCtl(actor);
+  const nowTurn = Number.isFinite(actor.turn) ? actor.turn : 0;
+  state.lastTurn = nowTurn;
+  if (Number.isFinite(cfg.cooldownTurns)) {
+    const cd = Math.max(0, Math.floor(cfg.cooldownTurns));
+    state.nextReadyAt = nowTurn + cd;
+  }
+}
+
+function pickNumber(...values) {
+  for (const value of values) {
+    if (value === undefined || value === null) continue;
+    const num = Number(value);
+    if (Number.isFinite(num)) return num;
+  }
+  return NaN;
 }
 

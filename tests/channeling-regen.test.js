@@ -37,10 +37,11 @@ function approxEqual(actual, expected, message) {
   const actor = makeChannelingActor();
 
   actor.turn = 1;
+  const staminaBefore = actor.res.stamina;
+  const manaBefore = actor.res.mana;
   startTurn(actor);
-  tickResources(actor);
-  approxEqual(actor.res.stamina, 5, "baseline regen should apply without channeling status");
-  approxEqual(actor.res.mana, 3, "baseline mana regen should apply without channeling status");
+  approxEqual(actor.res.stamina, staminaBefore + 1, "baseline regen should apply without channeling status");
+  approxEqual(actor.res.mana, manaBefore + 1, "baseline mana regen should apply without channeling status");
 
   endTurn(actor);
   assert.ok(hasStatus(actor, "channeling"), "idle actors gain the channeling status at end of turn");
@@ -48,9 +49,8 @@ function approxEqual(actual, expected, message) {
   actor.turn = 2;
   startTurn(actor);
   assert.ok(hasStatus(actor, "channeling"), "channeling persists into the next turn if uninterrupted");
-  tickResources(actor);
-  approxEqual(actor.res.stamina, 5 + 1.1, "channeling multiplies stamina regen");
-  approxEqual(actor.res.mana, 3 + 1.1, "channeling multiplies mana regen");
+  approxEqual(actor.res.stamina, staminaBefore + 1 + 1.1, "channeling multiplies stamina regen");
+  approxEqual(actor.res.mana, manaBefore + 1 + 1.1, "channeling multiplies mana regen");
 })();
 
 (function testChannelingBreaksAfterActing() {
@@ -58,12 +58,10 @@ function approxEqual(actual, expected, message) {
 
   actor.turn = 1;
   startTurn(actor);
-  tickResources(actor);
   endTurn(actor);
 
   actor.turn = 2;
   startTurn(actor);
-  tickResources(actor);
   const staminaBeforeAction = actor.res.stamina;
   actor._turnDidMove = true;
   endTurn(actor);
@@ -71,7 +69,6 @@ function approxEqual(actual, expected, message) {
   actor.turn = 3;
   startTurn(actor);
   assert.ok(!hasStatus(actor, "channeling"), "channeling is removed on the turn after acting");
-  tickResources(actor);
   const staminaAfterBreak = actor.res.stamina;
   approxEqual(
     staminaAfterBreak - staminaBeforeAction,
