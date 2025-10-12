@@ -5,7 +5,7 @@ import { ITEMS } from "../src/content/items.js";
 (function testAffixPools() {
   const prefixIds = new Set(AFFIX_POOLS.prefix.map((a) => a.id));
   assert(prefixIds.size >= 10, "expected at least ten weapon prefixes");
-  for (const id of ["corroding", "venom_laced", "radiant"]) {
+  for (const id of ["corroding", "venom_laced", "radiant", "drenching"]) {
     assert(prefixIds.has(id), `missing expected prefix ${id}`);
   }
 
@@ -50,7 +50,7 @@ import { ITEMS } from "../src/content/items.js";
 
   assert(brandTypes.size >= 10, "expected at least ten distinct weapon brand types");
 
-  for (const type of ["cold", "acid", "earth", "lightning"]) {
+  for (const type of ["cold", "acid", "earth", "lightning", "water"]) {
     assert(brandTypes.has(type), `missing expected elemental brand type ${type}`);
     const hasScaling = brandTypes
       .get(type)
