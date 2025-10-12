@@ -314,7 +314,7 @@ function getPrimaryResourceMax(actor, key) {
       );
     default:
       if (poolState && Number.isFinite(poolState.cur)) return poolState.cur;
-      return Infinity;
+      throw new Error(`Unknown resource type: ${key} in getPrimaryResourceMax`);
   }
 }
 
