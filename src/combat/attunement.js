@@ -108,13 +108,24 @@ export function gainAttunement(actor, type, amount) {
  */
 export function decayAttunements(actor) {
   ensureAttunement(actor);
-  const stacks = actor.attunement.stacks;
-  const rules = actor.attunement.rules;
-  for (const type of Object.keys(stacks)) {
-    const r = rules?.[type];
-    const dec = Math.max(0, Number(r?.decayPerTurn ?? 1));
-    const current = Number(stacks[type] || 0);
-    const next = Math.max(0, current - dec);
+  const stacks = actor.attunement?.stacks;
+  const rules = actor.attunement?.rules;
+  if (!stacks || !rules) return;
+
+  for (const [type, value] of Object.entries(stacks)) {
+    const rule = rules[type];
+    if (!rule) continue;
+
+    const decayRaw = Number(rule.decayPerTurn);
+    const decay = Number.isFinite(decayRaw) && decayRaw >= 0 ? decayRaw : 0;
+    const currentRaw = Number(value);
+
+    if (!Number.isFinite(currentRaw) || currentRaw <= 0) {
+      delete stacks[type];
+      continue;
+    }
+
+    const next = Math.max(0, Math.floor(currentRaw - decay));
     if (next <= 0) {
       delete stacks[type];
     } else {
