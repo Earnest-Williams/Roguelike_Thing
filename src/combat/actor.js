@@ -414,18 +414,25 @@ export class Actor {
 
     if (onHitBias && this.modCache?.offense?.polarity?.onHitBias) {
       const bias = this.modCache.offense.polarity.onHitBias;
-      for (const key of Object.keys(bias)) delete bias[key];
-      Object.assign(bias, onHitBias);
+      clearAndAssign(bias, onHitBias);
     }
 
     if (defenseBias && this.modCache?.defense?.polarity?.defenseBias) {
       const bias = this.modCache.defense.polarity.defenseBias;
-      for (const key of Object.keys(bias)) delete bias[key];
-      Object.assign(bias, defenseBias);
+      clearAndAssign(bias, defenseBias);
     }
   }
 }
 
+/**
+ * Helper to clear all keys from target and assign properties from source.
+ * @param {Object} target
+ * @param {Object} source
+ */
+function clearAndAssign(target, source) {
+  for (const key of Object.keys(target)) delete target[key];
+  Object.assign(target, source);
+}
 function ensureTurnFlags(actor) {
   if (!actor) return { moved: false, attacked: false, channeled: false };
   if (!actor.turnFlags || typeof actor.turnFlags !== "object") {
