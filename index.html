@@ -405,7 +405,6 @@
         posKeyFromCoords,
         randChoice,
         clamp,
-        colorStringToRgb,
         getNow,
         smoothstep01,
         chebyshevDistance,
@@ -443,6 +442,12 @@
         FURNITURE_EFFECT_IDS,
       } from "./src/world/furniture/index.js";
       import { generateDoorsForDungeon } from "./src/world/dungeon/door-placement.js";
+      import {
+        computeFieldOfView,
+        computeLightOverlayVisuals,
+        computeTileOverlayAlpha,
+        createLightOverlayContext,
+      } from "./src/world/fov.js";
 
       Sound.init();
 
@@ -2452,76 +2457,8 @@
           return player.equipment.getLightSourceProperties(defaults);
         }
 
-        function computeTileOverlayAlpha(x, y, lightCtx) {
-          const baseA = clampUnitInterval(LIGHT_CONFIG.baseOverlayAlpha);
-          const variance = Math.max(0, LIGHT_CONFIG.flickerVariance || 0);
-          if (!lightCtx || variance <= 0) {
-            return baseA;
-          }
-          const radius = Number.isFinite(lightCtx.radius)
-            ? Math.max(0, lightCtx.radius)
-            : 0;
-          if (radius <= 0) {
-            return baseA;
-          }
-          const osc = lightCtx.osc || 0;
-          if (osc === 0) {
-            return baseA;
-          }
-          const dx = x - lightCtx.playerX;
-          const dy = y - lightCtx.playerY;
-          const dist = Math.max(Math.abs(dx), Math.abs(dy));
-          const dead = LIGHT_CONFIG.flickerNearDeadZoneTiles;
-          const denom = Math.max(1e-6, radius - dead);
-          const u0 = (dist - dead) / denom;
-          const u = smoothstep01(u0);
-          const amp =
-            variance * Math.pow(u, LIGHT_CONFIG.flickerFalloffPower);
-          const alpha = baseA + osc * amp;
-          if (alpha <= 0) return 0;
-          if (alpha >= 1) return 1;
-          return alpha;
-        }
-
-        function createLightOverlayContext() {
-          const radius =
-            typeof player?.lightRadius === "function"
-              ? player.lightRadius()
-              : 0;
-          const rate =
-            typeof player?.equipment?.getLightFlickerRate === "function"
-              ? player.equipment.getLightFlickerRate()
-              : 0;
-          const flickerRate =
-            typeof rate === "number" && Number.isFinite(rate) ? Math.max(0, rate) : 0;
-          const tSec = getNow() / 1000;
-          const osc =
-            flickerRate > 0 ? Math.sin(tSec * 2 * Math.PI * flickerRate) : 0;
-          const playerX = typeof player?.x === "number" ? player.x : 0;
-          const playerY = typeof player?.y === "number" ? player.y : 0;
-          return {
-            radius,
-            osc,
-            playerX,
-            playerY,
-          };
-        }
-
-        function computeLightOverlayVisuals() {
-          const props = getLightProperties();
-          const rgb = colorStringToRgb(
-            props.color,
-            LIGHT_CONFIG.fallbackColor,
-          );
-          const baseA = clampUnitInterval(LIGHT_CONFIG.baseOverlayAlpha);
-          return {
-            style: `rgba(${rgb.r},${rgb.g},${rgb.b},${baseA.toFixed(3)})`,
-            rgb,
-          };
-        }
-
         function refreshLightingVisuals() {
-          const overlay = computeLightOverlayVisuals();
+          const overlay = computeLightOverlayVisuals(getLightProperties(), LIGHT_CONFIG);
           fovState.overlayStyle = overlay.style;
           fovState.overlayRgb = overlay.rgb;
         }
@@ -2530,73 +2467,6 @@
           return getLightProperties().radius;
         }
 
-        function tileBlocksLight(x, y, useKnownGrid = false) {
-          if (x < 0 || x >= mapState.width || y < 0 || y >= mapState.height)
-            return true;
-          const grid = useKnownGrid ? mapState.known : mapState.grid;
-          const row = grid[y];
-          if (!row) return true;
-          const val = row[x];
-          if (useKnownGrid && val === -1) return false;
-          return val === TILE_WALL;
-        }
-        function computeFieldOfView(pos, radius, useKnownGrid = false) {
-          const visible = new Set();
-          const radiusSq = radius * radius;
-          visible.add(posKey(pos));
-          const setVisible = (x, y) => {
-            if (x < 0 || x >= mapState.width || y < 0 || y >= mapState.height)
-              return;
-            visible.add(posKey({ x, y }));
-          };
-          function castLight(row, startSlope, endSlope, xx, xy, yx, yy) {
-            if (startSlope < endSlope) return;
-            for (let i = row; i <= radius; i++) {
-              let dx = -i - 1;
-              let dy = -i;
-              let blocked = false;
-              let newStart = startSlope;
-              while (dx <= 0) {
-                dx += 1;
-                const mx = pos.x + dx * xx + dy * xy;
-                const my = pos.y + dx * yx + dy * yy;
-                const lSlope = (dx - 0.5) / (dy + 0.5);
-                const rSlope = (dx + 0.5) / (dy - 0.5);
-                if (startSlope < rSlope) {
-                  continue;
-                }
-                if (endSlope > lSlope) {
-                  break;
-                }
-                const distSq = dx * dx + dy * dy;
-                if (distSq <= radiusSq) {
-                  setVisible(mx, my);
-                }
-                const blockedTile = tileBlocksLight(mx, my, useKnownGrid);
-                if (blocked) {
-                  if (blockedTile) {
-                    newStart = rSlope;
-                    continue;
-                  }
-                  blocked = false;
-                  startSlope = newStart;
-                } else if (blockedTile && i < radius) {
-                  blocked = true;
-                  castLight(i + 1, startSlope, lSlope, xx, xy, yx, yy);
-                  newStart = rSlope;
-                }
-              }
-              if (blocked) {
-                break;
-              }
-            }
-          }
-          for (let oct = 0; oct < 8; oct++) {
-            const [xx, xy, yx, yy] = FOV_TRANSFORMS[oct];
-            castLight(1, 1.0, 0.0, xx, xy, yx, yy);
-          }
-          return visible;
-        }
         function computeVisibleCells(pos) {
           const key = posKey(pos);
           const radius = getLightRadius();
@@ -2607,7 +2477,7 @@
           ) {
             return fovState.lastCache.visible;
           }
-          const visible = computeFieldOfView(pos, radius, false);
+          const visible = computeFieldOfView(pos, radius, mapState, { useKnownGrid: false });
           fovState.lastCache = { key, radius, visible };
           return visible;
         }
@@ -4171,7 +4041,7 @@
           const view = buildViewTransform(playerPos);
 
           refreshLightingVisuals();
-          const lightCtx = createLightOverlayContext();
+          const lightCtx = createLightOverlayContext(player, LIGHT_CONFIG, getNow);
           if (
             currentEndPos &&
             mapState.explored[currentEndPos.y]?.[currentEndPos.x]
@@ -4202,7 +4072,8 @@
               start: player.startPos ?? null,
               end: isEndRendered ? currentEndPos : null,
               colors: CONFIG.visual.colors,
-              overlayAlphaAt: (x, y) => computeTileOverlayAlpha(x, y, lightCtx),
+              overlayAlphaAt: (x, y) =>
+                computeTileOverlayAlpha(x, y, lightCtx, LIGHT_CONFIG),
               overlayColor,
               entities,
             },
@@ -4475,7 +4346,9 @@
           const lightRadius = getLightRadius();
           const radiusSq = lightRadius * lightRadius;
           explorationState.newlyExplored = [];
-          const visibleCells = computeFieldOfView(pos, lightRadius, false);
+          const visibleCells = computeFieldOfView(pos, lightRadius, mapState, {
+            useKnownGrid: false,
+          });
           fovState.lastCache = {
             key: posKey(pos),
             radius: lightRadius,
@@ -4545,7 +4418,9 @@
         function explorationScore(pos, shortTermMemory) {
           let score = 0;
           const lightRadius = getLightRadius();
-          const visibleCells = computeFieldOfView(pos, lightRadius, true);
+          const visibleCells = computeFieldOfView(pos, lightRadius, mapState, {
+            useKnownGrid: true,
+          });
           for (const cellKey of visibleCells) {
             const [x, y] = cellKey.split(",").map(Number);
             if (mapState.known[y][x] === -1) {
