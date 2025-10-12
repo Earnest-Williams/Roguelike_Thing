@@ -8,6 +8,12 @@ import {
 } from "../config.js";
 import { subscribe, latest, EVENT } from "./event-log.js";
 
+const RESOURCE_CHANGE_EPSILON = 1e-6;
+const RESOURCE_LABELS = {
+  stamina: "Sta",
+  mana: "Mana",
+};
+
 export class DebugOverlay {
   /**
    * @param {{ root?: HTMLElement | null, actorProvider: () => any }} opts
@@ -20,12 +26,16 @@ export class DebugOverlay {
     this.filterEl = this.root.querySelector(".dbg-filter");
     this.lastCombat = null;
     this.filterSet = new Set([EVENT.COMBAT, EVENT.STATUS, EVENT.TURN, EVENT.CONSOLE]);
+    this.prevResources = null;
 
     subscribe("*", () => {
       this.renderLog();
     });
     subscribe(EVENT.COMBAT, (entry) => {
       this.lastCombat = entry;
+      this.renderStats();
+    });
+    subscribe(EVENT.TURN, () => {
       this.renderStats();
     });
 
@@ -98,7 +108,10 @@ export class DebugOverlay {
 
   renderStats() {
     const a = this.actorProvider?.();
-    if (!a) return;
+    if (!a) {
+      this.prevResources = null;
+      return;
+    }
     const lines = [];
     const name = a.name ?? a.id ?? "?";
     const hp = a.res?.hp;
@@ -120,6 +133,36 @@ export class DebugOverlay {
     lines.push(`Resists: ${fmtMap(resolveResists(a))}`);
     lines.push(`Affins : ${fmtMap(resolveAffinities(a))}`);
     lines.push(`Brands : ${fmtBrands(a)}`);
+
+    const actorId = a.id ?? a.name ?? null;
+    const currentResources = {
+      actorId,
+      stamina: getResourceValue(a, "stamina"),
+      mana: getResourceValue(a, "mana"),
+    };
+    const prevResources =
+      this.prevResources && this.prevResources.actorId === actorId
+        ? this.prevResources
+        : null;
+    let resourceChanged = false;
+    const resourceParts = [];
+    for (const [key, label] of Object.entries(RESOURCE_LABELS)) {
+      const value = currentResources[key];
+      if (!Number.isFinite(value)) continue;
+      let part = `${label} ${formatResourceValue(value)}`;
+      if (prevResources && Number.isFinite(prevResources[key])) {
+        const delta = value - prevResources[key];
+        if (Math.abs(delta) > RESOURCE_CHANGE_EPSILON) {
+          part += ` (${formatSignedDelta(delta)})`;
+          resourceChanged = true;
+        }
+      }
+      resourceParts.push(part);
+    }
+    if (prevResources && resourceChanged && resourceParts.length) {
+      lines.push(`Resources: ${resourceParts.join(" / ")}`);
+    }
+    this.prevResources = currentResources;
 
     if (this.lastCombat?.payload) {
       const p = this.lastCombat.payload;
@@ -267,4 +310,26 @@ function fmtDelta(value, digits = DEBUG_OVERLAY_NUMBER_DIGITS) {
   if (!Number.isFinite(value)) return "0";
   const prefix = value >= 0 ? "+" : "";
   return `${prefix}${fmtNumber(value, digits)}`;
+}
+
+function getResourceValue(actor, key) {
+  if (Number.isFinite(actor?.res?.[key])) return actor.res[key];
+  if (Number.isFinite(actor?.resources?.[key])) return actor.resources[key];
+  if (Number.isFinite(actor?.[key])) return actor[key];
+  return null;
+}
+
+function formatResourceValue(value) {
+  return formatNumberWithTrim(value, 2);
+}
+
+function formatSignedDelta(value) {
+  const prefix = value >= 0 ? "+" : "";
+  return `${prefix}${formatNumberWithTrim(value, 2)}`;
+}
+
+function formatNumberWithTrim(value, digits) {
+  if (!Number.isFinite(value)) return "0";
+  const fixed = Number(value).toFixed(digits);
+  return fixed.replace(/\.0+$/, "").replace(/(\.\d*?)0+$/, "$1");
 }
