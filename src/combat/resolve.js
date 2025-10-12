@@ -6,6 +6,7 @@ import { applyStatuses } from "./status.js";
 import { applyOutgoingScaling, noteUseGain } from "./attunement.js";
 import { polarityDefenseMult, polarityOffenseMult } from "./polarity.js";
 import { postDamageTemporalResourceHooks } from "./post-damage-hooks.js";
+import { spendResources } from "./resources.js";
 
 const clone = (value) => {
   try {
@@ -24,6 +25,15 @@ const clone = (value) => {
 
 export function resolveAttack(ctx) {
   const { attacker, defender } = ctx;
+  const tags = Array.isArray(ctx?.tags) ? ctx.tags : [];
+
+  if (attacker?.resources) {
+    let baseCosts = ctx?.baseCosts;
+    if (baseCosts === undefined) baseCosts = { stamina: 2 };
+    if (baseCosts && Object.keys(baseCosts).length > 0) {
+      spendResources(attacker, baseCosts, tags);
+    }
+  }
   const baseAcc = Number.isFinite(ctx?.baseAccuracy) ? Number(ctx.baseAccuracy) : 0;
   const accBonus = attacker?.statusDerived?.accuracyFlat || 0;
   const finalAcc = Math.max(0, baseAcc + accBonus);
@@ -72,6 +82,19 @@ export function resolveAttack(ctx) {
   packets = applyPolarityAttack(packets, polOff);
   log({ step: "polarity_attack", packets });
   pushStep("polarity_attack", packets);
+
+  const sdMult = 1 + (attacker?.statusDerived?.damagePct || 0);
+  const mcMult = attacker?.modCache?.dmgMult ?? 1;
+  const outgoingMult = Math.max(0, sdMult * mcMult);
+  if (outgoingMult !== 1) {
+    packets = packets.map((pkt) => {
+      if (!pkt || !pkt.type) return pkt;
+      const amount = Math.max(0, Number(pkt.amount) || 0);
+      return { ...pkt, amount: amount * outgoingMult };
+    });
+    log({ step: "status_damage", packets });
+    pushStep("status_damage", packets);
+  }
 
   const defended = applyDefense(defender, packets, polDef);
   log({ step: "defense", packets: defended });

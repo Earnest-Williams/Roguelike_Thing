@@ -16,7 +16,7 @@ import {
   MIN_ATTACK_DAMAGE,
   SLOT,
 } from "../../constants.js";
-import { canPay, spend as spendResources, eventGain } from "./resources.js";
+import { canPay, eventGain } from "./resources.js";
 import { noteAttacked, noteMoved } from "./actor.js";
 
 /**
@@ -66,10 +66,10 @@ export function tryAttack(attacker, defender, opts = {}) {
     resourceCost: opts.resourceCost,
     tags: Array.isArray(opts.tags) ? opts.tags.slice() : ["attack"],
   };
-  if (!canPay(attacker, action)) return false;
+  const baseCosts = action.resourceCost ?? { stamina: 2 };
+  if (!canPay(attacker, { resourceCost: baseCosts, tags: action.tags })) return false;
   const { costAP } = finalAPForAction(attacker, action.baseAP, action.tags);
   if (!spendAP(attacker, costAP)) return false;
-  spendResources(attacker, action);
 
   const profile = {
     label: opts.label || "Basic Attack",
@@ -82,6 +82,8 @@ export function tryAttack(attacker, defender, opts = {}) {
     turn: attacker?.turn ?? 0,
     packets: [{ type: profile.type, amount: profile.base }],
     statusAttempts: [],
+    baseCosts,
+    tags: action.tags,
   };
   resolveAttack(ctx);
   attacker._turnDidAttack = true;
@@ -131,10 +133,10 @@ export function tryAttackEquipped(
       ? mode.profile.tags.slice()
       : [mode.kind || "attack"],
   };
-  if (!canPay(attacker, action)) return false;
+  const baseCosts = action.resourceCost ?? { stamina: 2 };
+  if (!canPay(attacker, { resourceCost: baseCosts, tags: action.tags })) return false;
   const { costAP } = finalAPForAction(attacker, action.baseAP, action.tags);
   if (!spendAP(attacker, costAP)) return false;
-  spendResources(attacker, action);
 
   const res = performEquippedAttack(attacker, defender, item, distTiles, mode);
   if (!res.ok) return false;

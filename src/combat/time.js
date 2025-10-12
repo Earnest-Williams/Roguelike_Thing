@@ -12,23 +12,41 @@ import { BASE_AP_GAIN_PER_TURN } from "../../constants.js";
 export function finalAPForAction(actor, baseAP, tags = []) {
   const tagsArr = Array.isArray(tags) ? tags : [];
   const temporal =
-    actor?.temporal || actor?.modCache?.temporalHooks || Object.create(null);
-  const sd = actor?.statusDerived || {};
+    actor?.modCache?.temporal ||
+    actor?.temporal ||
+    actor?.modCache?.temporalHooks ||
+    Object.create(null);
+  const sd = actor?.statusDerived || Object.create(null);
+
   const base = Math.max(0, Math.floor(Number(baseAP) || 0));
   const moveDelta = tagsArr.includes("move")
     ? (temporal.moveAPDelta || 0) + (sd.moveAPDelta || 0)
     : 0;
   const castDelta = tagsArr.includes("cast")
-    ? (temporal.castTimeDelta || 0) + (sd.castTimeDelta || 0)
+    ? (temporal.baseActionAPDelta || temporal.castTimeDelta || 0) + (sd.baseActionAPDelta || sd.castTimeDelta || 0)
     : 0;
-  const additive = Math.max(0, base + moveDelta + castDelta);
-  const speedScalar = 1 - ((temporal.actionSpeedPct || 0) + (sd.actionSpeedPct || 0));
-  const appliedScalar = Math.max(0.2, speedScalar);
-  const scaled = Math.max(0, Math.ceil(additive * appliedScalar));
+  const baseActionDelta = (temporal.baseActionAPDelta || 0) + (sd.baseActionAPDelta || 0);
+  const additive = Math.max(0, base + moveDelta + castDelta + baseActionDelta);
+
+  const temporalSpeedScalar = 1 - (temporal.actionSpeedPct || 0);
+  const statusSpeedScalar = 1 - (sd.actionSpeedPct || 0);
+  const temporalBaseMult = Number.isFinite(temporal.baseActionAPMult)
+    ? temporal.baseActionAPMult
+    : 1;
+  const temporalMoveMult = tagsArr.includes("move") && Number.isFinite(temporal.moveAPMult)
+    ? temporal.moveAPMult
+    : 1;
+  const speedScalar = Math.max(0.2, temporalSpeedScalar * statusSpeedScalar);
+
+  const totalMult = Math.max(0, temporalBaseMult * temporalMoveMult * speedScalar);
+  const scaled = Math.max(0, Math.floor(additive * totalMult));
+
   const refundPct = Math.max(0, (temporal.recoveryPct || 0) + (sd.recoveryPct || 0));
   const refund = Math.max(0, Math.floor(scaled * refundPct));
+  const cost = Math.max(0, scaled - refund);
+
   return {
-    costAP: Math.max(0, scaled - refund),
+    costAP: cost,
     refundAP: refund,
   };
 }
