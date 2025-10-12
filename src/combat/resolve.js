@@ -166,6 +166,20 @@ function resolveAttackCore(attacker, defender, opts = {}) {
   const affinityMap = mergeNumericMaps(affinitySources);
   packets = scaleByAffinity(packets, affinityMap);
 
+  const atkSD = attacker?.statusDerived || {};
+  const statusDamagePct = Number.isFinite(atkSD.damagePct) ? atkSD.damagePct : 0;
+  const statusDamageFlat = Number.isFinite(atkSD.damageFlat) ? atkSD.damageFlat : 0;
+  if (statusDamagePct !== 0 || statusDamageFlat !== 0) {
+    const statusMult = 1 + statusDamagePct;
+    packets = packets.map((pkt) =>
+      createPacket(
+        pkt.type,
+        pkt.amount * statusMult + statusDamageFlat,
+        Boolean(pkt.__isBase)
+      )
+    );
+  }
+
   const attackerForPolarity = opts?.atkPol ? { ...attacker, polarity: opts.atkPol } : attacker;
   const defenderForPolarity = opts?.defPol ? { ...defender, polarity: opts.defPol } : defender;
   const offenseScalar = polarityOffenseScalar(attackerForPolarity, defenderForPolarity);
