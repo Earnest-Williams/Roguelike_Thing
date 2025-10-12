@@ -86,6 +86,12 @@ function buildWeightsFromTags(tags) {
   return weights;
 }
 
+function collectComponentTags(components) {
+  return uniqueTags(
+    components.flatMap((component) => Array.isArray(component.tags) ? component.tags : []),
+  );
+}
+
 function buildCulminationEvent(descriptor, mechanics, tags) {
   const mechanicNames = mechanics.map((m) => formatComponentName(m.id));
   const mechanicLabel = mechanicNames.length > 0 ? mechanicNames.join(" & ") : "Unknown";
@@ -116,10 +122,8 @@ export function generateDungeonTheme(dungeonDepth = 0, rng = Math.random) {
   const descriptor = pickWeighted(DESCRIPTORS, picker);
   const mechanics = pickMechanicsForDepth(dungeonDepth, picker);
 
-  const componentTags = uniqueTags([
-    ...descriptor.tags,
-    ...mechanics.flatMap((mechanic) => mechanic.tags || []),
-  ]);
+  const components = [descriptor, ...mechanics];
+  const componentTags = collectComponentTags(components);
 
   const monsterTags = [...componentTags];
   const affixTags = [...componentTags];
@@ -133,7 +137,7 @@ export function generateDungeonTheme(dungeonDepth = 0, rng = Math.random) {
     DEFAULT_LEVEL_COUNT + Math.floor(Math.max(0, dungeonDepth) / 2) + (mechanics.length - 1),
   );
 
-  const powerBudgetCurve = buildPowerBudgetCurve(dungeonDepth, [descriptor, ...mechanics]);
+  const powerBudgetCurve = buildPowerBudgetCurve(dungeonDepth, components);
   const idComponents = [descriptor.id, ...mechanics.map((m) => m.id)];
   const id = idComponents.join("__");
   const mechanicNamesForName = mechanics.length > 0
