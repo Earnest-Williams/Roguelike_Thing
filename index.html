@@ -411,6 +411,12 @@
         hasLineOfSight,
       } from "./js/utils.js";
       import { CONFIG } from "./src/config.js";
+      import { createInitialState } from "./src/game/state.js";
+      import {
+        createDefaultModCache,
+        createDefaultStatusModCache,
+        createEmptyStatusDerivedMods,
+      } from "./src/game/utils.js";
       const clampUnitInterval = (value) => {
         if (!Number.isFinite(value)) return 0;
         return clamp(value, 0, 1);
@@ -450,64 +456,6 @@
       } from "./src/world/fov.js";
 
       Sound.init();
-
-      function createEmptyDamageTypeMap() {
-        return Object.create(null);
-      }
-
-      function createEmptyStatusDerivedMods() {
-        return {
-          moveAPDelta: 0,
-          actionSpeedPct: 0,
-          accuracyFlat: 0,
-          critChancePct: 0,
-          canAct: true,
-          damageDealtMult: createEmptyDamageTypeMap(),
-          damageTakenMult: createEmptyDamageTypeMap(),
-          resistDelta: createEmptyDamageTypeMap(),
-        };
-      }
-
-      function createDefaultStatusModCache() {
-        return {
-          inflictBonus: Object.create(null),
-          inflictDurMult: Object.create(null),
-          recvDurMult: Object.create(null),
-          resistBonus: Object.create(null),
-          freeAction: {
-            ignore: new Set(),
-          },
-        };
-      }
-
-      function createDefaultModCache() {
-        return {
-          status: createDefaultStatusModCache(),
-          offense: {
-            affinities: Object.create(null),
-            brandAdds: [],
-            conversions: [],
-            polarity: { onHitBias: { baseMult: 0, vs: Object.create(null) } },
-          },
-          defense: {
-            resists: Object.create(null),
-            immunities: new Set(),
-          },
-          polarity: {
-            grant: {
-              order: 0,
-              growth: 0,
-              chaos: 0,
-              decay: 0,
-              void: 0,
-            },
-            defenseBias: {
-              baseResistPct: 0,
-              vs: Object.create(null),
-            },
-          },
-        };
-      }
 
       const StatusRegistry = new Map();
 
@@ -937,57 +885,73 @@
       });
 
       const Game = (() => {
-        const viewportEl = document.getElementById("maze-viewport");
-        const canvas = document.getElementById("maze-canvas");
-        const statusDiv = document.getElementById("status");
-        const restartBtn = document.getElementById("restartBtn");
-        const equipmentSlotsDiv = document.getElementById("equipment-slots");
-        const inventorySlotsDiv = document.getElementById("inventory-slots");
-        const speedSlider = document.getElementById("speed-slider");
-        const speedValue = document.getElementById("speed-value");
-        const pauseIndicator = document.getElementById("pause-indicator");
-        const containerEl = document.getElementById("container");
+        const gameState = createInitialState();
+
+        const viewportEl =
+          (gameState.ui.viewport = document.getElementById("maze-viewport"));
+        const canvas =
+          (gameState.ui.canvas = document.getElementById("maze-canvas"));
+        const statusDiv =
+          (gameState.ui.statusDiv = document.getElementById("status"));
+        const restartBtn =
+          (gameState.ui.restartBtn = document.getElementById("restartBtn"));
+        const equipmentSlotsDiv =
+          (gameState.ui.equipmentSlots =
+            document.getElementById("equipment-slots"));
+        const inventorySlotsDiv =
+          (gameState.ui.inventorySlots =
+            document.getElementById("inventory-slots"));
+        const speedSlider =
+          (gameState.ui.speedSlider = document.getElementById("speed-slider"));
+        const speedValue =
+          (gameState.ui.speedValue = document.getElementById("speed-value"));
+        const pauseIndicator =
+          (gameState.ui.pauseIndicator =
+            document.getElementById("pause-indicator"));
+        const containerEl =
+          (gameState.ui.container = document.getElementById("container"));
 
         const canvasRenderer = canvas ? new CanvasRenderer(canvas) : null;
+        gameState.render.canvasRenderer = canvasRenderer;
         const renderController = canvasRenderer
           ? new RenderController(canvasRenderer)
           : null;
+        gameState.render.renderController = renderController;
         let rendererReady = false;
+        gameState.render.ready = rendererReady;
 
-        let minimapModalEl = document.getElementById("minimapModal");
-        const minimapCanvasEl = document.getElementById("minimapCanvas");
-        let minimapCloseBtn = document.getElementById("minimapClose");
+        let minimapModalEl =
+          (gameState.ui.minimapModal = document.getElementById("minimapModal"));
+        const minimapCanvasEl =
+          (gameState.ui.minimapCanvas =
+            document.getElementById("minimapCanvas"));
+        let minimapCloseBtn =
+          (gameState.ui.minimapClose = document.getElementById("minimapClose"));
         const minimapRenderer = minimapCanvasEl
           ? new CanvasRenderer(minimapCanvasEl)
           : null;
+        gameState.render.minimapRenderer = minimapRenderer;
         const minimapController = minimapRenderer
           ? new RenderController(minimapRenderer)
           : null;
+        gameState.render.minimapController = minimapController;
 
-        const simState = {
-          timeout: null,
-          loopFn: null,
-          isPaused: false,
-          speed: CONFIG.ai.ticksPerSecond,
-          isReady: false,
-          turnCounter: 0,
-        };
+        const simState = gameState.sim;
+        simState.timeout = null;
+        simState.loopFn = null;
+        simState.isPaused = false;
+        simState.speed = CONFIG.ai.ticksPerSecond;
+        simState.isReady = false;
+        simState.turnCounter = 0;
 
         const uiHooks = { simState, statusDiv, restartBtn };
 
-        let devPanelMounted = false;
-        let debugOverlayMounted = false;
-        let debugOverlayInstance = null;
+        const debugState = gameState.debug;
+        let devPanelMounted = debugState.devPanelMounted;
+        let debugOverlayMounted = debugState.debugOverlayMounted;
+        let debugOverlayInstance = debugState.debugOverlayInstance;
 
-        const mapState = {
-          width: 0,
-          height: 0,
-          grid: [],
-          explored: [],
-          known: [],
-          furniture: [],
-          furnitureIndex: new Map(),
-        };
+        const mapState = gameState.map;
 
         function rebuildFurnitureIndex(furniturePlacements = mapState.furniture) {
           mapState.furnitureIndex = new Map();
@@ -1019,30 +983,22 @@
             .filter(Boolean);
         }
 
-        const fovState = {
-          currentVisible: new Set(),
-          prevVisible: new Set(),
-          lastCache: { key: null, radius: null, visible: null },
-          overlayStyle: CONFIG.visual.colors.visibleOverlay,
-          overlayRgb: null,
-        };
+        const fovState = gameState.fov;
+        fovState.overlayStyle = CONFIG.visual.colors.visibleOverlay;
 
-        const explorationState = {
-          frontiers: new Set(),
-          newlyExplored: [],
-        };
+        const explorationState = gameState.exploration;
 
-        let player = {};
-        let mobManager = null;
-        let isEndRendered = false;
+        let player = gameState.player || {};
+        if (!gameState.player) {
+          gameState.player = player;
+        }
+        let mobManager = gameState.mobManager;
+        let isEndRendered = gameState.isEndRendered;
         const INVALID_POSITION_COORD = -1;
-        let prevPlayerPos = {
-          x: INVALID_POSITION_COORD,
-          y: INVALID_POSITION_COORD,
-        };
-        let hasPrevPlayerPos = false;
-        let currentEndPos = null;
-        let initRetries = 0;
+        let prevPlayerPos = gameState.prevPlayerPos;
+        let hasPrevPlayerPos = gameState.hasPrevPlayerPos;
+        let currentEndPos = gameState.currentEndPos;
+        let initRetries = gameState.initRetries;
 
         const rawLightConfig = CONFIG.visual.light || {};
         const LIGHT_CONFIG = {
@@ -3885,6 +3841,7 @@
             mapState.explored[currentEndPos.y]?.[currentEndPos.x]
           ) {
             isEndRendered = true;
+            gameState.isEndRendered = isEndRendered;
           }
 
           const overlayColor = fovState.overlayRgb
@@ -4550,7 +4507,22 @@
         // behaviours: beeline to the exit once discovered, opportunistically
         // explore high-value neighbours, and finally backtrack via the frontier
         // stack when no better move exists.
-        function simulate(startPos, endPos) {
+        function simulate(state, startPos, endPos) {
+          if (state.player) {
+            player = state.player;
+          } else {
+            state.player = player;
+          }
+          if (state.mobManager) {
+            mobManager = state.mobManager;
+          } else {
+            state.mobManager = mobManager;
+          }
+          isEndRendered = state.isEndRendered;
+          prevPlayerPos = state.prevPlayerPos;
+          hasPrevPlayerPos = state.hasPrevPlayerPos;
+          currentEndPos = state.currentEndPos;
+          initRetries = state.initRetries;
           statusDiv.textContent = "AI exploring...";
           restartBtn.style.display = "none";
           player.x = startPos.x;
@@ -4572,12 +4544,14 @@
           if (!mobManager) {
             mobManager = new MobManager();
             // Removed redundant mobManager.add(player); to prevent duplicate addition
+            state.mobManager = mobManager;
           }
           const gameCtx = {
             player,
             mobManager,
             maze: mapState.grid,
             ui: uiHooks,
+            state,
           };
 
           function processPlayerTurn() {
@@ -4761,7 +4735,10 @@
 
             prevPlayerPos.x = currentPlayerX;
             prevPlayerPos.y = currentPlayerY;
-            if (!hasPrevPlayerPos) hasPrevPlayerPos = true;
+            if (!hasPrevPlayerPos) {
+              hasPrevPlayerPos = true;
+            }
+            state.hasPrevPlayerPos = hasPrevPlayerPos;
             player.pos = nextMove;
             player.x = nextMove.x;
             player.y = nextMove.y;
@@ -4863,11 +4840,16 @@
               }
             }
             const delay = Math.max(16, 1000 / simState.speed);
-            simState.timeout = setTimeout(gameLoop, delay);
-          }
-          simState.loopFn = gameLoop;
-          gameLoop();
+          simState.timeout = setTimeout(gameLoop, delay);
         }
+        simState.loopFn = gameLoop;
+        gameLoop();
+        state.player = player;
+        state.mobManager = mobManager;
+        state.hasPrevPlayerPos = hasPrevPlayerPos;
+        state.currentEndPos = currentEndPos;
+        state.isEndRendered = isEndRendered;
+      }
         function togglePause() {
           simState.isPaused = !simState.isPaused;
           if (simState.isPaused) {
@@ -4890,7 +4872,9 @@
           statusDiv.textContent = "Generating dungeon...";
           restartBtn.style.display = "none";
           currentEndPos = null;
+          gameState.currentEndPos = currentEndPos;
           hasPrevPlayerPos = false;
+          gameState.hasPrevPlayerPos = hasPrevPlayerPos;
           simState.turnCounter = 0;
           mapState.furniture = [];
           rebuildFurnitureIndex();
@@ -4910,6 +4894,7 @@
           if (!devPanelMounted && typeof document !== "undefined") {
             mountDevPanel(document.body, newPlayer);
             devPanelMounted = true;
+            gameState.debug.devPanelMounted = true;
           }
 
           if (!debugOverlayMounted && typeof document !== "undefined") {
@@ -4919,6 +4904,8 @@
                 actorProvider: () => mobManager?.player || null,
               });
             debugOverlayMounted = true;
+            gameState.debug.debugOverlayMounted = true;
+            gameState.debug.debugOverlayInstance = debugOverlayInstance;
           }
 
           // Wearables
@@ -4982,6 +4969,7 @@
             silent: true,
           });
 
+          gameState.player = newPlayer;
           return newPlayer;
         }
 
@@ -5016,11 +5004,13 @@
           if (reason === "generation") {
             statusDiv.textContent = "Map generation failed, retrying...";
             initRetries++;
+            gameState.initRetries = initRetries;
             setTimeout(startNewSimulation, 100);
           } else if (reason === "connectivity") {
             statusDiv.textContent =
               "Map is not fully connected, regenerating...";
             initRetries++;
+            gameState.initRetries = initRetries;
             setTimeout(startNewSimulation, 50);
           }
         }
@@ -5029,6 +5019,7 @@
           const startPos = dungeonData.start;
           const endPos = dungeonData.end;
           currentEndPos = endPos;
+          gameState.currentEndPos = currentEndPos;
 
           mapState.furniture = normalizeFurniturePlacements(
             dungeonData.furniture || mapState.furniture || [],
@@ -5045,6 +5036,7 @@
           if (renderController) {
             renderController.init(mapState.width, mapState.height, CELL_SIZE);
             rendererReady = true;
+            gameState.render.ready = rendererReady;
           }
 
           if (minimapController) {
@@ -5056,8 +5048,10 @@
           player.pos = startPos;
           player.startPos = startPos;
           isEndRendered = false;
+          gameState.isEndRendered = isEndRendered;
           fovState.prevVisible = new Set();
           hasPrevPlayerPos = false;
+          gameState.hasPrevPlayerPos = hasPrevPlayerPos;
           fovState.currentVisible = new Set();
           explorationState.newlyExplored = [];
           fovState.lastCache = { key: null, radius: null, visible: null };
@@ -5070,10 +5064,12 @@
           prevPlayerPos.x = player.startPos.x;
           prevPlayerPos.y = player.startPos.y;
           hasPrevPlayerPos = true;
+          gameState.hasPrevPlayerPos = hasPrevPlayerPos;
           initRetries = 0;
+          gameState.initRetries = initRetries;
           simState.isReady = true;
 
-          setTimeout(() => simulate(player.startPos, endPos), 500);
+          setTimeout(() => simulate(gameState, player.startPos, endPos), 500);
         }
 
         function startNewSimulation() {
@@ -5091,8 +5087,11 @@
           minimapState.tilesH = 0;
           minimapState.view = null;
           mobManager = new MobManager();
+          gameState.mobManager = mobManager;
           player = setupPlayer();
+          gameState.player = player;
           rendererReady = false;
+          gameState.render.ready = rendererReady;
 
           setTimeout(() => {
             const result = generateAndValidateDungeon();
@@ -5139,8 +5138,12 @@
 
         function initMinimapDOM() {
           if (minimapDomInitialized) return;
-          minimapModalEl = minimapModalEl || document.getElementById("minimapModal");
-          minimapCloseBtn = minimapCloseBtn || document.getElementById("minimapClose");
+          minimapModalEl =
+            minimapModalEl || document.getElementById("minimapModal");
+          gameState.ui.minimapModal = minimapModalEl;
+          minimapCloseBtn =
+            minimapCloseBtn || document.getElementById("minimapClose");
+          gameState.ui.minimapClose = minimapCloseBtn;
           if (!minimapModalEl || !minimapCloseBtn) return;
 
           minimapCloseBtn.addEventListener("click", closeMinimap);
@@ -5313,6 +5316,7 @@
         return {
           bootstrap,
           togglePause,
+          state: gameState,
         };
       })();
 
