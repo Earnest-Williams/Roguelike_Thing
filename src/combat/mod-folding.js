@@ -1984,33 +1984,43 @@ export function foldInnatesIntoModCache(actor) {
   if (!actor || !actor.__template) return;
   const innate = actor.__template.innate || {};
 
-  if (innate.vision && typeof innate.vision === "object") {
+  // Fold vision bonuses
+  if (innate.vision?.lightBonus) {
     const bonus = Number(innate.vision.lightBonus) || 0;
     if (bonus) {
-      if (!actor.modCache.vision) {
-        actor.modCache.vision = { lightBonus: 0 };
-      }
-      actor.modCache.vision.lightBonus += bonus;
+      const vision = actor.modCache.vision || (actor.modCache.vision = { lightBonus: 0 });
+      vision.lightBonus += bonus;
     }
   }
 
+  // Fold innate resists
   if (innate.resists && typeof innate.resists === "object") {
+    const resistBucket = actor.modCache.resists || (actor.modCache.resists = {});
+    const defenseResists = actor.modCache.defense?.resists || null;
+
     for (const [type, value] of Object.entries(innate.resists)) {
       const amount = Number(value) || 0;
       if (!Number.isFinite(amount)) continue;
-      actor.modCache.resists[type] = (actor.modCache.resists[type] || 0) + amount;
-      if (actor.modCache.defense?.resists) {
-        actor.modCache.defense.resists[type] =
-          (actor.modCache.defense.resists[type] || 0) + amount;
+
+      resistBucket[type] = (resistBucket[type] || 0) + amount;
+      if (defenseResists && defenseResists !== resistBucket) {
+        defenseResists[type] = (defenseResists[type] || 0) + amount;
       }
-      actor.modCache.resists[type] = Math.max(
-        COMBAT_RESIST_MIN,
-        Math.min(COMBAT_RESIST_MAX, actor.modCache.resists[type]),
-      );
-      if (actor.modCache.defense?.resists?.[type] != null) {
-        actor.modCache.defense.resists[type] = Math.max(
+
+      if (Number.isFinite(resistBucket[type])) {
+        resistBucket[type] = Math.max(
           COMBAT_RESIST_MIN,
-          Math.min(COMBAT_RESIST_MAX, actor.modCache.defense.resists[type]),
+          Math.min(COMBAT_RESIST_MAX, resistBucket[type]),
+        );
+      }
+      if (
+        defenseResists &&
+        defenseResists !== resistBucket &&
+        Number.isFinite(defenseResists[type])
+      ) {
+        defenseResists[type] = Math.max(
+          COMBAT_RESIST_MIN,
+          Math.min(COMBAT_RESIST_MAX, defenseResists[type]),
         );
       }
     }

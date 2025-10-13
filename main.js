@@ -1582,14 +1582,15 @@ const Game = (() => {
 
   // --- ITEM TEMPLATES ---
 
-  function getPlayerLightRadius() {
-    if (player?.getLightRadius) {
-      const radius = Number(player.getLightRadius());
-      if (Number.isFinite(radius)) {
-        return Math.max(0, radius);
-      }
+  function resolvePlayerLightRadius() {
+    if (typeof player?.getLightRadius !== "function") {
+      return DEFAULT_LIGHT_RADIUS;
     }
-    return DEFAULT_LIGHT_RADIUS;
+    const raw = Number(player.getLightRadius());
+    if (!Number.isFinite(raw)) {
+      return DEFAULT_LIGHT_RADIUS;
+    }
+    return Math.max(0, raw);
   }
 
   function getLightProperties() {
@@ -1598,12 +1599,13 @@ const Game = (() => {
       color: LIGHT_CONFIG.fallbackColor,
       flickerRate: LIGHT_CONFIG.fallbackFlickerRate,
     };
+    const playerRadius = resolvePlayerLightRadius();
     if (!player?.equipment?.getLightSourceProperties) {
-      return { ...defaults, radius: getPlayerLightRadius() };
+      return { ...defaults, radius: playerRadius };
     }
     const props =
       player.equipment.getLightSourceProperties(defaults) ?? defaults;
-    return { ...props, radius: getPlayerLightRadius() };
+    return { ...props, radius: playerRadius };
   }
 
   function refreshLightingVisuals() {
@@ -1614,7 +1616,7 @@ const Game = (() => {
 
   function computeVisibleCells(pos) {
     const key = posKey(pos);
-    const radius = getPlayerLightRadius();
+    const radius = resolvePlayerLightRadius();
     if (
       fovState.lastCache.visible &&
       fovState.lastCache.key === key &&
@@ -3436,7 +3438,7 @@ const Game = (() => {
   // records which tiles were ever seen (explorationState) and promotes nearby
   // floor cells to "frontiers" so the explorer knows where to head next.
   function updateVisionAndExploration(pos) {
-    const lightRadius = getPlayerLightRadius();
+    const lightRadius = resolvePlayerLightRadius();
     const radiusSq = lightRadius * lightRadius;
     explorationState.newlyExplored = [];
     const visibleCells = computeFieldOfView(pos, lightRadius, mapState, {
@@ -3510,7 +3512,7 @@ const Game = (() => {
   // aimless oscillation.
   function explorationScore(pos, shortTermMemory) {
     let score = 0;
-    const lightRadius = getPlayerLightRadius();
+    const lightRadius = resolvePlayerLightRadius();
     const visibleCells = computeFieldOfView(pos, lightRadius, mapState, {
       useKnownGrid: true,
     });
