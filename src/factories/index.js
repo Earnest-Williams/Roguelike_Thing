@@ -85,8 +85,7 @@ export function createActorFromTemplate(tid) {
 
   foldModsFromEquipment(a);
   foldInnatesIntoModCache(a);
-  attachLogs(a); // enable turn/attack/status ring buffers
-  return a;
+  return attachLogs(a); // enable turn/attack/status ring buffers
 }
 
 /**

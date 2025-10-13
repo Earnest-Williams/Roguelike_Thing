@@ -200,8 +200,11 @@ export class UIManager {
     const vs = payload.vs || payload.defender?.name || payload.defender?.id;
     const dmg = typeof payload.damage === "number" ? payload.damage : payload.totalDamage;
     if (!who || !vs) return;
-    const message = dmg != null ? `${who} attacks ${vs} for ${dmg} damage!` : `${who} attacks ${vs}!`;
-    this.setStatusMessage(message, "combat");
+    const message =
+      dmg != null
+        ? `${who} attacks ${vs} for ${dmg} damage!`
+        : `${who} attacks ${vs}!`;
+    this.setStatusMessage(message, "combat", who || "combatant");
   }
 
   /**
@@ -221,8 +224,14 @@ export class UIManager {
     const hasMsg = Object.prototype.hasOwnProperty.call(payload, "msg");
     const hasLegacy = Object.prototype.hasOwnProperty.call(payload, "message");
     if (hasMsg || hasLegacy) {
+      const whoField =
+        typeof payload.who === "string" && payload.who.trim().length
+          ? payload.who.trim()
+          : "system";
       const message = hasMsg ? payload.msg ?? "" : payload.message ?? "";
-      this.setStatusMessage(message, payload.priority ?? "system");
+      const priority =
+        payload.priority ?? (whoField === "system" ? "system" : "combat");
+      this.setStatusMessage(message, priority, whoField);
     }
     if (Object.prototype.hasOwnProperty.call(payload, "restartVisible")) {
       this.setRestartVisible(Boolean(payload.restartVisible));
@@ -239,17 +248,26 @@ export class UIManager {
    * Update status message respecting priority rules.
    * @param {string} message
    * @param {"system" | "combat"} priority
+   * @param {string} [who]
    */
-  setStatusMessage(message, priority = "system") {
+  setStatusMessage(message, priority = "system", who = "system") {
     const statusEl = this.elements.status;
     if (!statusEl) return;
-    if (priority === "system") {
+    const normalizedPriority = priority === "combat" ? "combat" : "system";
+    if (normalizedPriority === "system") {
       this.statusPriority = "system";
     } else if (this.statusPriority === "system") {
       return;
     }
     statusEl.textContent = message || "";
-    if (priority !== "combat") {
+    if (statusEl.dataset) {
+      if (who) {
+        statusEl.dataset.who = String(who);
+      } else {
+        delete statusEl.dataset.who;
+      }
+    }
+    if (normalizedPriority !== "combat") {
       this.statusPriority = "system";
     } else {
       this.statusPriority = "combat";
