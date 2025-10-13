@@ -4816,6 +4816,21 @@ const Game = (() => {
     }
   }
 
+  function showStartMenu() {
+    if (!startMenuDom) {
+      startMenuDom = document.getElementById("startMenu");
+    }
+    if (!startMenuForm) {
+      startMenuForm = document.getElementById("customForm");
+    }
+    if (startMenuForm) {
+      startMenuForm.style.display = "none";
+    }
+    if (startMenuDom) {
+      startMenuDom.style.display = "flex";
+    }
+  }
+
   function initStartMenu() {
     startMenuDom = document.getElementById("startMenu");
     startMenuForm = document.getElementById("customForm");
@@ -4872,8 +4887,7 @@ const Game = (() => {
       startNewSimulation();
     });
 
-    hideStartMenu();
-    startMenuDom.style.display = "flex";
+    showStartMenu();
   }
 
   function collectFormSettings() {

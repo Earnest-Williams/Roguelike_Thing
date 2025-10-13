@@ -51,7 +51,7 @@ On load, a modal appears with:
 * **Quick Start** — runs current defaults.
 * **Custom Run** — optionally set seed, depth, initial spawn count, sim speed, and select generator tweaks (door spawn chance, extra edges, small room params). Any blank field uses defaults.
 
-Settings persist in `localStorage` (`rl_menu_settings`). “Restart” repeats your last run mode (quick or custom).
+Settings persist in `localStorage` (`rl_menu_settings`). “Restart” repeats your last run mode (quick or custom), and the overlay hides automatically once a run begins.
 
 ---
 
