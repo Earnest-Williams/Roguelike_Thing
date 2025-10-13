@@ -82,6 +82,116 @@ import { setStatusDamageAdapter } from "./src/content/statuses.js";
 
 Sound.init();
 
+let debugPanelLoader = null;
+let debugPanelToggleCount = 0;
+
+function loadDebugPanelModule() {
+  if (!debugPanelLoader) {
+    debugPanelLoader = import("./js/debug/debug-panel.js")
+      .then((mod) => {
+        if (!mod || typeof mod.ensureDebugPanel !== "function") {
+          return null;
+        }
+        const api = mod.ensureDebugPanel();
+        if (api && typeof globalThis !== "undefined") {
+          try {
+            const g = /** @type {any} */ (globalThis);
+            g.__debugPanel = api;
+          } catch {
+            // ignore assignment failures
+          }
+        }
+        return api || null;
+      })
+      .catch((err) => {
+        if (typeof console !== "undefined" && console.warn) {
+          console.warn("[debug] Failed to load debug panel", err);
+        }
+        debugPanelLoader = null;
+        return null;
+      });
+  }
+  return debugPanelLoader;
+}
+
+function queueDebugPanelToggle() {
+  debugPanelToggleCount += 1;
+  loadDebugPanelModule().then((api) => {
+    if (!api || typeof api.toggle !== "function") {
+      debugPanelToggleCount = 0;
+      return;
+    }
+    const toggles = debugPanelToggleCount;
+    debugPanelToggleCount = 0;
+    if (toggles % 2 === 1) {
+      try {
+        api.toggle();
+      } catch (err) {
+        if (typeof console !== "undefined" && console.warn) {
+          console.warn("[debug] Failed to toggle debug panel", err);
+        }
+      }
+    }
+  });
+}
+
+function shouldBootstrapDebugPanel() {
+  if (typeof window === "undefined") return false;
+  const w = window;
+  const flags = /** @type {any} */ (w.DEBUG_FLAGS);
+  if (flags && (flags.debugPanel || flags.devPanel || flags.attackDebug)) {
+    return true;
+  }
+  const search = typeof w.location?.search === "string" ? w.location.search : "";
+  if (search && typeof URLSearchParams === "function") {
+    try {
+      const params = new URLSearchParams(search);
+      const value = params.get("debugPanel");
+      if (value === "" || value === "1" || value === "true") {
+        return true;
+      }
+    } catch {
+      // ignore URL parsing issues
+    }
+  }
+  try {
+    const stored = w.localStorage?.getItem?.("debug-panel");
+    if (stored === "1" || stored === "true") {
+      return true;
+    }
+  } catch {
+    // ignore storage access issues
+  }
+  return false;
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "F3") {
+      event.preventDefault();
+      queueDebugPanelToggle();
+    }
+  });
+
+  const g = /** @type {any} */ (window);
+  g.loadDebugPanel = () => {
+    debugPanelToggleCount = 0;
+    return loadDebugPanelModule().then((api) => api?.show?.());
+  };
+  g.hideDebugPanel = () => {
+    debugPanelToggleCount = 0;
+    return loadDebugPanelModule().then((api) => api?.hide?.());
+  };
+  g.toggleDebugPanel = () => {
+    debugPanelToggleCount = 0;
+    return loadDebugPanelModule().then((api) => api?.toggle?.());
+  };
+
+  if (shouldBootstrapDebugPanel()) {
+    loadDebugPanelModule().then((api) => api?.show?.());
+  }
+}
+
 // Route periodic status damage through the full attack resolution pipeline so that
 // damage numbers, resistances, and triggers work exactly like direct attacks.
 setStatusDamageAdapter(({ statusId, target, amount, type, turn }) => {
