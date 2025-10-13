@@ -31,6 +31,7 @@ import {
 import { CONFIG } from "./src/config.js";
 import { createInitialState } from "./src/game/state.js";
 import { ChapterState } from "./src/game/chapter-state.js";
+import { mulberry32 } from "./src/sim/sim.js";
 // NOTE: spawnMonsters is the canonical spawner; do not use any local/legacy spawn helpers.
 import { spawnMonsters } from "./src/game/spawn.js";
 import { AIPlanner } from "./src/combat/ai-planner.js";
@@ -301,6 +302,20 @@ const Game = (() => {
   // Everything inside this closure runs once on boot and wires together DOM
   // elements, rendering systems, and the persistent `gameState` object.
   const gameState = createInitialState();
+  gameState.config = gameState.config || {};
+
+  const DEFAULT_TICKS_PER_SECOND = Number.isFinite(CONFIG?.ai?.ticksPerSecond)
+    ? CONFIG.ai.ticksPerSecond
+    : 12;
+  const BASE_GENERATOR_HYBRID = (() => {
+    try {
+      return JSON.parse(JSON.stringify(CONFIG?.generator?.hybrid || {}));
+    } catch {
+      return {};
+    }
+  })();
+  const MENU_SETTINGS_KEY = "rl_menu_settings";
+  const LAST_RUN_MODE_KEY = "rl_last_run_mode";
 
   const viewportEl =
     (gameState.ui.viewport = document.getElementById("maze-viewport"));
@@ -325,6 +340,8 @@ const Game = (() => {
       document.getElementById("pause-indicator"));
   const containerEl =
     (gameState.ui.container = document.getElementById("container"));
+  let startMenuDom = null;
+  let startMenuForm = null;
 
   const uiManager = new UIManager({
     status: statusDiv,
@@ -4680,9 +4697,17 @@ const Game = (() => {
         AIPlanner,
       };
       if (!gameCtx.state.__didInitialSpawns) {
-        const tags = Array.isArray(gameCtx.state?.chapter?.theme?.monsterTags)
+        const overrideTags = Array.isArray(
+          gameCtx.state?.config?.monsterTagsOverride,
+        )
+          ? gameCtx.state.config.monsterTagsOverride.filter(Boolean)
+          : [];
+        let tags = Array.isArray(gameCtx.state?.chapter?.theme?.monsterTags)
           ? gameCtx.state.chapter.theme.monsterTags
           : [];
+        if (overrideTags.length > 0) {
+          tags = overrideTags;
+        }
         const rng = gameCtx.state?.rng || Math.random;
         const count = Number.isFinite(gameCtx.state?.config?.initialSpawnCount)
           ? Math.max(0, Math.floor(gameCtx.state.config.initialSpawnCount))
@@ -4718,11 +4743,19 @@ const Game = (() => {
       return;
     }
 
-    if (!gameState.chapter) {
-      gameState.chapter = new ChapterState({ depth: 0 });
+    const depthOverride = Number.isFinite(gameState?.config?.depth)
+      ? Math.max(0, Math.floor(gameState.config.depth))
+      : 0;
+    if (Number.isFinite(gameState?.config?.seed)) {
+      const normalizedSeed = gameState.config.seed >>> 0;
+      gameState.config.seed = normalizedSeed;
+      gameState.rng = mulberry32(normalizedSeed);
     } else {
-      gameState.chapter.reset();
+      delete gameState.rng;
     }
+    const rngFn =
+      typeof gameState?.rng === "function" ? gameState.rng : Math.random;
+    gameState.chapter = new ChapterState({ depth: depthOverride, rng: rngFn });
     const chapter = gameState.chapter;
     if (chapter) {
       emit(EVENT.STATUS, {
@@ -4747,6 +4780,17 @@ const Game = (() => {
     gameState.render.ready = rendererReady;
 
     setTimeout(() => {
+      restoreHybridGeneratorConfig();
+      if (gameState?.config?.generatorOverrides) {
+        try {
+          deepMerge(
+            CONFIG?.generator?.hybrid || {},
+            gameState.config.generatorOverrides,
+          );
+        } catch (err) {
+          console.warn("Generator override merge failed", err);
+        }
+      }
       const result = generateAndValidateDungeon();
       if (!result.success) {
         handleDungeonFailure(result.reason);
@@ -4757,6 +4801,382 @@ const Game = (() => {
     }, 50);
   }
 
+  function hideStartMenu() {
+    if (!startMenuForm) {
+      startMenuForm = document.getElementById("customForm");
+    }
+    if (startMenuForm) {
+      startMenuForm.style.display = "none";
+    }
+    if (!startMenuDom) {
+      startMenuDom = document.getElementById("startMenu");
+    }
+    if (startMenuDom) {
+      startMenuDom.style.display = "none";
+    }
+  }
+
+  function initStartMenu() {
+    startMenuDom = document.getElementById("startMenu");
+    startMenuForm = document.getElementById("customForm");
+    const quickBtn = document.getElementById("startQuickBtn");
+    const openCustomBtn = document.getElementById("openCustomBtn");
+    const cancelCustomBtn = document.getElementById("cancelCustomBtn");
+    const resetCustomBtn = document.getElementById("resetCustomBtn");
+
+    if (!startMenuDom) {
+      setLastRunMode("quick");
+      applyQuickSettings({ resetSpeed: true });
+      startNewSimulation();
+      return;
+    }
+
+    const saved = loadMenuSettings();
+    prefillForm(saved);
+
+    quickBtn?.addEventListener("click", () => {
+      setLastRunMode("quick");
+      applyQuickSettings({ resetSpeed: true });
+      hideStartMenu();
+      startNewSimulation();
+    });
+
+    openCustomBtn?.addEventListener("click", () => {
+      if (startMenuForm) {
+        startMenuForm.style.display = "block";
+      }
+    });
+
+    cancelCustomBtn?.addEventListener("click", () => {
+      if (startMenuForm) {
+        startMenuForm.style.display = "none";
+      }
+    });
+
+    resetCustomBtn?.addEventListener("click", () => {
+      try {
+        localStorage.removeItem(MENU_SETTINGS_KEY);
+      } catch {
+        // ignore storage errors
+      }
+      prefillForm({});
+    });
+
+    startMenuForm?.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const settings = collectFormSettings();
+      saveMenuSettings(settings);
+      setLastRunMode("custom");
+      applyCustomSettings(settings);
+      hideStartMenu();
+      startNewSimulation();
+    });
+
+    hideStartMenu();
+    startMenuDom.style.display = "flex";
+  }
+
+  function collectFormSettings() {
+    const getInput = (id) =>
+      /** @type {HTMLInputElement | null} */ (
+        document.getElementById(id)
+      );
+    const seedVal = parseInt(getInput("cf-seed")?.value || "", 10);
+    const depthVal = parseInt(getInput("cf-depth")?.value || "", 10);
+    const spawnVal = parseInt(
+      getInput("cf-initialSpawns")?.value || "",
+      10,
+    );
+    const tpsVal = parseInt(getInput("cf-tps")?.value || "", 10);
+    const tagsRaw = (getInput("cf-monsterTags")?.value || "").trim();
+    const monsterTags = tagsRaw
+      ? tagsRaw
+          .split(",")
+          .map((tag) => tag.trim())
+          .filter(Boolean)
+      : [];
+
+    const doorSpawnVal = parseFloat(
+      getInput("cf-doorSpawn")?.value || "",
+    );
+    const extraEdgesVal = parseFloat(
+      getInput("cf-extraEdges")?.value || "",
+    );
+    const smallCandidatesVal = parseInt(
+      getInput("cf-smallCandidates")?.value || "",
+      10,
+    );
+    const smallMinVal = parseInt(
+      getInput("cf-smallMin")?.value || "",
+      10,
+    );
+    const smallMaxVal = parseInt(
+      getInput("cf-smallMax")?.value || "",
+      10,
+    );
+
+    const gen = {};
+    if (Number.isFinite(doorSpawnVal)) {
+      gen.doors = { ...(gen.doors || {}), spawnChance: clamp01(doorSpawnVal) };
+    }
+    if (Number.isFinite(extraEdgesVal)) {
+      gen.extraEdgesFraction = clamp01(extraEdgesVal);
+    }
+    if (Number.isFinite(smallCandidatesVal)) {
+      gen.smallRooms = {
+        ...(gen.smallRooms || {}),
+        candidateCount: Math.max(0, Math.floor(smallCandidatesVal)),
+      };
+    }
+    if (Number.isFinite(smallMinVal)) {
+      gen.smallRooms = {
+        ...(gen.smallRooms || {}),
+        minSize: Math.max(1, Math.floor(smallMinVal)),
+      };
+    }
+    if (Number.isFinite(smallMaxVal)) {
+      gen.smallRooms = {
+        ...(gen.smallRooms || {}),
+        maxSize: Math.max(1, Math.floor(smallMaxVal)),
+      };
+    }
+
+    return {
+      seed: Number.isFinite(seedVal) ? seedVal >>> 0 : undefined,
+      depth: Number.isFinite(depthVal)
+        ? Math.max(0, Math.floor(depthVal))
+        : undefined,
+      initialSpawns: Number.isFinite(spawnVal)
+        ? Math.max(0, Math.floor(spawnVal))
+        : undefined,
+      tps: Number.isFinite(tpsVal)
+        ? Math.max(1, Math.min(60, Math.floor(tpsVal)))
+        : undefined,
+      monsterTags: monsterTags.length ? monsterTags : undefined,
+      gen: Object.keys(gen).length > 0 ? gen : undefined,
+    };
+  }
+
+  function saveMenuSettings(settings) {
+    try {
+      localStorage.setItem(MENU_SETTINGS_KEY, JSON.stringify(settings || {}));
+    } catch {
+      // ignore storage errors
+    }
+  }
+
+  function loadMenuSettings() {
+    try {
+      const raw = localStorage.getItem(MENU_SETTINGS_KEY);
+      if (!raw) return {};
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+
+  function prefillForm(settings = {}) {
+    const assign = (id, value) => {
+      const input = document.getElementById(id);
+      if (!input) return;
+      if (value === undefined || value === null || value === "") {
+        input.value = "";
+      } else {
+        input.value = String(value);
+      }
+    };
+    assign("cf-seed", settings.seed);
+    assign("cf-depth", settings.depth);
+    assign("cf-initialSpawns", settings.initialSpawns);
+    assign("cf-tps", settings.tps);
+    assign(
+      "cf-monsterTags",
+      Array.isArray(settings.monsterTags)
+        ? settings.monsterTags.join(", ")
+        : "",
+    );
+    const gen = settings.gen || {};
+    assign("cf-doorSpawn", gen?.doors?.spawnChance);
+    assign("cf-extraEdges", gen?.extraEdgesFraction);
+    assign("cf-smallCandidates", gen?.smallRooms?.candidateCount);
+    assign("cf-smallMin", gen?.smallRooms?.minSize);
+    assign("cf-smallMax", gen?.smallRooms?.maxSize);
+  }
+
+  function setLastRunMode(mode) {
+    try {
+      localStorage.setItem(LAST_RUN_MODE_KEY, mode);
+    } catch {
+      // ignore storage errors
+    }
+  }
+
+  function getLastRunMode() {
+    try {
+      return localStorage.getItem(LAST_RUN_MODE_KEY) || "quick";
+    } catch {
+      return "quick";
+    }
+  }
+
+  function applyQuickSettings({ resetSpeed = false } = {}) {
+    gameState.config = gameState.config || {};
+    delete gameState.config.monsterTagsOverride;
+    delete gameState.config.initialSpawnCount;
+    delete gameState.config.generatorOverrides;
+    delete gameState.config.depth;
+    delete gameState.config.seed;
+    delete gameState.rng;
+
+    if (resetSpeed) {
+      CONFIG.ai.ticksPerSecond = DEFAULT_TICKS_PER_SECOND;
+    }
+    if (resetSpeed || simState.speed !== CONFIG.ai.ticksPerSecond) {
+      simState.speed = CONFIG.ai.ticksPerSecond;
+      if (speedSlider) {
+        speedSlider.value = String(CONFIG.ai.ticksPerSecond);
+      }
+      emit(EVENT.STATUS, {
+        who: "system",
+        msg: `Speed set to ${CONFIG.ai.ticksPerSecond} tps`,
+        speed: CONFIG.ai.ticksPerSecond,
+      });
+    }
+  }
+
+  function applyCustomSettings({
+    seed,
+    depth,
+    initialSpawns,
+    monsterTags,
+    tps,
+    gen,
+  } = {}) {
+    gameState.config = gameState.config || {};
+
+    if (Array.isArray(monsterTags) && monsterTags.length) {
+      gameState.config.monsterTagsOverride = monsterTags
+        .filter(Boolean)
+        .slice(0, 24);
+    } else {
+      delete gameState.config.monsterTagsOverride;
+    }
+
+    if (Number.isFinite(initialSpawns)) {
+      gameState.config.initialSpawnCount = Math.max(
+        0,
+        Math.floor(initialSpawns),
+      );
+    } else {
+      delete gameState.config.initialSpawnCount;
+    }
+
+    if (Number.isFinite(depth)) {
+      gameState.config.depth = Math.max(0, Math.floor(depth));
+    } else {
+      delete gameState.config.depth;
+    }
+
+    if (Number.isFinite(seed)) {
+      const normalizedSeed = seed >>> 0;
+      gameState.config.seed = normalizedSeed;
+      gameState.rng = mulberry32(normalizedSeed);
+    } else {
+      delete gameState.config.seed;
+      delete gameState.rng;
+    }
+
+    if (Number.isFinite(tps)) {
+      const clamped = Math.max(1, Math.min(60, Math.floor(tps)));
+      CONFIG.ai.ticksPerSecond = clamped;
+      simState.speed = clamped;
+      if (speedSlider) {
+        speedSlider.value = String(clamped);
+      }
+      emit(EVENT.STATUS, {
+        who: "system",
+        msg: `Speed set to ${clamped} tps`,
+        speed: clamped,
+      });
+    }
+
+    if (gen && typeof gen === "object") {
+      gameState.config.generatorOverrides = clonePlain(gen);
+    } else {
+      delete gameState.config.generatorOverrides;
+    }
+  }
+
+  function restoreHybridGeneratorConfig() {
+    const target = CONFIG?.generator?.hybrid;
+    if (!target || typeof target !== "object") return;
+    if (!BASE_GENERATOR_HYBRID || typeof BASE_GENERATOR_HYBRID !== "object") {
+      return;
+    }
+    for (const key of Object.keys(target)) {
+      if (!Object.prototype.hasOwnProperty.call(BASE_GENERATOR_HYBRID, key)) {
+        delete target[key];
+      }
+    }
+    for (const key of Object.keys(BASE_GENERATOR_HYBRID)) {
+      target[key] = clonePlain(BASE_GENERATOR_HYBRID[key]);
+    }
+  }
+
+  function clonePlain(value) {
+    if (value === undefined || value === null) {
+      return value;
+    }
+    if (typeof structuredClone === "function") {
+      try {
+        return structuredClone(value);
+      } catch {
+        // structuredClone not available for this value
+      }
+    }
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch {
+      return value;
+    }
+  }
+
+  function clamp01(value) {
+    if (!Number.isFinite(value)) {
+      value = Number(value);
+    }
+    if (!Number.isFinite(value)) {
+      return 0;
+    }
+    if (value < 0) return 0;
+    if (value > 1) return 1;
+    return value;
+  }
+
+  function deepMerge(target, source) {
+    if (!target || typeof target !== "object") return target;
+    if (!source || typeof source !== "object") return target;
+    for (const key of Object.keys(source)) {
+      const value = source[key];
+      if (Array.isArray(value)) {
+        target[key] = value.slice();
+      } else if (value && typeof value === "object") {
+        if (
+          !target[key] ||
+          typeof target[key] !== "object" ||
+          Array.isArray(target[key])
+        ) {
+          target[key] = {};
+        }
+        deepMerge(target[key], value);
+      } else {
+        target[key] = value;
+      }
+    }
+    return target;
+  }
+
   function bootstrap() {
     const ticksPerSecond = CONFIG.ai.ticksPerSecond;
     speedSlider.value = ticksPerSecond;
@@ -4765,7 +5185,18 @@ const Game = (() => {
       msg: `Speed set to ${ticksPerSecond} tps`,
       speed: ticksPerSecond,
     });
-    restartBtn.addEventListener("click", startNewSimulation);
+    restartBtn.addEventListener("click", () => {
+      if (getLastRunMode() === "custom") {
+        setLastRunMode("custom");
+        const saved = loadMenuSettings();
+        applyCustomSettings(saved);
+      } else {
+        setLastRunMode("quick");
+        applyQuickSettings({ resetSpeed: true });
+      }
+      hideStartMenu();
+      startNewSimulation();
+    });
     speedSlider.addEventListener("input", (e) => {
       simState.speed = parseInt(e.target.value, 10);
       emit(EVENT.STATUS, {
@@ -4782,7 +5213,7 @@ const Game = (() => {
       }
     });
     initMinimapDOM();
-    startNewSimulation();
+    initStartMenu();
   }
   // ===================== MINIMAP =====================
   const MINIMAP_CFG = CONFIG.minimap || {};

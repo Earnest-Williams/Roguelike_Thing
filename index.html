@@ -8,6 +8,219 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
+    <!-- Start Menu Overlay -->
+    <div
+      id="startMenu"
+      style="position: fixed; inset: 0; background: rgba(0, 0, 0, 0.75);
+        display: flex; align-items: center; justify-content: center; z-index: 9999;
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;"
+    >
+      <div
+        style="background: #111; color: #eee; width: min(900px, 96vw);
+          max-height: 90vh; overflow: auto; border-radius: 12px; padding: 20px;
+          box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6);"
+      >
+        <h1 style="margin: 0 0 12px 0; font-size: 1.6rem;">
+          Roguelike — Start Menu
+        </h1>
+        <p style="margin: 0 0 14px 0; opacity: 0.9;">
+          Choose a normal run, or set custom parameters. Any blank field uses the
+          current default.
+        </p>
+
+        <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+          <button
+            id="startQuickBtn"
+            style="padding: 10px 14px; border-radius: 8px; border: 1px solid #444;
+              background: #1f6feb; color: #fff; cursor: pointer;"
+          >
+            Quick Start
+          </button>
+          <button
+            id="openCustomBtn"
+            style="padding: 10px 14px; border-radius: 8px; border: 1px solid #444;
+              background: #333; color: #eee; cursor: pointer;"
+          >
+            Custom Run…
+          </button>
+        </div>
+
+        <form id="customForm" style="display: none; margin-top: 16px;">
+          <fieldset
+            style="border: 1px solid #333; padding: 12px; border-radius: 8px;
+              margin-bottom: 12px;"
+          >
+            <legend style="padding: 0 6px; color: #ccc;">Core</legend>
+            <div
+              style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;"
+            >
+              <label>
+                Seed (uint32)<br />
+                <input
+                  type="number"
+                  id="cf-seed"
+                  placeholder="e.g., 12345"
+                  style="width: 100%; background: #0e0e0e; color: #eee; border: 1px solid #333;
+                    border-radius: 6px; padding: 6px;"
+                />
+              </label>
+              <label>
+                Depth (0+)<br />
+                <input
+                  type="number"
+                  id="cf-depth"
+                  min="0"
+                  placeholder="0"
+                  style="width: 100%; background: #0e0e0e; color: #eee; border: 1px solid #333;
+                    border-radius: 6px; padding: 6px;"
+                />
+              </label>
+              <label>
+                Initial spawn count<br />
+                <input
+                  type="number"
+                  id="cf-initialSpawns"
+                  min="0"
+                  placeholder="(default 8)"
+                  style="width: 100%; background: #0e0e0e; color: #eee; border: 1px solid #333;
+                    border-radius: 6px; padding: 6px;"
+                />
+              </label>
+              <label>
+                Sim speed (tps)<br />
+                <input
+                  type="number"
+                  id="cf-tps"
+                  min="1"
+                  max="60"
+                  placeholder="(default from slider)"
+                  style="width: 100%; background: #0e0e0e; color: #eee; border: 1px solid #333;
+                    border-radius: 6px; padding: 6px;"
+                />
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset
+            style="border: 1px solid #333; padding: 12px; border-radius: 8px;
+              margin-bottom: 12px;"
+          >
+            <legend style="padding: 0 6px; color: #ccc;">Thematic spawning</legend>
+            <div
+              style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;"
+            >
+              <label>
+                Monster tags override (comma-sep)<br />
+                <input
+                  id="cf-monsterTags"
+                  placeholder="orc, undead"
+                  style="width: 100%; background: #0e0e0e; color: #eee; border: 1px solid #333;
+                    border-radius: 6px; padding: 6px;"
+                />
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset
+            style="border: 1px solid #333; padding: 12px; border-radius: 8px;
+              margin-bottom: 12px;"
+          >
+            <legend style="padding: 0 6px; color: #ccc;">Generator knobs</legend>
+            <div
+              style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;"
+            >
+              <label>
+                Door spawn chance (0–1)<br />
+                <input
+                  id="cf-doorSpawn"
+                  step="0.05"
+                  min="0"
+                  max="1"
+                  type="number"
+                  placeholder="leave blank for default"
+                  style="width: 100%; background: #0e0e0e; color: #eee; border: 1px solid #333;
+                    border-radius: 6px; padding: 6px;"
+                />
+              </label>
+              <label>
+                Extra corridor edges (0–1)<br />
+                <input
+                  id="cf-extraEdges"
+                  step="0.05"
+                  min="0"
+                  max="1"
+                  type="number"
+                  placeholder="leave blank for default"
+                  style="width: 100%; background: #0e0e0e; color: #eee; border: 1px solid #333;
+                    border-radius: 6px; padding: 6px;"
+                />
+              </label>
+              <label>
+                Small room candidates<br />
+                <input
+                  id="cf-smallCandidates"
+                  min="0"
+                  type="number"
+                  placeholder="leave blank for default"
+                  style="width: 100%; background: #0e0e0e; color: #eee; border: 1px solid #333;
+                    border-radius: 6px; padding: 6px;"
+                />
+              </label>
+              <label>
+                Small room min size<br />
+                <input
+                  id="cf-smallMin"
+                  min="1"
+                  type="number"
+                  placeholder="leave blank"
+                  style="width: 100%; background: #0e0e0e; color: #eee; border: 1px solid #333;
+                    border-radius: 6px; padding: 6px;"
+                />
+              </label>
+              <label>
+                Small room max size<br />
+                <input
+                  id="cf-smallMax"
+                  min="1"
+                  type="number"
+                  placeholder="leave blank"
+                  style="width: 100%; background: #0e0e0e; color: #eee; border: 1px solid #333;
+                    border-radius: 6px; padding: 6px;"
+                />
+              </label>
+            </div>
+          </fieldset>
+
+          <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+            <button
+              id="startCustomBtn"
+              type="submit"
+              style="padding: 10px 14px; border-radius: 8px; border: 1px solid #444;
+                background: #1f6feb; color: #fff; cursor: pointer;"
+            >
+              Start Custom Run
+            </button>
+            <button
+              id="cancelCustomBtn"
+              type="button"
+              style="padding: 10px 14px; border-radius: 8px; border: 1px solid #444;
+                background: #222; color: #eee; cursor: pointer;"
+            >
+              Cancel
+            </button>
+            <button
+              id="resetCustomBtn"
+              type="button"
+              title="Clear saved menu settings"
+              style="margin-left: auto; padding: 10px 14px; border-radius: 8px;
+                border: 1px solid #444; background: #222; color: #aaa; cursor: pointer;"
+            >
+              Reset
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
     <div id="app-container">
       <div id="container">
         <h1>Roguelike Dungeon Simulator</h1>

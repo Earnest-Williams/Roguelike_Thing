@@ -45,6 +45,16 @@ Roguelike_Thing is a deterministic combat sandbox that separates simulation code
 
 ---
 
+## Start Menu (Generation Controls)
+
+On load, a modal appears with:
+* **Quick Start** — runs current defaults.
+* **Custom Run** — optionally set seed, depth, initial spawn count, sim speed, and select generator tweaks (door spawn chance, extra edges, small room params). Any blank field uses defaults.
+
+Settings persist in `localStorage` (`rl_menu_settings`). “Restart” repeats your last run mode (quick or custom).
+
+---
+
 ## 🔧 Development workflow tips
 
 - **Prefer deterministic seeds while iterating.** Use `setSeed` from `src/combat/rng.js` before running scripted scenarios so repeated runs highlight behavioural deltas.
