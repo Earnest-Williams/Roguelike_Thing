@@ -33,11 +33,9 @@ import { createInitialState } from "./src/game/state.js";
 import { ChapterState } from "./src/game/chapter-state.js";
 // NOTE: spawnMonsters is the canonical spawner; do not use any local/legacy spawn helpers.
 import { spawnMonsters } from "./src/game/spawn.js";
-import {
-  createDefaultModCache,
-  createEmptyStatusDerivedMods,
-} from "./src/game/utils.js";
 import { AIPlanner } from "./src/combat/ai-planner.js";
+import { Actor } from "./src/combat/actor.js";
+import { foldModsFromEquipment } from "./src/combat/mod-folding.js";
 import {
   Item,
   ItemStack,
@@ -812,50 +810,173 @@ const Game = (() => {
 
   let __mobAutoId = 1;
 
-  class Mob {
-    constructor(o) {
-      this.id = __mobAutoId++;
-      this.kind = o.kind;
-      this.name = o.name;
+  class Player {
+    constructor(o = {}) {
+      const name = o.name ?? "Player";
+      const factions =
+        Array.isArray(o.factions) && o.factions.length
+          ? o.factions.slice()
+          : ["player"];
+      const affiliations = Array.isArray(o.affiliations)
+        ? o.affiliations.slice()
+        : [];
+
+      this.id = o.id || `player#${__mobAutoId++}`;
+      this.kind = "player";
+      this.name = name;
+      this.glyph = o.glyph ?? "@";
+      this.color = o.color ?? "#fff";
       this.x = o.x | 0;
       this.y = o.y | 0;
-      this.hp = o.hp ?? DEFAULT_MOB_HP;
-      this.maxHp = this.hp;
-      this.speed = o.speed ?? DEFAULT_MOB_SPEED;
       this.baseDelay = o.baseDelay ?? 1;
       this.nextActAt = o.nextActAt ?? 0;
-      this.glyph = o.glyph ?? "?";
-      this.color = o.color ?? "#fff";
-      this.factions = Array.isArray(o.factions) && o.factions.length
-        ? [...o.factions]
-        : ["unaligned"];
-      if (this.factions.includes("unaligned") && this.factions.length > 1) {
-        this.factions = ["unaligned"];
-      }
-      this.affiliations = Array.isArray(o.affiliations)
-        ? [...o.affiliations]
-        : [];
-      this.equipment = new Equipment();
+      this.__dead = false;
+
       this.inventory = new Inventory(DEFAULT_INVENTORY_CAPACITY);
-      this.statuses = [];
-      this.statusDerived = createEmptyStatusDerivedMods();
-      this.modCache = createDefaultModCache();
+      this.equipment = new Equipment();
       this.__log = null;
+
+      this.__actor = new Actor({
+        id: this.id,
+        name,
+        baseStats: {
+          str: 5,
+          dex: 5,
+          int: 5,
+          vit: 5,
+          con: 5,
+          will: 5,
+          luck: 5,
+          maxHP: DEFAULT_MOB_HP,
+          maxStamina: 10,
+          maxMana: 0,
+          baseSpeed: DEFAULT_MOB_SPEED,
+        },
+        factions,
+        affiliations,
+      });
+
+      this.syncActorEquipment();
     }
+
+    get actor() {
+      return this.__actor;
+    }
+
+    get factions() {
+      return this.__actor?.factions || [];
+    }
+
+    set factions(value) {
+      if (!this.__actor) return;
+      this.__actor.factions = Array.isArray(value) ? value.slice() : [];
+    }
+
+    get affiliations() {
+      return this.__actor?.affiliations || [];
+    }
+
+    set affiliations(value) {
+      if (!this.__actor) return;
+      this.__actor.affiliations = Array.isArray(value) ? value.slice() : [];
+    }
+
+    get res() {
+      return this.__actor?.res;
+    }
+
+    set res(value) {
+      if (!this.__actor) return;
+      this.__actor.res = value;
+    }
+
+    get statusDerived() {
+      return this.__actor?.statusDerived;
+    }
+
+    set statusDerived(value) {
+      if (!this.__actor) return;
+      this.__actor.statusDerived = value;
+    }
+
+    get statuses() {
+      return this.__actor?.statuses;
+    }
+
+    set statuses(value) {
+      if (!this.__actor) return;
+      this.__actor.statuses = Array.isArray(value) ? value : [];
+    }
+
+    get modCache() {
+      return this.__actor?.modCache;
+    }
+
+    set modCache(value) {
+      if (!this.__actor) return;
+      this.__actor.modCache = value;
+    }
+
+    get hp() {
+      return this.__actor?.res?.hp ?? 0;
+    }
+
+    set hp(value) {
+      if (this.__actor?.res) {
+        this.__actor.res.hp = value;
+      }
+    }
+
+    get maxHp() {
+      return this.__actor?.base?.maxHP ?? 0;
+    }
+
+    set maxHp(value) {
+      if (!this.__actor) return;
+      if (this.__actor.base) {
+        this.__actor.base.maxHP = value;
+      }
+      if (this.__actor.baseStats) {
+        this.__actor.baseStats.maxHP = value;
+      }
+    }
+
     get pos() {
       return { x: this.x, y: this.y };
     }
+
     set pos(p) {
+      if (!p) return;
       this.x = p.x | 0;
       this.y = p.y | 0;
     }
+
     getLightRadius() {
-      const gearRadius =
-        typeof this.equipment?.getLightRadius === "function"
-          ? Number(this.equipment.getLightRadius()) || 0
-          : 0;
-      const innateBonus = Number(this.modCache?.vision?.lightBonus || 0);
-      return Math.max(0, gearRadius + innateBonus);
+      const radius = this.__actor?.getLightRadius?.() ?? 0;
+      return Number.isFinite(radius) ? Math.max(0, radius) : 0;
+    }
+
+    syncActorEquipment() {
+      if (!this.__actor) return;
+      const record = {};
+      if (this.equipment?.slots instanceof Map) {
+        for (const [slot, item] of this.equipment.slots.entries()) {
+          if (item) {
+            record[slot] = item;
+          }
+        }
+      }
+      Object.defineProperty(record, "getLightRadius", {
+        enumerable: false,
+        value: (...args) => this.equipment.getLightRadius(...args),
+      });
+      Object.defineProperty(record, "getLightSourceProperties", {
+        enumerable: false,
+        value: (...args) =>
+          this.equipment.getLightSourceProperties(...args),
+      });
+      this.__actor.equipment = record;
+      foldModsFromEquipment(this.__actor);
     }
 
     canOccupy(x, y, maze, mobManager = null) {
@@ -865,6 +986,7 @@ const Game = (() => {
       if (mobManager && mobManager.getMobAt(x, y)) return false;
       return true;
     }
+
     tryMove(dx, dy, maze, mobManager = null) {
       const nx = this.x + dx,
         ny = this.y + dy;
@@ -875,14 +997,9 @@ const Game = (() => {
       }
       return false;
     }
-    takeTurn(gameCtx) {
-      /* no-op base */
-    }
-  }
 
-  class Player extends Mob {
-    constructor(o) {
-      super({ kind: "player", glyph: "@", color: "#fff", ...o });
+    takeTurn() {
+      /* player turns handled elsewhere */
     }
   }
 
@@ -4282,6 +4399,8 @@ const Game = (() => {
     newPlayer.inventory.add(new ItemStack(makeItem("pouch_small")), {
       silent: true,
     });
+
+    newPlayer.syncActorEquipment();
 
     gameState.player = newPlayer;
     return newPlayer;
