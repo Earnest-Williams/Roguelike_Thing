@@ -139,6 +139,7 @@ export class Monster {
   }
 
   getLightRadius() {
+    /** [Unified Implementation] Delegate vision to the Actor. */
     return this.__actor?.getLightRadius?.() ?? 0;
   }
 
