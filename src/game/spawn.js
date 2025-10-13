@@ -47,6 +47,10 @@ export function randomOpenTile(
   return null;
 }
 
+/**
+ * Canonical spawner. Returns the number of Monster instances created and placed.
+ * All initial and dynamic spawns must use this function.
+ */
 export function spawnMonsters(
   gameCtx,
   { count = 6, includeTags = [], rng = Math.random } = {},
