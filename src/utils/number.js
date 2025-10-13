@@ -8,7 +8,19 @@
  * @param {number} max
  */
 export function clamp(value, min, max) {
-  if (!Number.isFinite(value)) return Number.isFinite(min) ? min : 0;
+  if (!Number.isFinite(value)) {
+    if (Number.isNaN(value)) {
+      if (Number.isFinite(min)) return min;
+      if (Number.isFinite(max)) return max;
+      return 0;
+    }
+    if (value === Infinity) {
+      return Number.isFinite(max) ? max : value;
+    }
+    if (value === -Infinity) {
+      return Number.isFinite(min) ? min : value;
+    }
+  }
   if (Number.isFinite(min) && value < min) return min;
   if (Number.isFinite(max) && value > max) return max;
   return value;
