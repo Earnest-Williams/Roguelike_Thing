@@ -5,7 +5,6 @@ import {
   DEFAULT_MOB_HP,
   DEFAULT_MOB_SPEED,
   DEFAULT_INVENTORY_CAPACITY,
-  DEFAULT_MONSTER_AGGRO_RANGE,
   SHORT_TERM_MEMORY_PENALTY,
   CARDINAL_DIRECTIONS,
   WEAPON_CATEGORY,
@@ -878,39 +877,6 @@ const Game = (() => {
   class Player extends Mob {
     constructor(o) {
       super({ kind: "player", glyph: "@", color: "#fff", ...o });
-    }
-  }
-
-  class Monster extends Mob {
-    constructor(o) {
-      super({ kind: "monster", glyph: "m", color: "#f99", ...o });
-      this.aggroRange = o.aggroRange ?? DEFAULT_MONSTER_AGGRO_RANGE;
-    }
-    takeTurn(gameCtx) {
-      const { player, maze } = gameCtx;
-      const dx = player.x - this.x,
-        dy = player.y - this.y;
-      const dist = Math.abs(dx) + Math.abs(dy);
-      if (dist === 0) return;
-      if (dist <= this.aggroRange) {
-        const step =
-          Math.abs(dx) > Math.abs(dy)
-            ? { dx: Math.sign(dx), dy: 0 }
-            : { dx: 0, dy: Math.sign(dy) };
-        if (!this.tryMove(step.dx, step.dy, maze, gameCtx.mobManager)) {
-          const alt =
-            step.dx !== 0
-              ? { dx: 0, dy: Math.sign(dy) }
-              : { dx: Math.sign(dx), dy: 0 };
-          this.tryMove(alt.dx, alt.dy, maze, gameCtx.mobManager);
-        }
-      } else {
-        const { dx, dy } =
-          CARDINAL_DIRECTIONS[
-            (Math.random() * CARDINAL_DIRECTIONS.length) | 0
-          ];
-        this.tryMove(dx, dy, maze, gameCtx.mobManager);
-      }
     }
   }
 
