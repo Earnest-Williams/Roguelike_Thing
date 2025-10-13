@@ -1584,7 +1584,7 @@ const Game = (() => {
   // --- ITEM TEMPLATES ---
 
   function getLightProperties() {
-    const radius = Math.max(0, Number(player?.getLightRadius?.()) || 0);
+    const radius = Math.max(0, player?.getLightRadius?.() ?? 0);
     const defaults = {
       radius,
       color: LIGHT_CONFIG.fallbackColor,
@@ -1604,9 +1604,13 @@ const Game = (() => {
     fovState.overlayRgb = overlay.rgb;
   }
 
+  /**
+   * Computes the visible cells around the player and updates the cached FOV.
+   * All vision must flow through Actor/Monster.getLightRadius().
+   */
   function computeVisibleCells(pos) {
     const key = posKey(pos);
-    const radius = Math.max(0, Number(player?.getLightRadius?.()) || 0);
+    const radius = Math.max(0, player?.getLightRadius?.() ?? 0);
     if (
       fovState.lastCache.visible &&
       fovState.lastCache.key === key &&
@@ -3427,8 +3431,9 @@ const Game = (() => {
   // Updates the persistent fog-of-war state as the player moves. This both
   // records which tiles were ever seen (explorationState) and promotes nearby
   // floor cells to "frontiers" so the explorer knows where to head next.
+  // Uses getLightRadius() directly; removes stale helper logic.
   function updateVisionAndExploration(pos) {
-    const lightRadius = Math.max(0, Number(player?.getLightRadius?.()) || 0);
+    const lightRadius = Math.max(0, player?.getLightRadius?.() ?? 0);
     const radiusSq = lightRadius * lightRadius;
     explorationState.newlyExplored = [];
     const visibleCells = computeFieldOfView(pos, lightRadius, mapState, {
@@ -3502,7 +3507,7 @@ const Game = (() => {
   // aimless oscillation.
   function explorationScore(pos, shortTermMemory) {
     let score = 0;
-    const lightRadius = Math.max(0, Number(player?.getLightRadius?.()) || 0);
+    const lightRadius = Math.max(0, player?.getLightRadius?.() ?? 0);
     const visibleCells = computeFieldOfView(pos, lightRadius, mapState, {
       useKnownGrid: true,
     });
@@ -4399,15 +4404,7 @@ const Game = (() => {
        *  - Creates Monsters via factories (folding mods correctly)
        */
       const tags = gameState.chapter?.theme?.monsterTags ?? [];
-      const rngSource = gameState.rng;
-      const rng =
-        typeof rngSource === "function"
-          ? rngSource
-          : typeof rngSource?.next === "function"
-          ? () => rngSource.next()
-          : typeof rngSource?.random === "function"
-          ? () => rngSource.random()
-          : Math.random;
+      const rng = gameState.rng;
       const spawned = spawnMonsters(
         { maze: mapState.grid, mobManager, player },
         { count: 8, includeTags: tags, rng },
