@@ -62,34 +62,15 @@ function selectTarget(self, ctx = {}) {
   const selfActor = toActor(self) ?? self;
   const selfMob = ctx.selfMob ?? selfActor;
 
-  /** @type {any[]} */
-  const rawEntities = [];
-  const seenEntities = new Set();
-  const pushEntity = (entity) => {
-    if (!entity || seenEntities.has(entity)) return;
-    seenEntities.add(entity);
-    rawEntities.push(entity);
-  };
-
-  pushEntity(ctx.player);
-  for (const mob of listMobs(ctx.mobManager)) {
-    pushEntity(mob);
-  }
+  const allEntities = [ctx.player, ...listMobs(ctx.mobManager)];
   if (ctx.target) {
-    pushEntity(ctx.target);
+    allEntities.push(ctx.target);
   }
 
-  const seenActors = new Set([selfActor]);
-  const candidates = rawEntities
+  const candidates = allEntities
+    .filter(Boolean)
     .map((entity) => ({ entity, actor: toActor(entity) }))
-    .filter(({ actor }) => actor)
-    .filter(({ actor }) => {
-      if (actor === selfActor || seenActors.has(actor)) {
-        return false;
-      }
-      seenActors.add(actor);
-      return true;
-    });
+    .filter(({ actor }) => actor && actor !== selfActor);
 
   const hostiles = candidates
     .map((entry) => ({
