@@ -4190,6 +4190,7 @@ const Game = (() => {
   }
 
   function setupPlayer() {
+    // Pass factions directly to the Player constructor, which passes it to the Actor.
     const newPlayer = new Player({
       name: "Player",
       x: 0,
