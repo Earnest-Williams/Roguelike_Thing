@@ -441,7 +441,8 @@ export class Actor {
 
   /**
    * Returns the current light radius for vision/FOV.
-   * All render/fog systems should use this accessor.
+   * This is the single source of truth for vision/light radius; all render/fog
+   * systems should use this accessor.
    */
   getLightRadius() {
     const gearRadius =
