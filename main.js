@@ -31,9 +31,8 @@ import {
 import { CONFIG } from "./src/config.js";
 import { createInitialState } from "./src/game/state.js";
 import { ChapterState } from "./src/game/chapter-state.js";
+import { FactionService } from "./src/game/faction-service.js";
 import { mulberry32 } from "./src/sim/sim.js";
-// NOTE: spawnMonsters is the canonical spawner; do not use any local/legacy spawn helpers.
-import { spawnMonsters } from "./src/game/spawn.js";
 import { AIPlanner } from "./src/combat/ai-planner.js";
 import { Actor } from "./src/combat/actor.js";
 import { attachLogs } from "./src/combat/debug-log.js";
@@ -1827,6 +1826,10 @@ const Game = (() => {
   // --- ITEM TEMPLATES ---
 
   function readPlayerLightRadius() {
+    const override = gameState?.config?.knobs?.playerFovOverride;
+    if (override != null && Number.isFinite(override)) {
+      return Math.max(0, Math.floor(override));
+    }
     /** [Unified Implementation] All lighting reads delegate to Actor.getLightRadius(). */
     const radius = Number(player?.getLightRadius?.() ?? 0);
     return Number.isFinite(radius) ? Math.max(0, radius) : 0;
@@ -4134,7 +4137,17 @@ const Game = (() => {
       let nextPos = currentPos;
       let attemptedFrontiers = false;
 
-      if (mapState.known[endPos.y][endPos.x] === TILE_FLOOR) {
+      const arenaCfg = gameState?.config?.modes?.arena;
+      const suppressExitNow =
+        !!arenaCfg?.enabled &&
+        !!arenaCfg?.suppressExitSeekUntilClear &&
+        Array.isArray(mobManager?.list) &&
+        mobManager.list.some((m) => {
+          const target = m?.actor ?? m;
+          return !!target && FactionService.isHostile(player, target);
+        });
+
+      if (!suppressExitNow && mapState.known[endPos.y][endPos.x] === TILE_FLOOR) {
         const pathToExit = bfsToTarget(
           currentPos,
           endPos,
@@ -4565,6 +4578,33 @@ const Game = (() => {
     return newPlayer;
   }
 
+  function applyDungeonDataToMapState(dungeonData) {
+    mapState.grid = Array.isArray(dungeonData.grid) ? dungeonData.grid : [];
+    mapState.width = mapState.grid[0] ? mapState.grid[0].length : 0;
+    mapState.height = mapState.grid.length;
+    mapState.furniture = normalizeFurniturePlacements(
+      dungeonData.furniture || [],
+    );
+    rebuildFurnitureIndex();
+  }
+
+  /**
+   * Builds a single-room "arena" grid with a 1-tile wall border.
+   * Start = center; End = opposite corner (unused if exit-seek is suppressed).
+   */
+  function generateArenaDungeon(width, height) {
+    const w = Math.max(8, width | 0);
+    const h = Math.max(8, height | 0);
+    const grid = Array.from({ length: h }, (_, y) =>
+      Array.from({ length: w }, (_, x) =>
+        x === 0 || y === 0 || x === w - 1 || y === h - 1 ? TILE_WALL : TILE_FLOOR,
+      ),
+    );
+    const start = { x: (w / 2) | 0, y: (h / 2) | 0 };
+    const end = { x: 1, y: 1 };
+    return { grid, start, end, furniture: [] };
+  }
+
   function generateAndValidateDungeon() {
     emit(EVENT.STATUS, {
       who: "system",
@@ -4576,13 +4616,7 @@ const Game = (() => {
       return { success: false, reason: "generation" };
     }
 
-    mapState.grid = dungeonData.grid;
-    mapState.width = mapState.grid[0].length;
-    mapState.height = mapState.grid.length;
-    mapState.furniture = normalizeFurniturePlacements(
-      dungeonData.furniture || [],
-    );
-    rebuildFurnitureIndex();
+    applyDungeonDataToMapState(dungeonData);
 
     const isConnected = !!aStarPath(
       mapState.grid,
@@ -4712,11 +4746,25 @@ const Game = (() => {
         const count = Number.isFinite(gameCtx.state?.config?.initialSpawnCount)
           ? Math.max(0, Math.floor(gameCtx.state.config.initialSpawnCount))
           : 8;
-        const spawned = spawnMonsters(gameCtx, {
-          count,
-          includeTags: tags,
-          rng,
-        });
+        const { spawnMonsters, spawnByIdCounts } = await import(
+          "./src/game/spawn.js"
+        );
+        let spawned = 0;
+        if (gameCtx.state?.config?.modes?.arena?.enabled) {
+          const idCounts = gameCtx.state.config.modes.arena.spawnsById || {};
+          spawned = spawnByIdCounts(
+            gameCtx,
+            idCounts,
+            gameCtx.state?.config?.knobs?.spawnMinDistance,
+            rng,
+          );
+        } else {
+          spawned = spawnMonsters(gameCtx, {
+            count,
+            includeTags: tags,
+            rng,
+          });
+        }
         console.log(
           `[spawn] spawned=${spawned} tags=${tags.join(",") || "all"}`,
         );
@@ -4791,13 +4839,30 @@ const Game = (() => {
           console.warn("Generator override merge failed", err);
         }
       }
-      const result = generateAndValidateDungeon();
-      if (!result.success) {
-        handleDungeonFailure(result.reason);
-        return;
-      }
+      const arenaCfg = gameState?.config?.modes?.arena;
+      if (arenaCfg?.enabled) {
+        const knobWidth = gameState?.config?.knobs?.mapWidth;
+        const knobHeight = gameState?.config?.knobs?.mapHeight;
+        const baseWidth = Number.isFinite(arenaCfg.width)
+          ? arenaCfg.width
+          : CONFIG?.modes?.arena?.width ?? 40;
+        const baseHeight = Number.isFinite(arenaCfg.height)
+          ? arenaCfg.height
+          : CONFIG?.modes?.arena?.height ?? 24;
+        const width = Number.isFinite(knobWidth) ? knobWidth : baseWidth;
+        const height = Number.isFinite(knobHeight) ? knobHeight : baseHeight;
+        const dungeonData = generateArenaDungeon(width, height);
+        applyDungeonDataToMapState(dungeonData);
+        initializeSimulation(dungeonData);
+      } else {
+        const result = generateAndValidateDungeon();
+        if (!result.success) {
+          handleDungeonFailure(result.reason);
+          return;
+        }
 
-      initializeSimulation(result.dungeonData);
+        initializeSimulation(result.dungeonData);
+      }
     }, 50);
   }
 
@@ -4895,13 +4960,25 @@ const Game = (() => {
       /** @type {HTMLInputElement | null} */ (
         document.getElementById(id)
       );
-    const seedVal = parseInt(getInput("cf-seed")?.value || "", 10);
-    const depthVal = parseInt(getInput("cf-depth")?.value || "", 10);
-    const spawnVal = parseInt(
-      getInput("cf-initialSpawns")?.value || "",
-      10,
-    );
-    const tpsVal = parseInt(getInput("cf-tps")?.value || "", 10);
+    const readInt = (id) => {
+      const el = getInput(id);
+      if (!el) return NaN;
+      const raw = el.value;
+      if (raw === undefined || raw === null || raw === "") return NaN;
+      return parseInt(raw, 10);
+    };
+    const readFloat = (id) => {
+      const el = getInput(id);
+      if (!el) return NaN;
+      const raw = el.value;
+      if (raw === undefined || raw === null || raw === "") return NaN;
+      return parseFloat(raw);
+    };
+
+    const seedVal = readInt("cf-seed");
+    const depthVal = readInt("cf-depth");
+    const spawnVal = readInt("cf-initialSpawns");
+    const tpsVal = readInt("cf-tps");
     const tagsRaw = (getInput("cf-monsterTags")?.value || "").trim();
     const monsterTags = tagsRaw
       ? tagsRaw
@@ -4910,24 +4987,11 @@ const Game = (() => {
           .filter(Boolean)
       : [];
 
-    const doorSpawnVal = parseFloat(
-      getInput("cf-doorSpawn")?.value || "",
-    );
-    const extraEdgesVal = parseFloat(
-      getInput("cf-extraEdges")?.value || "",
-    );
-    const smallCandidatesVal = parseInt(
-      getInput("cf-smallCandidates")?.value || "",
-      10,
-    );
-    const smallMinVal = parseInt(
-      getInput("cf-smallMin")?.value || "",
-      10,
-    );
-    const smallMaxVal = parseInt(
-      getInput("cf-smallMax")?.value || "",
-      10,
-    );
+    const doorSpawnVal = readFloat("cf-doorSpawn");
+    const extraEdgesVal = readFloat("cf-extraEdges");
+    const smallCandidatesVal = readInt("cf-smallCandidates");
+    const smallMinVal = readInt("cf-smallMin");
+    const smallMaxVal = readInt("cf-smallMax");
 
     const gen = {};
     if (Number.isFinite(doorSpawnVal)) {
@@ -4955,7 +5019,7 @@ const Game = (() => {
       };
     }
 
-    return {
+    const settings = {
       seed: Number.isFinite(seedVal) ? seedVal >>> 0 : undefined,
       depth: Number.isFinite(depthVal)
         ? Math.max(0, Math.floor(depthVal))
@@ -4969,6 +5033,71 @@ const Game = (() => {
       monsterTags: monsterTags.length ? monsterTags : undefined,
       gen: Object.keys(gen).length > 0 ? gen : undefined,
     };
+    const knobDefaults = CONFIG?.knobs || {};
+    const fovVal = readInt("cf-knob-fov");
+    const spawnDistVal = readInt("cf-knob-spawn-dist");
+    const mapWidthVal = readInt("cf-knob-map-w");
+    const mapHeightVal = readInt("cf-knob-map-h");
+    settings.knobs = {
+      playerFovOverride: Number.isFinite(fovVal)
+        ? Math.max(0, Math.floor(fovVal))
+        : null,
+      spawnMinDistance: Number.isFinite(spawnDistVal)
+        ? Math.max(0, Math.floor(spawnDistVal))
+        : Number.isFinite(knobDefaults.spawnMinDistance)
+        ? Math.max(0, Math.floor(knobDefaults.spawnMinDistance))
+        : 6,
+      mapWidth: Number.isFinite(mapWidthVal)
+        ? Math.max(8, Math.floor(mapWidthVal))
+        : null,
+      mapHeight: Number.isFinite(mapHeightVal)
+        ? Math.max(8, Math.floor(mapHeightVal))
+        : null,
+    };
+
+    const arenaDefaults = CONFIG?.modes?.arena || {};
+    const arenaEnabled = !!getInput("cf-arena-enabled")?.checked;
+    const arenaWidthVal = readInt("cf-arena-w");
+    const arenaHeightVal = readInt("cf-arena-h");
+    const arenaWidth = Number.isFinite(arenaWidthVal)
+      ? Math.max(8, Math.floor(arenaWidthVal))
+      : Number.isFinite(arenaDefaults.width)
+      ? Math.max(8, Math.floor(arenaDefaults.width))
+      : 40;
+    const arenaHeight = Number.isFinite(arenaHeightVal)
+      ? Math.max(8, Math.floor(arenaHeightVal))
+      : Number.isFinite(arenaDefaults.height)
+      ? Math.max(8, Math.floor(arenaDefaults.height))
+      : 24;
+    const suppressExit = !!getInput("cf-arena-suppress-exit")?.checked;
+    const rawSpawns = String(
+      /** @type {HTMLTextAreaElement | null} */ (
+        document.getElementById("cf-arena-spawns")
+      )?.value || "",
+    ).trim();
+    const spawnsById = {};
+    if (rawSpawns) {
+      for (const line of rawSpawns.split(/\r?\n/)) {
+        const match = line.trim().match(/^([a-z0-9:_-]+)\s*=\s*(\d+)$/i);
+        if (match) {
+          const parsed = Number(match[2]);
+          if (Number.isFinite(parsed)) {
+            const count = Math.max(0, Math.floor(parsed));
+            spawnsById[match[1]] = count;
+          }
+        }
+      }
+    }
+    settings.modes = {
+      arena: {
+        enabled: arenaEnabled,
+        width: arenaWidth,
+        height: arenaHeight,
+        spawnsById,
+        suppressExitSeekUntilClear: suppressExit,
+      },
+    };
+    return settings;
   }
 
   function saveMenuSettings(settings) {
@@ -5016,6 +5145,44 @@ const Game = (() => {
     assign("cf-smallCandidates", gen?.smallRooms?.candidateCount);
     assign("cf-smallMin", gen?.smallRooms?.minSize);
     assign("cf-smallMax", gen?.smallRooms?.maxSize);
+    const knobs = settings.knobs || {};
+    assign("cf-knob-fov", knobs.playerFovOverride ?? "");
+    assign(
+      "cf-knob-spawn-dist",
+      knobs.spawnMinDistance ?? CONFIG?.knobs?.spawnMinDistance ?? 6,
+    );
+    assign("cf-knob-map-w", knobs.mapWidth ?? "");
+    assign("cf-knob-map-h", knobs.mapHeight ?? "");
+    const arena = settings?.modes?.arena || {};
+    const arenaEnabledEl = /** @type {HTMLInputElement | null} */ (
+      document.getElementById("cf-arena-enabled")
+    );
+    if (arenaEnabledEl) {
+      arenaEnabledEl.checked = !!arena.enabled;
+    }
+    assign("cf-arena-w", arena.width ?? CONFIG?.modes?.arena?.width ?? 40);
+    assign(
+      "cf-arena-h",
+      arena.height ?? CONFIG?.modes?.arena?.height ?? 24,
+    );
+    const suppressExitEl = /** @type {HTMLInputElement | null} */ (
+      document.getElementById("cf-arena-suppress-exit")
+    );
+    if (suppressExitEl) {
+      suppressExitEl.checked =
+        arena.suppressExitSeekUntilClear ??
+        CONFIG?.modes?.arena?.suppressExitSeekUntilClear ??
+        true;
+    }
+    const spawnArea = /** @type {HTMLTextAreaElement | null} */ (
+      document.getElementById("cf-arena-spawns")
+    );
+    if (spawnArea) {
+      const lines = Object.entries(arena.spawnsById || {}).map(
+        ([id, count]) => `${id}=${count}`,
+      );
+      spawnArea.value = lines.join("\n");
+    }
   }
 
   function setLastRunMode(mode) {
@@ -5041,6 +5208,8 @@ const Game = (() => {
     delete gameState.config.generatorOverrides;
     delete gameState.config.depth;
     delete gameState.config.seed;
+    delete gameState.config.knobs;
+    delete gameState.config.modes;
     delete gameState.rng;
 
     if (resetSpeed) {
@@ -5066,6 +5235,8 @@ const Game = (() => {
     monsterTags,
     tps,
     gen,
+    knobs,
+    modes,
   } = {}) {
     gameState.config = gameState.config || {};
 
@@ -5119,6 +5290,68 @@ const Game = (() => {
       gameState.config.generatorOverrides = clonePlain(gen);
     } else {
       delete gameState.config.generatorOverrides;
+    }
+
+    if (knobs && typeof knobs === "object") {
+      const sanitizedKnobs = {
+        playerFovOverride: Number.isFinite(knobs.playerFovOverride)
+          ? Math.max(0, Math.floor(knobs.playerFovOverride))
+          : null,
+        spawnMinDistance: Number.isFinite(knobs.spawnMinDistance)
+          ? Math.max(0, Math.floor(knobs.spawnMinDistance))
+          : Number.isFinite(CONFIG?.knobs?.spawnMinDistance)
+          ? Math.max(0, Math.floor(CONFIG.knobs.spawnMinDistance))
+          : 6,
+        mapWidth: Number.isFinite(knobs.mapWidth)
+          ? Math.max(8, Math.floor(knobs.mapWidth))
+          : null,
+        mapHeight: Number.isFinite(knobs.mapHeight)
+          ? Math.max(8, Math.floor(knobs.mapHeight))
+          : null,
+      };
+      gameState.config.knobs = sanitizedKnobs;
+    } else {
+      delete gameState.config.knobs;
+    }
+
+    if (modes && typeof modes === "object") {
+      const sanitizedModes = {};
+      const arenaInput = modes.arena;
+      if (arenaInput && typeof arenaInput === "object") {
+        const sanitizedSpawns = {};
+        for (const [id, raw] of Object.entries(arenaInput.spawnsById || {})) {
+          if (!id) continue;
+          const parsed = Number(raw);
+          if (!Number.isFinite(parsed)) continue;
+          const count = Math.max(0, Math.floor(parsed));
+          sanitizedSpawns[id] = count;
+        }
+        sanitizedModes.arena = {
+          enabled: !!arenaInput.enabled,
+          width: Number.isFinite(arenaInput.width)
+            ? Math.max(8, Math.floor(arenaInput.width))
+            : Number.isFinite(CONFIG?.modes?.arena?.width)
+            ? Math.max(8, Math.floor(CONFIG.modes.arena.width))
+            : 40,
+          height: Number.isFinite(arenaInput.height)
+            ? Math.max(8, Math.floor(arenaInput.height))
+            : Number.isFinite(CONFIG?.modes?.arena?.height)
+            ? Math.max(8, Math.floor(CONFIG.modes.arena.height))
+            : 24,
+          spawnsById: sanitizedSpawns,
+          suppressExitSeekUntilClear:
+            arenaInput.suppressExitSeekUntilClear ??
+            CONFIG?.modes?.arena?.suppressExitSeekUntilClear ??
+            true,
+        };
+      }
+      if (Object.keys(sanitizedModes).length > 0) {
+        gameState.config.modes = sanitizedModes;
+      } else {
+        delete gameState.config.modes;
+      }
+    } else {
+      delete gameState.config.modes;
     }
   }
 

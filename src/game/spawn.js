@@ -1,5 +1,6 @@
 import { MOB_TEMPLATES } from "../content/mobs.js";
 import { createMobFromTemplate } from "../factories/index.js";
+import { CONFIG } from "../config.js";
 import { TILE_FLOOR } from "../../js/constants.js";
 
 export function buildSpawnWeights({ includeTags = [] } = {}) {
@@ -60,18 +61,68 @@ export function spawnMonsters(
   if (!weights.length) return 0;
 
   let spawned = 0;
+  const configuredDistance =
+    gameCtx?.state?.config?.knobs?.spawnMinDistance ??
+    CONFIG?.knobs?.spawnMinDistance ??
+    6;
+  const safeDistance = Number.isFinite(configuredDistance)
+    ? Math.max(0, Math.floor(configuredDistance))
+    : 6;
   for (let i = 0; i < count; i++) {
     const id = pickWeighted(weights, rng);
     if (!id) break;
 
     const mob = createMobFromTemplate(id);
-    const pos = randomOpenTile(maze, mobManager, player, 6, rng);
+    const pos = randomOpenTile(maze, mobManager, player, safeDistance, rng);
     if (!pos) continue;
 
     mob.x = pos.x;
     mob.y = pos.y;
     mobManager.add(mob);
     spawned++;
+  }
+  mobManager.reindex?.();
+  return spawned;
+}
+
+/**
+ * Spawns an exact set of mobs by template id → count mapping.
+ * @param {{ maze: number[][], mobManager: any, player?: any }} gameCtx
+ * @param {Record<string, number>} idCounts
+ * @param {number} [minManhattan] Manhattan distance from player (fallback to CONFIG.knobs.spawnMinDistance)
+ * @param {() => number} [rng]
+ * @returns {number} total spawned
+ */
+export function spawnByIdCounts(
+  gameCtx,
+  idCounts = {},
+  minManhattan,
+  rng = Math.random,
+) {
+  const { maze, mobManager, player } = gameCtx;
+  let spawned = 0;
+  const fallbackDistance =
+    gameCtx?.state?.config?.knobs?.spawnMinDistance ??
+    CONFIG?.knobs?.spawnMinDistance ??
+    6;
+  const safeDistance = Number.isFinite(minManhattan)
+    ? Math.max(0, Math.floor(minManhattan))
+    : Number.isFinite(fallbackDistance)
+    ? Math.max(0, Math.floor(fallbackDistance))
+    : 6;
+  for (const [id, raw] of Object.entries(idCounts)) {
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed)) continue;
+    const count = Math.max(0, Math.floor(parsed));
+    for (let i = 0; i < count; i++) {
+      const mob = createMobFromTemplate(id);
+      const pos = randomOpenTile(maze, mobManager, player, safeDistance, rng);
+      if (!pos) continue;
+      mob.x = pos.x;
+      mob.y = pos.y;
+      mobManager.add(mob);
+      spawned++;
+    }
   }
   mobManager.reindex?.();
   return spawned;
