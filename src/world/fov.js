@@ -13,10 +13,7 @@ function clampUnitInterval(value) {
  * @param {() => number} [getNow]
  */
 export function createLightOverlayContext(player, lightConfig = {}, getNow = defaultGetNow) {
-  const radius =
-    typeof player?.getLightRadius === "function"
-      ? Math.max(0, Number(player.getLightRadius()))
-      : 0;
+  const radius = Math.max(0, Number(player?.getLightRadius?.() ?? 0));
   const rawRate =
     typeof player?.equipment?.getLightFlickerRate === "function"
       ? player.equipment.getLightFlickerRate()
