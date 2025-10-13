@@ -3851,26 +3851,6 @@ const Game = (() => {
       AIPlanner,
     };
 
-    if (!gameState.__didInitialSpawns) {
-      const { spawnMonsters } = await import("./src/game/spawn.js");
-      const tags = gameState.chapter?.theme?.monsterTags ?? [];
-      const rngSource = gameState.rng;
-      const rng = typeof rngSource === "function"
-        ? rngSource
-        : typeof rngSource?.random === "function"
-        ? () => rngSource.random()
-        : Math.random;
-      const spawned = spawnMonsters(gameCtx, {
-        count: 8,
-        includeTags: tags,
-        rng,
-      });
-      console.log(
-        `[SPAWN] ${spawned} mobs (tags: ${tags.join(", ") || "all"})`,
-      );
-      gameState.__didInitialSpawns = true;
-    }
-
     function processPlayerTurn() {
       const currentPlayerX = player.x;
       const currentPlayerY = player.y;
@@ -4417,6 +4397,31 @@ const Game = (() => {
     initRetries = 0;
     gameState.initRetries = initRetries;
     simState.isReady = true;
+
+    if (!gameState.__didInitialSpawns) {
+      const { spawnMonsters } = await import("./src/game/spawn.js");
+      const gameCtx = {
+        player,
+        mobManager,
+        maze: mapState.grid,
+        state: gameState,
+        AIPlanner,
+      };
+      const tags = gameState.chapter?.theme?.monsterTags ?? [];
+      const rngSource = gameState.rng;
+      const rng = typeof rngSource === "function"
+        ? rngSource
+        : typeof rngSource?.random === "function"
+        ? () => rngSource.random()
+        : Math.random;
+      const spawned = spawnMonsters(gameCtx, {
+        count: 8,
+        includeTags: tags,
+        rng,
+      });
+      console.log(`[SPAWN] ${spawned} mobs (tags: ${tags.join(", ") || "all"})`);
+      gameState.__didInitialSpawns = true;
+    }
 
     setTimeout(() => simulate(gameState, player.startPos, endPos), 500);
   }
