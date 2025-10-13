@@ -858,10 +858,6 @@ const Game = (() => {
       return Math.max(0, gearRadius + innateBonus);
     }
 
-    lightRadius() {
-      return this.getLightRadius();
-    }
-
     canOccupy(x, y, maze, mobManager = null) {
       if (y < 0 || y >= maze.length || x < 0 || x >= maze[0].length)
         return false;
