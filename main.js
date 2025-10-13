@@ -848,8 +848,17 @@ const Game = (() => {
       this.x = p.x | 0;
       this.y = p.y | 0;
     }
+    getLightRadius() {
+      const gearRadius =
+        typeof this.equipment?.getLightRadius === "function"
+          ? Number(this.equipment.getLightRadius()) || 0
+          : 0;
+      const innateBonus = Number(this.modCache?.vision?.lightBonus || 0);
+      return Math.max(0, gearRadius + innateBonus);
+    }
+
     lightRadius() {
-      return this.equipment.getLightRadius();
+      return this.getLightRadius();
     }
 
     canOccupy(x, y, maze, mobManager = null) {
