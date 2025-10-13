@@ -1,7 +1,6 @@
 import {
   TILE_FLOOR,
   TILE_WALL,
-  DEFAULT_LIGHT_RADIUS,
   DEFAULT_MOB_HP,
   DEFAULT_MOB_SPEED,
   DEFAULT_INVENTORY_CAPACITY,
@@ -32,6 +31,7 @@ import {
 import { CONFIG } from "./src/config.js";
 import { createInitialState } from "./src/game/state.js";
 import { ChapterState } from "./src/game/chapter-state.js";
+// NOTE: spawnMonsters is the canonical spawner; do not use any local/legacy spawn helpers.
 import { spawnMonsters } from "./src/game/spawn.js";
 import {
   createDefaultModCache,
@@ -756,7 +756,7 @@ const Game = (() => {
       const fallback = defaults
         ? { ...defaults }
         : {
-            radius: DEFAULT_LIGHT_RADIUS,
+            radius: 0,
             color: LIGHT_CONFIG.fallbackColor,
             flickerRate: LIGHT_CONFIG.fallbackFlickerRate,
           };
@@ -1583,30 +1583,19 @@ const Game = (() => {
 
   // --- ITEM TEMPLATES ---
 
-  function resolvePlayerLightRadius() {
-    if (typeof player?.getLightRadius !== "function") {
-      return DEFAULT_LIGHT_RADIUS;
-    }
-    const raw = Number(player.getLightRadius());
-    if (!Number.isFinite(raw)) {
-      return DEFAULT_LIGHT_RADIUS;
-    }
-    return Math.max(0, raw);
-  }
-
   function getLightProperties() {
+    const radius = Math.max(0, Number(player?.getLightRadius?.()) || 0);
     const defaults = {
-      radius: DEFAULT_LIGHT_RADIUS,
+      radius,
       color: LIGHT_CONFIG.fallbackColor,
       flickerRate: LIGHT_CONFIG.fallbackFlickerRate,
     };
-    const playerRadius = resolvePlayerLightRadius();
     if (!player?.equipment?.getLightSourceProperties) {
-      return { ...defaults, radius: playerRadius };
+      return defaults;
     }
     const props =
       player.equipment.getLightSourceProperties(defaults) ?? defaults;
-    return { ...props, radius: playerRadius };
+    return { ...props, radius };
   }
 
   function refreshLightingVisuals() {
@@ -1617,7 +1606,7 @@ const Game = (() => {
 
   function computeVisibleCells(pos) {
     const key = posKey(pos);
-    const radius = resolvePlayerLightRadius();
+    const radius = Math.max(0, Number(player?.getLightRadius?.()) || 0);
     if (
       fovState.lastCache.visible &&
       fovState.lastCache.key === key &&
@@ -3439,7 +3428,7 @@ const Game = (() => {
   // records which tiles were ever seen (explorationState) and promotes nearby
   // floor cells to "frontiers" so the explorer knows where to head next.
   function updateVisionAndExploration(pos) {
-    const lightRadius = resolvePlayerLightRadius();
+    const lightRadius = Math.max(0, Number(player?.getLightRadius?.()) || 0);
     const radiusSq = lightRadius * lightRadius;
     explorationState.newlyExplored = [];
     const visibleCells = computeFieldOfView(pos, lightRadius, mapState, {
@@ -3513,7 +3502,7 @@ const Game = (() => {
   // aimless oscillation.
   function explorationScore(pos, shortTermMemory) {
     let score = 0;
-    const lightRadius = resolvePlayerLightRadius();
+    const lightRadius = Math.max(0, Number(player?.getLightRadius?.()) || 0);
     const visibleCells = computeFieldOfView(pos, lightRadius, mapState, {
       useKnownGrid: true,
     });
@@ -4403,17 +4392,27 @@ const Game = (() => {
     simState.isReady = true;
 
     if (!gameState.__didInitialSpawns) {
-      const gameCtx = {
-        player,
-        mobManager,
-        maze: mapState.grid,
-        state: gameState,
-        AIPlanner,
-      };
-      const spawned = spawnInitialMonsters(gameCtx);
+      /**
+       * Use the central spawner which:
+       *  - Builds weighted tables from MOB_TEMPLATES and theme tags
+       *  - Picks open tiles away from the player
+       *  - Creates Monsters via factories (folding mods correctly)
+       */
+      const tags = gameState.chapter?.theme?.monsterTags ?? [];
+      const rngSource = gameState.rng;
+      const rng =
+        typeof rngSource === "function"
+          ? rngSource
+          : typeof rngSource?.next === "function"
+          ? () => rngSource.next()
+          : typeof rngSource?.random === "function"
+          ? () => rngSource.random()
+          : Math.random;
+      const spawned = spawnMonsters(
+        { maze: mapState.grid, mobManager, player },
+        { count: 8, includeTags: tags, rng },
+      );
       if (CONFIG?.debug?.logSpawns !== false) {
-        const chapter = gameState.chapter;
-        const tags = chapter?.theme?.monsterTags ?? [];
         console.log(
           `[SPAWN] ${spawned} mobs (tags: ${tags.join(", ") || "all"})`,
         );
@@ -4477,27 +4476,6 @@ const Game = (() => {
     }, 50);
   }
 
-  function spawnInitialMonsters(gameCtx) {
-    const chapter = gameState.chapter ?? null;
-    const includeTags = chapter?.theme?.monsterTags ?? [];
-    const depthIndex = Number.isFinite(chapter?.depth) ? Number(chapter.depth) : 0;
-    const levelIndex = Number.isFinite(chapter?.currentLevel)
-      ? Number(chapter.currentLevel)
-      : 1;
-    const effectiveDepth = Math.max(1, depthIndex + levelIndex);
-    const base = 4;
-    const perDepth = 2;
-    const count = Math.max(3, Math.min(12, base + (effectiveDepth - 1) * perDepth));
-    const rngSource = gameState.rng;
-    const rng = typeof rngSource === "function"
-      ? rngSource
-      : typeof rngSource?.next === "function"
-      ? () => rngSource.next()
-      : typeof rngSource?.random === "function"
-      ? () => rngSource.random()
-      : Math.random;
-    return spawnMonsters(gameCtx, { includeTags, count, rng });
-  }
   function bootstrap() {
     const ticksPerSecond = CONFIG.ai.ticksPerSecond;
     speedSlider.value = ticksPerSecond;

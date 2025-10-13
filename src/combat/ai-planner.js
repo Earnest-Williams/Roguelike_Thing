@@ -4,6 +4,23 @@ import { ACTIONS } from "../content/actions.js";
 import { FactionService } from "../game/faction-service.js";
 import { hasLineOfSight } from "../../js/utils.js";
 
+/**
+ * @file
+ * Normalizes arbitrary simulation "entities" (Monsters, Actors, raw POJOs)
+ * into `Actor` instances, **excludes self**, and selects a hostile target using
+ * `FactionService`. This is the canonical planner—remove/avoid any competing
+ * variants. Consumers should pass `{ selfMob }` on context to help compute
+ * distances using world coordinates when available.
+ *
+ * Key guarantees:
+ *  - Entity → Actor coercion via `asActor(...)`
+ *  - Self-filtering: both wrapper and actor identity are excluded
+ *  - Hostility check is centralized (no duplicated faction math here)
+ *  - Distance is Chebyshev on mob world coords when possible
+ *
+ * See also: src/game/monster.js (AI handoff) and src/game/faction-service.js.
+ */
+
 const asActor = (entity) => entity?.__actor ?? entity?.actor ?? entity ?? null;
 
 const asPosition = (entity) => {
@@ -41,7 +58,9 @@ const listMobs = (mobManager) => {
 };
 
 function selectTarget(self, ctx = {}) {
+  /** @type {(e: any) => import("./actor.js").Actor | null} */
   const toActor = ctx.toActor ?? asActor;
+  // unwrap both self wrapper and actor to a canonical actor reference
   const selfActor = toActor(self) ?? self;
   const selfMob = ctx.selfMob ?? selfActor;
 
@@ -67,6 +86,7 @@ function selectTarget(self, ctx = {}) {
     pushEntity(ctx.target);
   }
 
+  // Centralized hostility decision; do not replicate allegiance logic here.
   const hostiles = candidates.filter(({ actor, entity }) =>
     FactionService.isHostile(self, actor ?? entity),
   );
@@ -99,7 +119,7 @@ function selectTarget(self, ctx = {}) {
     if (!selfPos || !candidate.position) return Infinity;
     const dx = Math.abs(candidate.position.x - selfPos.x);
     const dy = Math.abs(candidate.position.y - selfPos.y);
-    return dx + dy;
+    return Math.max(dx, dy);
   };
 
   hostiles.sort((a, b) => {

@@ -2,6 +2,18 @@
 // @ts-check
 
 /**
+ * @file Monster
+ * World-entity wrapper around a combat `Actor`. This is the **only** Monster
+ * definition in the codebase; import from `src/game/monster.js` everywhere.
+ *
+ * Responsibilities:
+ *  - Maintain world position/ids for rendering & scheduling
+ *  - Proxy combat state to the underlying Actor
+ *  - Expose `getLightRadius()` so vision code can read the actor's folded mods
+ *  - Delegate turns to the AI planner via `takeTurn(ctx)`
+ */
+
+/**
  * World entity wrapper around a combat actor.
  */
 export class Monster {
