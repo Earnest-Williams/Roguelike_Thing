@@ -32,6 +32,7 @@ import {
 import { CONFIG } from "./src/config.js";
 import { createInitialState } from "./src/game/state.js";
 import { ChapterState } from "./src/game/chapter-state.js";
+import { spawnMonsters } from "./src/game/spawn.js";
 import {
   createDefaultModCache,
   createEmptyStatusDerivedMods,
@@ -4402,7 +4403,6 @@ const Game = (() => {
     simState.isReady = true;
 
     if (!gameState.__didInitialSpawns) {
-      const { spawnMonsters } = await import("./src/game/spawn.js");
       const gameCtx = {
         player,
         mobManager,
@@ -4410,7 +4410,16 @@ const Game = (() => {
         state: gameState,
         AIPlanner,
       };
-      const tags = gameState.chapter?.theme?.monsterTags ?? [];
+      const chapter = gameState.chapter;
+      const includeTags = chapter?.theme?.monsterTags ?? [];
+      const depthIndex = Number.isFinite(chapter?.depth) ? Number(chapter.depth) : 0;
+      const levelIndex = Number.isFinite(chapter?.currentLevel)
+        ? Number(chapter.currentLevel)
+        : 1;
+      const effectiveDepth = Math.max(1, depthIndex + levelIndex);
+      const base = 4;
+      const perDepth = 2;
+      const count = Math.max(3, Math.min(12, base + (effectiveDepth - 1) * perDepth));
       const rngSource = gameState.rng;
       const rng = typeof rngSource === "function"
         ? rngSource
@@ -4418,11 +4427,13 @@ const Game = (() => {
         ? () => rngSource.random()
         : Math.random;
       const spawned = spawnMonsters(gameCtx, {
-        count: 8,
-        includeTags: tags,
+        count,
+        includeTags,
         rng,
       });
-      console.log(`[SPAWN] ${spawned} mobs (tags: ${tags.join(", ") || "all"})`);
+      console.log(
+        `[SPAWN] ${spawned} mobs (tags: ${includeTags.join(", ") || "all"}, count: ${count})`,
+      );
       gameState.__didInitialSpawns = true;
     }
 
