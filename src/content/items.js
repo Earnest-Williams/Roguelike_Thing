@@ -289,3 +289,12 @@ export const ITEMS = [
   },
 ];
 
+export const BASE_ITEMS = Object.freeze(
+  ITEMS.reduce((acc, item) => {
+    if (item?.id) {
+      acc[item.id] = item;
+    }
+    return acc;
+  }, /** @type {Record<string, any>} */ (Object.create(null))),
+);
+
