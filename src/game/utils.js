@@ -65,6 +65,7 @@ export function createDefaultModCache() {
         vs: Object.create(null),
       },
     },
+    vision: { lightBonus: 0 },
   };
 }
 
