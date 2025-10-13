@@ -1582,20 +1582,28 @@ const Game = (() => {
 
   // --- ITEM TEMPLATES ---
 
+  function getPlayerLightRadius() {
+    if (player?.getLightRadius) {
+      const radius = Number(player.getLightRadius());
+      if (Number.isFinite(radius)) {
+        return Math.max(0, radius);
+      }
+    }
+    return DEFAULT_LIGHT_RADIUS;
+  }
+
   function getLightProperties() {
     const defaults = {
       radius: DEFAULT_LIGHT_RADIUS,
       color: LIGHT_CONFIG.fallbackColor,
       flickerRate: LIGHT_CONFIG.fallbackFlickerRate,
     };
-    if (
-      !player ||
-      !player.equipment ||
-      typeof player.equipment.getLightSourceProperties !== "function"
-    ) {
-      return defaults;
+    if (!player?.equipment?.getLightSourceProperties) {
+      return { ...defaults, radius: getPlayerLightRadius() };
     }
-    return player.equipment.getLightSourceProperties(defaults);
+    const props =
+      player.equipment.getLightSourceProperties(defaults) ?? defaults;
+    return { ...props, radius: getPlayerLightRadius() };
   }
 
   function refreshLightingVisuals() {
@@ -1606,7 +1614,7 @@ const Game = (() => {
 
   function computeVisibleCells(pos) {
     const key = posKey(pos);
-    const radius = player?.getLightRadius?.() ?? getLightProperties().radius;
+    const radius = getPlayerLightRadius();
     if (
       fovState.lastCache.visible &&
       fovState.lastCache.key === key &&
@@ -3428,7 +3436,7 @@ const Game = (() => {
   // records which tiles were ever seen (explorationState) and promotes nearby
   // floor cells to "frontiers" so the explorer knows where to head next.
   function updateVisionAndExploration(pos) {
-    const lightRadius = player?.getLightRadius?.() ?? getLightProperties().radius;
+    const lightRadius = getPlayerLightRadius();
     const radiusSq = lightRadius * lightRadius;
     explorationState.newlyExplored = [];
     const visibleCells = computeFieldOfView(pos, lightRadius, mapState, {
@@ -3502,7 +3510,7 @@ const Game = (() => {
   // aimless oscillation.
   function explorationScore(pos, shortTermMemory) {
     let score = 0;
-    const lightRadius = player?.getLightRadius?.() ?? getLightProperties().radius;
+    const lightRadius = getPlayerLightRadius();
     const visibleCells = computeFieldOfView(pos, lightRadius, mapState, {
       useKnownGrid: true,
     });
