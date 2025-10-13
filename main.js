@@ -3032,6 +3032,19 @@ const Game = (() => {
     }
   }
 
+  function clampPositionToGrid(grid, pos) {
+    const height = Array.isArray(grid) ? grid.length : 0;
+    const width =
+      height > 0 && Array.isArray(grid[0]) ? grid[0].length : 0;
+
+    const rawX = Number.isFinite(pos?.x) ? pos.x : 0;
+    const rawY = Number.isFinite(pos?.y) ? pos.y : 0;
+
+    const x = width > 0 ? clamp(Math.round(rawX), 0, width - 1) : 0;
+    const y = height > 0 ? clamp(Math.round(rawY), 0, height - 1) : 0;
+
+    return { x, y };
+  }
   function ensureFloorAt(grid, pos) {
     if (!grid || !pos) return;
     const rowIndex = Math.round(pos.y);
@@ -3116,12 +3129,13 @@ const Game = (() => {
     }
     // Choose start/end on far rooms
     const startRoom = allRooms[0] || null;
-    const start = startRoom?.center
+    const rawStart = startRoom?.center
       ? { x: startRoom.center.x, y: startRoom.center.y }
       : {
           x: Math.floor(mapState.width / 2),
           y: Math.floor(mapState.height / 2),
         };
+    const start = clampPositionToGrid(grid, rawStart);
     let farIdx = 0,
       farDist = -1;
     for (let i = 0; i < allRooms.length; i++) {
@@ -3132,9 +3146,10 @@ const Game = (() => {
       }
     }
     const endRoom = allRooms[farIdx] || startRoom;
-    const end = endRoom?.center
+    const rawEnd = endRoom?.center
       ? { x: endRoom.center.x, y: endRoom.center.y }
-      : start;
+      : rawStart;
+    const end = clampPositionToGrid(grid, rawEnd);
     // Force floors at start/end
     ensureFloorAt(grid, start);
     ensureFloorAt(grid, end);
@@ -3149,8 +3164,8 @@ const Game = (() => {
     );
     return {
       grid,
-      start: { x: Math.round(start.x), y: Math.round(start.y) },
-      end: { x: Math.round(end.x), y: Math.round(end.y) },
+      start,
+      end,
       furniture: furniturePlacements,
     };
   }
