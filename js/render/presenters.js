@@ -64,6 +64,14 @@ export function buildMainViewBatch({
 
   const overlayRgb = normalizeColor(overlayColor) || null;
 
+  const rawPlayerLightRadius =
+    typeof player?.getLightRadius === "function"
+      ? Number(player.getLightRadius())
+      : 0;
+  const playerLightRadius = Number.isFinite(rawPlayerLightRadius)
+    ? Math.max(0, rawPlayerLightRadius)
+    : 0;
+
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       if (!explored[y]?.[x]) continue;
@@ -97,7 +105,8 @@ export function buildMainViewBatch({
       }
 
       if (isVisible) {
-        const overlayA = overlayAlphaAt(x, y);
+        const overlayA =
+          playerLightRadius > 0 ? overlayAlphaAt(x, y) : 0;
         if (typeof overlayA === "number") {
           const clamped = Math.max(0, Math.min(1, overlayA));
           if (clamped > 0) {

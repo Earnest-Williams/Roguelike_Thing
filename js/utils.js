@@ -1,7 +1,6 @@
 import { TILE_WALL } from "./constants.js";
 
-// [Unified Implementation] Field-of-view code must query Actor/Monster.getLightRadius();
-// keep this module free of legacy light-radius helpers.
+// [Unified Implementation] No standalone light helpers; use Actor/Monster.getLightRadius().
 
 export function shuffle(array) {
   for (let i = array.length - 1; i > 0; i--) {

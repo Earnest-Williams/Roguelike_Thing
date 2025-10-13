@@ -1580,7 +1580,12 @@ const Game = (() => {
   // --- ITEM TEMPLATES ---
 
   function readPlayerLightRadius() {
-    return Math.max(0, Number(player?.getLightRadius?.() ?? 0));
+    /** [Unified Implementation] All lighting reads delegate to Actor.getLightRadius(). */
+    const radius =
+      typeof player?.getLightRadius === "function"
+        ? Number(player.getLightRadius())
+        : 0;
+    return Math.max(0, Number.isFinite(radius) ? radius : 0);
   }
 
   function getLightProperties() {
