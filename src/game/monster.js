@@ -36,6 +36,22 @@ export class Monster {
     return this.__actor?.res;
   }
 
+  set res(value) {
+    if (this.__actor) {
+      this.__actor.res = value;
+    }
+  }
+
+  get resources() {
+    return this.__actor?.resources;
+  }
+
+  set resources(value) {
+    if (this.__actor) {
+      this.__actor.resources = value;
+    }
+  }
+
   get modCache() {
     return this.__actor?.modCache;
   }
@@ -58,6 +74,15 @@ export class Monster {
 
   get statuses() {
     return this.__actor?.statuses;
+  }
+
+  set statuses(value) {
+    if (!this.__actor) return;
+    if (Array.isArray(value)) {
+      this.__actor.statuses = value;
+      return;
+    }
+    this.__actor.statuses = [];
   }
 
   get actions() {
