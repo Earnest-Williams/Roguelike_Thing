@@ -218,8 +218,11 @@ export class UIManager {
    */
   handleStatusEvent(payload) {
     if (!payload) return;
-    if (Object.prototype.hasOwnProperty.call(payload, "message")) {
-      this.setStatusMessage(payload.message ?? "", payload.priority ?? "system");
+    const hasMsg = Object.prototype.hasOwnProperty.call(payload, "msg");
+    const hasLegacy = Object.prototype.hasOwnProperty.call(payload, "message");
+    if (hasMsg || hasLegacy) {
+      const message = hasMsg ? payload.msg ?? "" : payload.message ?? "";
+      this.setStatusMessage(message, payload.priority ?? "system");
     }
     if (Object.prototype.hasOwnProperty.call(payload, "restartVisible")) {
       this.setRestartVisible(Boolean(payload.restartVisible));

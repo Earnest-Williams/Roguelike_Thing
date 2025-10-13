@@ -201,7 +201,20 @@ function renderEntry(e) {
   }
   if (e.type === EVENT.STATUS) {
     const p = e.payload;
-    return `<div>✴️ ${p.who}: ${p.id} ${p.action}${p.stacks ? ` x${p.stacks}` : ""}</div>`;
+    const info = [];
+    if (Object.prototype.hasOwnProperty.call(p, "paused")) {
+      info.push(`paused=${Boolean(p.paused)}`);
+    }
+    if (Object.prototype.hasOwnProperty.call(p, "restartVisible")) {
+      info.push(`restart=${Boolean(p.restartVisible)}`);
+    }
+    if (Object.prototype.hasOwnProperty.call(p, "speed")) {
+      info.push(`speed=${p.speed}`);
+    }
+    const suffix = info.length ? ` (${info.join(" ")})` : "";
+    const who = p.who ?? "system";
+    const msg = p.msg ?? p.message ?? "";
+    return `<div>✴️ ${who}: ${msg}${suffix}</div>`;
   }
   if (e.type === EVENT.TURN) {
     const p = e.payload;
