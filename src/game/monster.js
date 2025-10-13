@@ -140,9 +140,11 @@ export class Monster {
 
   /** Visible-light radius is defined by the Actor. */
   getLightRadius() {
-    return typeof this.__actor?.getLightRadius === "function"
-      ? this.__actor.getLightRadius()
-      : 0;
+    const actor = this.__actor;
+    if (typeof actor?.getLightRadius === "function") {
+      return actor.getLightRadius();
+    }
+    return actor?.lightRadius ?? 0;
   }
 
   onTurnStart(turn) {
