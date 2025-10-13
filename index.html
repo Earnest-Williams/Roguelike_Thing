@@ -191,6 +191,114 @@
             </div>
           </fieldset>
 
+          <fieldset
+            style="border: 1px solid #333; padding: 12px; border-radius: 8px;
+              margin-bottom: 12px;"
+          >
+            <legend style="padding: 0 6px; color: #ccc;">More knobs</legend>
+            <div
+              style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;"
+            >
+              <label>
+                Player FOV override<br />
+                <input
+                  id="cf-knob-fov"
+                  type="number"
+                  min="0"
+                  placeholder="(blank = auto)"
+                  style="width: 100%; background: #0e0e0e; color: #eee; border: 1px solid #333;
+                    border-radius: 6px; padding: 6px;"
+                />
+              </label>
+              <label>
+                Spawn min distance<br />
+                <input
+                  id="cf-knob-spawn-dist"
+                  type="number"
+                  min="0"
+                  value="6"
+                  style="width: 100%; background: #0e0e0e; color: #eee; border: 1px solid #333;
+                    border-radius: 6px; padding: 6px;"
+                />
+              </label>
+              <label>
+                Map width (optional)<br />
+                <input
+                  id="cf-knob-map-w"
+                  type="number"
+                  min="8"
+                  placeholder="(generator default)"
+                  style="width: 100%; background: #0e0e0e; color: #eee; border: 1px solid #333;
+                    border-radius: 6px; padding: 6px;"
+                />
+              </label>
+              <label>
+                Map height (optional)<br />
+                <input
+                  id="cf-knob-map-h"
+                  type="number"
+                  min="8"
+                  placeholder="(generator default)"
+                  style="width: 100%; background: #0e0e0e; color: #eee; border: 1px solid #333;
+                    border-radius: 6px; padding: 6px;"
+                />
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset
+            style="border: 1px solid #333; padding: 12px; border-radius: 8px;
+              margin-bottom: 12px;"
+          >
+            <legend style="padding: 0 6px; color: #ccc;">Arena mode</legend>
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+              <label style="display: flex; align-items: center; gap: 8px;">
+                <input id="cf-arena-enabled" type="checkbox" /> Enable Arena (single large room)
+              </label>
+              <div
+                id="cf-arena-fields"
+                style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;"
+              >
+                <label>
+                  Arena width<br />
+                  <input
+                    id="cf-arena-w"
+                    type="number"
+                    min="8"
+                    value="40"
+                    style="width: 100%; background: #0e0e0e; color: #eee; border: 1px solid #333;
+                      border-radius: 6px; padding: 6px;"
+                  />
+                </label>
+                <label>
+                  Arena height<br />
+                  <input
+                    id="cf-arena-h"
+                    type="number"
+                    min="8"
+                    value="24"
+                    style="width: 100%; background: #0e0e0e; color: #eee; border: 1px solid #333;
+                      border-radius: 6px; padding: 6px;"
+                  />
+                </label>
+                <label style="grid-column: 1 / -1;">
+                  Exact spawns (one per line, id=count)<br />
+                  <textarea
+                    id="cf-arena-spawns"
+                    rows="4"
+                    placeholder="orc=8&#10;skeleton=4"
+                    style="width: 100%; background: #0e0e0e; color: #eee; border: 1px solid #333;
+                      border-radius: 6px; padding: 6px; resize: vertical;"
+                  ></textarea>
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px;">
+                  <input id="cf-arena-suppress-exit" type="checkbox" checked />
+                  Suppress exit-seeking while hostiles remain
+                </label>
+              </div>
+            </div>
+          </fieldset>
+
           <div style="display: flex; gap: 12px; flex-wrap: wrap;">
             <button
               id="startCustomBtn"

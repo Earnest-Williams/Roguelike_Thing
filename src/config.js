@@ -117,6 +117,32 @@ export const CONFIG = {
       },
     },
   },
+  /** UI-tweakable knobs (all optional) */
+  knobs: {
+    /** Override player vision. If null, use folded Actor.getLightRadius(). */
+    playerFovOverride: null,
+    /** Manhattan distance to keep spawns away from player. */
+    spawnMinDistance: 6,
+    /** Optional map size override for generators. */
+    mapWidth: null,
+    mapHeight: null,
+  },
+  /** Game modes */
+  modes: {
+    arena: {
+      enabled: false,
+      /** Interior room size (excluding 1-tile wall border) */
+      width: 40,
+      height: 24,
+      /**
+       * Exact spawns by mob template id.
+       * Example: { "orc": 8, "skeleton": 4 }
+       */
+      spawnsById: {},
+      /** While true, path-to-exit is suppressed if any hostiles are alive. */
+      suppressExitSeekUntilClear: true,
+    },
+  },
   generator: {
     hybrid: {
       large: {
