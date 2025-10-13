@@ -1,6 +1,6 @@
 import { TILE_WALL } from "./constants.js";
 
-// [Unified Implementation] No standalone light helpers; use Actor/Monster.getLightRadius().
+// NOTE: Do not implement light helpers here. Always use Actor.getLightRadius().
 
 export function shuffle(array) {
   for (let i = array.length - 1; i > 0; i--) {
