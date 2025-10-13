@@ -2,6 +2,7 @@
 // @ts-check
 import { ACTIONS } from "../content/actions.js";
 import { FactionService } from "../game/faction-service.js";
+import { asActor } from "../combat/actor.js";
 import { hasLineOfSight } from "../../js/utils.js";
 
 /**
@@ -20,8 +21,6 @@ import { hasLineOfSight } from "../../js/utils.js";
  *
  * See also: src/game/monster.js (AI handoff) and src/game/faction-service.js.
  */
-
-const asActor = (entity) => entity?.__actor ?? entity?.actor ?? entity ?? null;
 
 const asPosition = (entity) => {
   if (!entity) return null;
@@ -83,10 +82,13 @@ function selectTarget(self, ctx = {}) {
   const seenActors = new Set([selfActor]);
   const candidates = rawEntities
     .map((entity) => ({ entity, actor: toActor(entity) }))
-    .filter(({ actor }) => actor && !seenActors.has(actor))
+    .filter(({ actor }) => actor)
     .filter(({ actor }) => {
+      if (actor === selfActor || seenActors.has(actor)) {
+        return false;
+      }
       seenActors.add(actor);
-      return actor !== selfActor;
+      return true;
     });
 
   const hostiles = candidates
