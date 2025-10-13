@@ -35,6 +35,7 @@ import { ChapterState } from "./src/game/chapter-state.js";
 import { spawnMonsters } from "./src/game/spawn.js";
 import { AIPlanner } from "./src/combat/ai-planner.js";
 import { Actor } from "./src/combat/actor.js";
+import { attachLogs } from "./src/combat/debug-log.js";
 import { foldModsFromEquipment } from "./src/combat/mod-folding.js";
 import {
   Item,
@@ -239,7 +240,8 @@ function handleDeath(gameCtx, actor) {
       sim.isPaused = true;
     }
     emit(EVENT.STATUS, {
-      message: "You died",
+      who: actor?.name ?? actor?.id ?? "player",
+      msg: "You died",
       restartVisible: true,
       paused: true,
     });
@@ -965,6 +967,7 @@ const Game = (() => {
         factions,
         affiliations,
       });
+      attachLogs(this.__actor);
 
       this.syncActorEquipment();
     }
@@ -4062,7 +4065,11 @@ const Game = (() => {
     hasPrevPlayerPos = state.hasPrevPlayerPos;
     currentEndPos = state.currentEndPos;
     initRetries = state.initRetries;
-    emit(EVENT.STATUS, { message: "AI exploring...", restartVisible: false });
+    emit(EVENT.STATUS, {
+      who: "system",
+      msg: "AI exploring...",
+      restartVisible: false,
+    });
     player.x = startPos.x;
     player.y = startPos.y;
     player.nextActAt = 0;
@@ -4267,7 +4274,8 @@ const Game = (() => {
         simState.timeout = null;
         simState.loopFn = null;
         emit(EVENT.STATUS, {
-          message: "AI is trapped!",
+          who: "system",
+          msg: "AI is trapped!",
           restartVisible: true,
         });
         return { ended: true };
@@ -4366,7 +4374,11 @@ const Game = (() => {
           simState.timeout = null;
           simState.loopFn = null;
           Sound.playDoor();
-          emit(EVENT.STATUS, { message: "Exit found!", restartVisible: true });
+          emit(EVENT.STATUS, {
+            who: "system",
+            msg: "Exit found!",
+            restartVisible: true,
+          });
           // When wiring multi-floor progression, advance the chapter here:
           // state.chapter?.nextLevel();
           renderScene();
@@ -4404,7 +4416,11 @@ const Game = (() => {
   }
   function togglePause() {
     simState.isPaused = !simState.isPaused;
-    emit(EVENT.STATUS, { paused: simState.isPaused });
+    emit(EVENT.STATUS, {
+      who: "system",
+      msg: simState.isPaused ? "Simulation paused" : "Simulation resumed",
+      paused: simState.isPaused,
+    });
     if (!simState.isPaused && typeof simState.loopFn === "function") {
       simState.timeout = setTimeout(
         simState.loopFn,
@@ -4417,9 +4433,10 @@ const Game = (() => {
     simState.loopFn = null;
     simState.isPaused = false;
     emit(EVENT.STATUS, {
+      who: "system",
+      msg: "Generating dungeon...",
       paused: false,
       restartVisible: false,
-      message: "Generating dungeon...",
     });
     currentEndPos = null;
     gameState.currentEndPos = currentEndPos;
@@ -4532,7 +4549,11 @@ const Game = (() => {
   }
 
   function generateAndValidateDungeon() {
-    emit(EVENT.STATUS, { message: "Generating dungeon...", restartVisible: false });
+    emit(EVENT.STATUS, {
+      who: "system",
+      msg: "Generating dungeon...",
+      restartVisible: false,
+    });
     const dungeonData = generateDungeon();
     if (!dungeonData) {
       return { success: false, reason: "generation" };
@@ -4561,7 +4582,8 @@ const Game = (() => {
   function handleDungeonFailure(reason) {
     if (reason === "generation") {
       emit(EVENT.STATUS, {
-        message: "Map generation failed, retrying...",
+        who: "system",
+        msg: "Map generation failed, retrying...",
         restartVisible: false,
       });
       initRetries++;
@@ -4569,7 +4591,8 @@ const Game = (() => {
       setTimeout(startNewSimulation, 100);
     } else if (reason === "connectivity") {
       emit(EVENT.STATUS, {
-        message: "Map is not fully connected, regenerating...",
+        who: "system",
+        msg: "Map is not fully connected, regenerating...",
         restartVisible: false,
       });
       initRetries++;
@@ -4687,7 +4710,8 @@ const Game = (() => {
   function startNewSimulation() {
     if (initRetries > MAX_INIT_RETRIES) {
       emit(EVENT.STATUS, {
-        message: "Fatal Error: Map generation failed repeatedly.",
+        who: "system",
+        msg: "Fatal Error: Map generation failed repeatedly.",
         restartVisible: true,
       });
       console.error("Map generation failed after multiple retries.");
@@ -4702,7 +4726,8 @@ const Game = (() => {
     const chapter = gameState.chapter;
     if (chapter) {
       emit(EVENT.STATUS, {
-        message: `Chapter Theme: ${chapter.theme.name}`,
+        who: "system",
+        msg: `Chapter Theme: ${chapter.theme.name}`,
         restartVisible: false,
       });
     }
@@ -4735,11 +4760,19 @@ const Game = (() => {
   function bootstrap() {
     const ticksPerSecond = CONFIG.ai.ticksPerSecond;
     speedSlider.value = ticksPerSecond;
-    emit(EVENT.STATUS, { speed: ticksPerSecond });
+    emit(EVENT.STATUS, {
+      who: "system",
+      msg: `Speed set to ${ticksPerSecond} tps`,
+      speed: ticksPerSecond,
+    });
     restartBtn.addEventListener("click", startNewSimulation);
     speedSlider.addEventListener("input", (e) => {
       simState.speed = parseInt(e.target.value, 10);
-      emit(EVENT.STATUS, { speed: simState.speed });
+      emit(EVENT.STATUS, {
+        who: "system",
+        msg: `Speed set to ${simState.speed} tps`,
+        speed: simState.speed,
+      });
     });
     window.addEventListener("resize", handleResize);
     window.addEventListener("keydown", (e) => {
