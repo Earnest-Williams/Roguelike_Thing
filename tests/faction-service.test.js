@@ -4,7 +4,11 @@ import { Actor } from "../src/combat/actor.js";
 import { MOB_TEMPLATES } from "../src/content/mobs.js";
 import { FactionService } from "../src/game/faction-service.js";
 import { Monster } from "../src/game/monster.js";
-import { foldInnatesIntoModCache, foldModsFromEquipment } from "../src/combat/mod-folding.js";
+import {
+  foldInnatesIntoModCache,
+  foldModsFromEquipment,
+  rebuildModCache,
+} from "../src/combat/mod-folding.js";
 
 function makeActor({ id, factions, affiliations }) {
   return new Actor({
@@ -103,6 +107,34 @@ function makeActor({ id, factions, affiliations }) {
     orc.getLightRadius() >= 1,
     true,
     "orc monsters should expose innate dark vision through getLightRadius",
+  );
+})();
+
+(function testRebuildModCachePreservesVisionBonus() {
+  const template = MOB_TEMPLATES.orc;
+  const actor = new Actor({
+    id: template.id,
+    name: template.name,
+    baseStats: template.baseStats,
+    factions: template.factions,
+    affiliations: template.affiliations,
+  });
+  Object.defineProperty(actor, "__template", {
+    value: template,
+    enumerable: false,
+    configurable: true,
+    writable: false,
+  });
+
+  foldModsFromEquipment(actor);
+  foldInnatesIntoModCache(actor);
+  assert.equal(actor.modCache?.vision?.lightBonus, 1, "innate dark vision should apply");
+
+  rebuildModCache(actor);
+  assert.equal(
+    actor.modCache?.vision?.lightBonus,
+    1,
+    "rebuilding the mod cache should preserve innate vision bonuses",
   );
 })();
 
