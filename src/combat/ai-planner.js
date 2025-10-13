@@ -60,22 +60,16 @@ const listMobs = (mobManager) => {
 function selectTarget(self, ctx = {}) {
   /** @type {(e: any) => import("./actor.js").Actor | null} */
   const toActor = ctx.toActor ?? asActor;
-  // unwrap both self wrapper and actor to a canonical actor reference
   const selfActor = toActor(self) ?? self;
   const selfMob = ctx.selfMob ?? selfActor;
 
-  const seen = new Set();
-  /** @type {{ entity: any, actor: any, position: { x: number, y: number } | null }[]} */
-  const candidates = [];
-
+  /** @type {any[]} */
+  const rawEntities = [];
+  const seenEntities = new Set();
   const pushEntity = (entity) => {
-    if (!entity || seen.has(entity)) return;
-    seen.add(entity);
-    const actor = toActor(entity);
-    if (!actor || actor === selfActor) return;
-    if (entity === selfMob) return;
-    const position = asPosition(entity) ?? asPosition(actor);
-    candidates.push({ entity, actor, position });
+    if (!entity || seenEntities.has(entity)) return;
+    seenEntities.add(entity);
+    rawEntities.push(entity);
   };
 
   pushEntity(ctx.player);
@@ -86,10 +80,22 @@ function selectTarget(self, ctx = {}) {
     pushEntity(ctx.target);
   }
 
-  // Centralized hostility decision; do not replicate allegiance logic here.
-  const hostiles = candidates.filter(({ actor, entity }) =>
-    FactionService.isHostile(self, actor ?? entity),
-  );
+  const seenActors = new Set([selfActor]);
+  const candidates = rawEntities
+    .map((entity) => ({ entity, actor: toActor(entity) }))
+    .filter(({ actor }) => actor && !seenActors.has(actor))
+    .filter(({ actor }) => {
+      seenActors.add(actor);
+      return actor !== selfActor;
+    });
+
+  const hostiles = candidates
+    .map((entry) => ({
+      ...entry,
+      position: asPosition(entry.entity) ?? asPosition(entry.actor),
+    }))
+    .filter(({ actor }) => FactionService.isHostile(selfActor, actor));
+
   if (hostiles.length === 0) {
     return null;
   }
