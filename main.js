@@ -4410,30 +4410,14 @@ const Game = (() => {
         state: gameState,
         AIPlanner,
       };
-      const chapter = gameState.chapter;
-      const includeTags = chapter?.theme?.monsterTags ?? [];
-      const depthIndex = Number.isFinite(chapter?.depth) ? Number(chapter.depth) : 0;
-      const levelIndex = Number.isFinite(chapter?.currentLevel)
-        ? Number(chapter.currentLevel)
-        : 1;
-      const effectiveDepth = Math.max(1, depthIndex + levelIndex);
-      const base = 4;
-      const perDepth = 2;
-      const count = Math.max(3, Math.min(12, base + (effectiveDepth - 1) * perDepth));
-      const rngSource = gameState.rng;
-      const rng = typeof rngSource === "function"
-        ? rngSource
-        : typeof rngSource?.random === "function"
-        ? () => rngSource.random()
-        : Math.random;
-      const spawned = spawnMonsters(gameCtx, {
-        count,
-        includeTags,
-        rng,
-      });
-      console.log(
-        `[SPAWN] ${spawned} mobs (tags: ${includeTags.join(", ") || "all"}, count: ${count})`,
-      );
+      const spawned = spawnInitialMonsters(gameCtx);
+      if (CONFIG?.debug?.logSpawns !== false) {
+        const chapter = gameState.chapter;
+        const tags = chapter?.theme?.monsterTags ?? [];
+        console.log(
+          `[SPAWN] ${spawned} mobs (tags: ${tags.join(", ") || "all"})`,
+        );
+      }
       gameState.__didInitialSpawns = true;
     }
 
@@ -4491,6 +4475,28 @@ const Game = (() => {
 
       initializeSimulation(result.dungeonData);
     }, 50);
+  }
+
+  function spawnInitialMonsters(gameCtx) {
+    const chapter = gameState.chapter ?? null;
+    const includeTags = chapter?.theme?.monsterTags ?? [];
+    const depthIndex = Number.isFinite(chapter?.depth) ? Number(chapter.depth) : 0;
+    const levelIndex = Number.isFinite(chapter?.currentLevel)
+      ? Number(chapter.currentLevel)
+      : 1;
+    const effectiveDepth = Math.max(1, depthIndex + levelIndex);
+    const base = 4;
+    const perDepth = 2;
+    const count = Math.max(3, Math.min(12, base + (effectiveDepth - 1) * perDepth));
+    const rngSource = gameState.rng;
+    const rng = typeof rngSource === "function"
+      ? rngSource
+      : typeof rngSource?.next === "function"
+      ? () => rngSource.next()
+      : typeof rngSource?.random === "function"
+      ? () => rngSource.random()
+      : Math.random;
+    return spawnMonsters(gameCtx, { includeTags, count, rng });
   }
   function bootstrap() {
     const ticksPerSecond = CONFIG.ai.ticksPerSecond;
