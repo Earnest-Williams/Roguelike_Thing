@@ -1,6 +1,7 @@
 // src/combat/ai-planner.js
 // @ts-check
 import { ACTIONS } from "../content/actions.js";
+import { FactionService } from "../game/faction-service.js";
 
 /**
  * Lightweight context passed to actions.
@@ -20,13 +21,34 @@ export class AIPlanner {
    */
   static takeTurn(actor, context = {}) {
     if (!actor) return;
+    const selfMob = context.selfMob || actor;
+
     const actionIds = Array.isArray(actor.actions) && actor.actions.length
       ? actor.actions
       : AIPlanner.defaultActions(actor);
 
-    const target = context.target ?? context.player ?? null;
-    const distance = AIPlanner.distanceBetween(actor, target, context);
-    const scope = { actor, target, context, distance };
+    const allEntities = [context.player, ...(context.mobManager?.list || [])]
+      .filter(Boolean);
+    const candidatePairs = allEntities
+      .filter((entity) => entity && entity !== selfMob)
+      .map((entity) => ({ entity, actor: entity.__actor || entity.actor || entity }));
+
+    const hostilePairs = candidatePairs.filter(({ actor: other }) =>
+      FactionService.isHostile(actor, other),
+    );
+
+    const chosen = hostilePairs[0] || null;
+    const fallbackTarget = context.target ?? context.player ?? null;
+    const targetEntity = chosen?.entity ?? fallbackTarget;
+    const targetActor = chosen?.actor ?? targetEntity?.__actor ?? targetEntity;
+    const distance = AIPlanner.distanceBetween(selfMob, targetEntity, context);
+    const scope = {
+      actor,
+      target: targetEntity,
+      targetActor,
+      context,
+      distance,
+    };
 
     let best = null;
 
@@ -68,12 +90,12 @@ export class AIPlanner {
    * @param {any} target
    * @param {any} context
    */
-  static distanceBetween(actor, target, context) {
+  static distanceBetween(selfMob, target, context) {
     if (typeof context?.distance === "number") {
       return context.distance;
     }
-    const ax = actor?.x;
-    const ay = actor?.y;
+    const ax = selfMob?.x;
+    const ay = selfMob?.y;
     const tx = target?.x;
     const ty = target?.y;
     if ([ax, ay, tx, ty].every((v) => typeof v === "number")) {

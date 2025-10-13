@@ -134,6 +134,8 @@ import { rebuildDerived } from "./status.js";
  * @property {string} id
  * @property {string} [name]
  * @property {BaseStats} baseStats
+ * @property {string[]} [factions]
+ * @property {string[]} [affiliations]
  * @property {Partial<Record<keyof typeof SLOT, Item|ItemStack>>} [equipment]
  * @property {string[]} [actions]
  */
@@ -149,25 +151,39 @@ export class Actor {
     this.id = init.id;
     this.name = init.name ?? init.id;
 
+    /** @type {string[]} */
+    this.factions = Array.isArray(init.factions) && init.factions.length
+      ? [...init.factions]
+      : ["unaligned"];
+    if (this.factions.includes("unaligned") && this.factions.length > 1) {
+      this.factions = ["unaligned"];
+    }
+
+    /** @type {string[]} */
+    this.affiliations = Array.isArray(init.affiliations)
+      ? [...init.affiliations]
+      : [];
+
     const baseStats = init.baseStats ?? Object.create(null);
     /** @type {BaseStats} */
     this.base = {
-      str: Number.isFinite(baseStats.str) ? Number(baseStats.str) : 0,
-      dex: Number.isFinite(baseStats.dex) ? Number(baseStats.dex) : 0,
-      int: Number.isFinite(baseStats.int) ? Number(baseStats.int) : 0,
-      vit: Number.isFinite(baseStats.vit) ? Number(baseStats.vit) : 0,
-      con: Number.isFinite(baseStats.con) ? Number(baseStats.con) : 0,
-      will: Number.isFinite(baseStats.will) ? Number(baseStats.will) : 0,
-      luck: Number.isFinite(baseStats.luck) ? Number(baseStats.luck) : 0,
-      maxHP: Number.isFinite(baseStats.maxHP) ? Number(baseStats.maxHP) : 0,
+      str: Number.isFinite(baseStats.str) ? Number(baseStats.str) : 5,
+      dex: Number.isFinite(baseStats.dex) ? Number(baseStats.dex) : 5,
+      int: Number.isFinite(baseStats.int) ? Number(baseStats.int) : 5,
+      vit: Number.isFinite(baseStats.vit) ? Number(baseStats.vit) : 5,
+      con: Number.isFinite(baseStats.con) ? Number(baseStats.con) : 5,
+      will: Number.isFinite(baseStats.will) ? Number(baseStats.will) : 5,
+      luck: Number.isFinite(baseStats.luck) ? Number(baseStats.luck) : 5,
+      maxHP: Number.isFinite(baseStats.maxHP) ? Number(baseStats.maxHP) : 10,
       maxStamina: Number.isFinite(baseStats.maxStamina)
         ? Number(baseStats.maxStamina)
-        : 0,
+        : 10,
       maxMana: Number.isFinite(baseStats.maxMana) ? Number(baseStats.maxMana) : 0,
       baseSpeed: Number.isFinite(baseStats.baseSpeed)
         ? Number(baseStats.baseSpeed)
         : BASE_SPEED_MULTIPLIER,
     };
+    this.baseStats = this.base;
 
     /** @type {Partial<Record<string, Item|ItemStack>>} */
     this.equipment = {};
@@ -277,6 +293,7 @@ export class Actor {
         onHitBias: Object.create(null),
         defenseBias: Object.create(null),
       },
+      vision: { lightBonus: 0 },
     };
 
     // Track per-type attunement runtime state (rules + live stacks).
@@ -408,6 +425,27 @@ export class Actor {
     const temporal = this.modCache?.temporal?.cooldownMult ?? 1;
     const derived = this.statusDerived?.cooldownMult ?? 1;
     return Math.max(MIN_TOTAL_COOLDOWN_MULTIPLIER, temporal * derived);
+  }
+
+  _sumEquipmentLightRadius() {
+    const slots = this.equipment?.slots || this.equipment || {};
+    let sum = 0;
+    for (const key of Object.keys(slots)) {
+      const entry = slots[key];
+      if (entry && typeof entry.lightRadius === "number") {
+        sum += entry.lightRadius;
+      }
+    }
+    return sum;
+  }
+
+  getLightRadius() {
+    const gearRadius =
+      typeof this.equipment?.getLightRadius === "function"
+        ? this.equipment.getLightRadius()
+        : this._sumEquipmentLightRadius();
+    const innateBonus = this.modCache?.vision?.lightBonus || 0;
+    return Math.max(0, (gearRadius || 0) + innateBonus);
   }
 
   /**
