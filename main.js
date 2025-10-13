@@ -1606,9 +1606,7 @@ const Game = (() => {
 
   function computeVisibleCells(pos) {
     const key = posKey(pos);
-    const radius = typeof player?.getLightRadius === "function"
-      ? player.getLightRadius()
-      : getLightProperties().radius;
+    const radius = player?.getLightRadius?.() ?? getLightProperties().radius;
     if (
       fovState.lastCache.visible &&
       fovState.lastCache.key === key &&
@@ -3430,9 +3428,7 @@ const Game = (() => {
   // records which tiles were ever seen (explorationState) and promotes nearby
   // floor cells to "frontiers" so the explorer knows where to head next.
   function updateVisionAndExploration(pos) {
-    const lightRadius = typeof player?.getLightRadius === "function"
-      ? player.getLightRadius()
-      : getLightProperties().radius;
+    const lightRadius = player?.getLightRadius?.() ?? getLightProperties().radius;
     const radiusSq = lightRadius * lightRadius;
     explorationState.newlyExplored = [];
     const visibleCells = computeFieldOfView(pos, lightRadius, mapState, {
@@ -3506,9 +3502,7 @@ const Game = (() => {
   // aimless oscillation.
   function explorationScore(pos, shortTermMemory) {
     let score = 0;
-    const lightRadius = typeof player?.getLightRadius === "function"
-      ? player.getLightRadius()
-      : getLightProperties().radius;
+    const lightRadius = player?.getLightRadius?.() ?? getLightProperties().radius;
     const visibleCells = computeFieldOfView(pos, lightRadius, mapState, {
       useKnownGrid: true,
     });
