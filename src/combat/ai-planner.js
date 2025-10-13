@@ -2,6 +2,7 @@
 // @ts-check
 import { ACTIONS } from "../content/actions.js";
 import { FactionService } from "../game/faction-service.js";
+// All entity targeting must normalize to Actor and exclude self before hostility checks.
 import { asActor } from "../combat/actor.js";
 import { hasLineOfSight } from "../../js/utils.js";
 
