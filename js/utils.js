@@ -21,7 +21,14 @@ export function posKeyFromCoords(x, y) {
 export const randChoice = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
 export function clamp(value, min, max) {
-  return Math.max(min, Math.min(max, value));
+  let lo = min;
+  let hi = max;
+
+  if (Number.isFinite(lo) && Number.isFinite(hi) && lo > hi) {
+    [lo, hi] = [hi, lo];
+  }
+
+  return Math.max(lo, Math.min(hi, value));
 }
 
 export const clamp01Normalized = (value) => {
