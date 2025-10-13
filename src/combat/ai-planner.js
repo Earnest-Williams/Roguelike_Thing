@@ -2,8 +2,123 @@
 // @ts-check
 import { ACTIONS } from "../content/actions.js";
 import { FactionService } from "../game/faction-service.js";
+import { hasLineOfSight } from "../../js/utils.js";
 
 const asActor = (entity) => entity?.__actor ?? entity?.actor ?? entity ?? null;
+
+const asPosition = (entity) => {
+  if (!entity) return null;
+  if (typeof entity.x === "number" && typeof entity.y === "number") {
+    return { x: entity.x, y: entity.y };
+  }
+  const pos = typeof entity.pos === "function" ? entity.pos() : entity.pos;
+  if (pos && typeof pos.x === "number" && typeof pos.y === "number") {
+    return { x: pos.x, y: pos.y };
+  }
+  if (typeof entity.getPosition === "function") {
+    const result = entity.getPosition();
+    if (result && typeof result.x === "number" && typeof result.y === "number") {
+      return { x: result.x, y: result.y };
+    }
+  }
+  return null;
+};
+
+const listMobs = (mobManager) => {
+  if (!mobManager) return [];
+  if (typeof mobManager.list === "function") {
+    try {
+      const result = mobManager.list();
+      return Array.isArray(result) ? result : [];
+    } catch (err) {
+      console.warn("mobManager.list() threw during AI planning", err);
+      return [];
+    }
+  }
+  if (Array.isArray(mobManager.list)) return mobManager.list;
+  if (Array.isArray(mobManager)) return mobManager;
+  return [];
+};
+
+function selectTarget(self, ctx = {}) {
+  const toActor = ctx.toActor ?? asActor;
+  const selfActor = toActor(self) ?? self;
+  const selfMob = ctx.selfMob ?? selfActor;
+
+  const seen = new Set();
+  /** @type {{ entity: any, actor: any, position: { x: number, y: number } | null }[]} */
+  const candidates = [];
+
+  const pushEntity = (entity) => {
+    if (!entity || seen.has(entity)) return;
+    seen.add(entity);
+    const actor = toActor(entity);
+    if (!actor || actor === selfActor) return;
+    if (entity === selfMob) return;
+    const position = asPosition(entity) ?? asPosition(actor);
+    candidates.push({ entity, actor, position });
+  };
+
+  pushEntity(ctx.player);
+  for (const mob of listMobs(ctx.mobManager)) {
+    pushEntity(mob);
+  }
+  if (ctx.target) {
+    pushEntity(ctx.target);
+  }
+
+  const hostiles = candidates.filter(({ actor }) =>
+    FactionService.isHostile(selfActor, actor),
+  );
+  if (hostiles.length === 0) {
+    return null;
+  }
+
+  const maze = ctx.maze ?? ctx.grid ?? null;
+  const selfPos = asPosition(selfMob) ?? asPosition(selfActor);
+  const rngSource = ctx.rng;
+  const rng = typeof rngSource === "function"
+    ? rngSource
+    : typeof rngSource?.next === "function"
+    ? () => rngSource.next()
+    : typeof rngSource?.random === "function"
+    ? () => rngSource.random()
+    : Math.random;
+
+  const losScore = (candidate) => {
+    if (!maze || !selfPos || !candidate.position) return 0;
+    try {
+      return hasLineOfSight(maze, selfPos, candidate.position) ? 0 : 1;
+    } catch (err) {
+      console.warn("LOS check failed during AI planning", err);
+      return 0;
+    }
+  };
+
+  const distScore = (candidate) => {
+    if (!selfPos || !candidate.position) return Infinity;
+    const dx = Math.abs(candidate.position.x - selfPos.x);
+    const dy = Math.abs(candidate.position.y - selfPos.y);
+    return dx + dy;
+  };
+
+  hostiles.sort((a, b) => {
+    const losA = losScore(a);
+    const losB = losScore(b);
+    if (losA !== losB) return losA - losB;
+    const dA = distScore(a);
+    const dB = distScore(b);
+    if (Number.isFinite(dA) && Number.isFinite(dB) && dA !== dB) {
+      return dA - dB;
+    }
+    const roll = rng() - 0.5;
+    if (roll < 0) return -1;
+    if (roll > 0) return 1;
+    return 0;
+  });
+
+  return hostiles[0] ?? null;
+}
 
 export const AIPlanner = {
   /**
@@ -19,21 +134,10 @@ export const AIPlanner = {
       ? actor.actions
       : AIPlanner.defaultActions(actor);
 
-    const allEntities = [context.player, ...(context.mobManager?.list || [])]
-      .filter(Boolean);
-
-    const candidates = allEntities
-      .map((entity) => ({ entity, actor: asActor(entity) }))
-      .filter(({ actor: other }) => other && other !== selfMob);
-
-    const enemies = candidates.filter(({ actor: other }) =>
-      FactionService.isHostile(actor, other),
-    );
-
-    const chosen = enemies[0] || null;
+    const selection = selectTarget(actor, { ...context, selfMob });
     const fallbackTarget = context.target ?? context.player ?? null;
-    const targetEntity = chosen?.entity ?? fallbackTarget;
-    const targetActor = chosen?.actor ?? asActor(targetEntity);
+    const targetEntity = selection?.entity ?? fallbackTarget;
+    const targetActor = selection?.actor ?? asActor(targetEntity);
     const distance = AIPlanner.distanceBetween(selfMob, targetEntity, context);
     const scope = {
       actor,
