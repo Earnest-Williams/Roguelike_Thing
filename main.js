@@ -4519,10 +4519,10 @@ const Game = (() => {
 
     if (!gameState.__didInitialSpawns) {
       /**
-       * Use the central spawner which:
-       *  - Builds weighted tables from MOB_TEMPLATES and theme tags
-       *  - Picks open tiles away from the player
-       *  - Creates Monsters via factories (folding mods correctly)
+       * [Thematic Spawning]
+       * Perform a one-time initial spawn using chapter theme tags.
+       * This block is idempotent via `__didInitialSpawns` on game state,
+       * so reloads or repeated init calls do not duplicate mobs.
        */
       const gameCtx = {
         player,
@@ -4531,18 +4531,24 @@ const Game = (() => {
         state: gameState,
         AIPlanner,
       };
-      const chapter = gameState.chapter;
-      const tags = chapter?.theme?.monsterTags ?? [];
-      const count = 8;
-      const includeTags = tags;
-      const rng = gameState.rng;
-      const spawned = spawnMonsters(gameCtx, { count, includeTags, rng });
-      if (CONFIG?.debug?.logSpawns !== false) {
+      if (!gameCtx.state.__didInitialSpawns) {
+        const tags = Array.isArray(gameCtx.state?.chapter?.theme?.monsterTags)
+          ? gameCtx.state.chapter.theme.monsterTags
+          : [];
+        const rng = gameCtx.state?.rng || Math.random;
+        const count = Number.isFinite(gameCtx.state?.config?.initialSpawnCount)
+          ? Math.max(0, Math.floor(gameCtx.state.config.initialSpawnCount))
+          : 8;
+        const spawned = spawnMonsters(gameCtx, {
+          count,
+          includeTags: tags,
+          rng,
+        });
         console.log(
-          `[SPAWN] ${spawned} mobs (tags: ${tags.join(", ") || "all"})`,
+          `[spawn] spawned=${spawned} tags=${tags.join(",") || "all"}`,
         );
+        gameCtx.state.__didInitialSpawns = true;
       }
-      gameState.__didInitialSpawns = true;
     }
 
     setTimeout(() => simulate(gameState, player.startPos, endPos), 500);
