@@ -2,6 +2,7 @@ import { strict as assert } from "node:assert";
 
 import { TILE_FLOOR } from "../js/constants.js";
 import { buildSpawnWeights, spawnMonsters } from "../src/game/spawn.js";
+import { Monster } from "../src/game/monster.js";
 
 function sequenceRng(values) {
   let index = 0;
@@ -47,6 +48,7 @@ class StubMobManager {
   assert.equal(spawned, 2, "expected two mobs to spawn");
   assert.equal(mobManager.list.length, 2, "mob manager should track spawned mobs");
   for (const mob of mobManager.list) {
+    assert(mob instanceof Monster, "spawned mobs should be Monster instances");
     assert(mob?.actor, "spawned entities should expose their actor");
     assert.equal(mob.actor.id, "orc", "spawned mob should match requested template");
     assert(Number.isInteger(mob.x) && Number.isInteger(mob.y), "spawned mobs should have integer coordinates");
