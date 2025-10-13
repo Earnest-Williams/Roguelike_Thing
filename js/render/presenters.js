@@ -6,6 +6,9 @@
 import { TILE_WALL } from "../constants.js";
 import { colorStringToRgba as toRgba } from "../utils.js";
 
+// [Unified Implementation] Lighting overlays are driven by Actor.getLightRadius();
+// presentation layers should only consume the computed overlays provided upstream.
+
 /**
  * Convert state into renderable tile visuals for the main map.
  * @param {Object} params

@@ -1584,7 +1584,7 @@ const Game = (() => {
   // --- ITEM TEMPLATES ---
 
   function getLightProperties() {
-    const radius = Math.max(0, player?.getLightRadius?.() ?? 0);
+    const radius = Math.max(0, Number(player?.getLightRadius?.() ?? 0));
     const defaults = {
       radius,
       color: LIGHT_CONFIG.fallbackColor,
@@ -1610,7 +1610,7 @@ const Game = (() => {
    */
   function computeVisibleCells(pos) {
     const key = posKey(pos);
-    const radius = Math.max(0, player?.getLightRadius?.() ?? 0);
+    const radius = Math.max(0, Number(player?.getLightRadius?.() ?? 0));
     if (
       fovState.lastCache.visible &&
       fovState.lastCache.key === key &&
@@ -3433,7 +3433,7 @@ const Game = (() => {
   // floor cells to "frontiers" so the explorer knows where to head next.
   // Uses getLightRadius() directly; removes stale helper logic.
   function updateVisionAndExploration(pos) {
-    const lightRadius = Math.max(0, player?.getLightRadius?.() ?? 0);
+    const lightRadius = Math.max(0, Number(player?.getLightRadius?.() ?? 0));
     const radiusSq = lightRadius * lightRadius;
     explorationState.newlyExplored = [];
     const visibleCells = computeFieldOfView(pos, lightRadius, mapState, {
@@ -3507,7 +3507,7 @@ const Game = (() => {
   // aimless oscillation.
   function explorationScore(pos, shortTermMemory) {
     let score = 0;
-    const lightRadius = Math.max(0, player?.getLightRadius?.() ?? 0);
+    const lightRadius = Math.max(0, Number(player?.getLightRadius?.() ?? 0));
     const visibleCells = computeFieldOfView(pos, lightRadius, mapState, {
       useKnownGrid: true,
     });
