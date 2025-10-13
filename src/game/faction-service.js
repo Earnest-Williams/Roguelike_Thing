@@ -14,16 +14,17 @@ export const FactionService = {
   isAllied(a, b) {
     if (!a || !b) return false;
 
-    const actorA = Array.isArray(a.factions) ? a : a.__actor || a.actor || a;
-    const actorB = Array.isArray(b.factions) ? b : b.__actor || b.actor || b;
+    const actorA = resolveActor(a);
+    const actorB = resolveActor(b);
+    if (!actorA || !actorB) return false;
 
     const A = new Set(actorA.factions || []);
     const B = new Set(actorB.factions || []);
 
     if (A.has("unaligned") || B.has("unaligned")) return false;
 
-    for (const f of A) {
-      if (B.has(f)) return true;
+    for (const faction of A) {
+      if (B.has(faction)) return true;
     }
 
     const affiliationsA = new Set(actorA.affiliations || []);
@@ -45,4 +46,25 @@ export const FactionService = {
     return !this.isAllied(a, b);
   },
 };
+
+/**
+ * Normalise incoming entities to an Actor-like shape by unwrapping common wrappers.
+ * @param {any} entity
+ * @returns {import('../combat/actor.js').Actor|null}
+ */
+function resolveActor(entity) {
+  if (!entity) return null;
+
+  if (entity.__actor && entity.__actor !== entity) {
+    return resolveActor(entity.__actor);
+  }
+
+  if (entity.actor && entity.actor !== entity) {
+    return resolveActor(entity.actor);
+  }
+
+  if (Array.isArray(entity.factions)) return entity;
+
+  return null;
+}
 
