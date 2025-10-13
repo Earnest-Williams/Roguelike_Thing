@@ -16,8 +16,6 @@ export function createLightOverlayContext(player, lightConfig = {}, getNow = def
   const radius =
     typeof player?.getLightRadius === "function"
       ? Math.max(0, player.getLightRadius())
-      : typeof player?.lightRadius === "function"
-      ? Math.max(0, player.lightRadius())
       : 0;
   const rawRate =
     typeof player?.equipment?.getLightFlickerRate === "function"
