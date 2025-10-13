@@ -4403,12 +4403,12 @@ const Game = (() => {
        *  - Picks open tiles away from the player
        *  - Creates Monsters via factories (folding mods correctly)
        */
+      const gameCtx = { maze: mapState.grid, mobManager, player };
       const tags = gameState.chapter?.theme?.monsterTags ?? [];
+      const count = 8;
+      const includeTags = tags;
       const rng = gameState.rng;
-      const spawned = spawnMonsters(
-        { maze: mapState.grid, mobManager, player },
-        { count: 8, includeTags: tags, rng },
-      );
+      const spawned = spawnMonsters(gameCtx, { count, includeTags, rng });
       if (CONFIG?.debug?.logSpawns !== false) {
         console.log(
           `[SPAWN] ${spawned} mobs (tags: ${tags.join(", ") || "all"})`,
