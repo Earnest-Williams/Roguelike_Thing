@@ -5,7 +5,8 @@ import { MOB_TEMPLATES } from "../content/mobs.js";
 import { SLOT } from "../../js/constants.js";
 import { makeItem, registerItem, upsertItem } from "../../js/item-system.js";
 import { Actor } from "../combat/actor.js";
-import { foldModsFromEquipment } from "../combat/mod-folding.js";
+import { foldInnatesIntoModCache, foldModsFromEquipment } from "../combat/mod-folding.js";
+import { Monster } from "../game/monster.js";
 
 // One-time registration (idempotent safe-guard)
 let _registered = false;
@@ -69,14 +70,36 @@ export function createActorFromTemplate(tid) {
     baseStats: t.baseStats,
     equipment,
     actions: Array.isArray(t.actions) ? t.actions : undefined,
+    factions: t.factions,
+    affiliations: t.affiliations,
   });
-  // merge innate payloads (affinities/resists/brands) by pretending they are “items” in a virtual slot
-  if (t.innate) {
-    const pseudo = { id: `${t.id}#innate`, ...t.innate };
-    a.equipment["Innate"] = pseudo;
-  }
+
+  Object.defineProperty(a, "__template", {
+    value: t,
+    enumerable: false,
+    configurable: true,
+    writable: false,
+  });
+
   foldModsFromEquipment(a);
+  foldInnatesIntoModCache(a);
   return a;
+}
+
+/**
+ * Create a world mob instance from a template id.
+ * @param {string} tid
+ */
+export function createMobFromTemplate(tid) {
+  const template = MOB_TEMPLATES[tid];
+  if (!template) throw new Error("Unknown mob template: " + tid);
+  const actor = createActorFromTemplate(tid);
+  return new Monster({
+    actor,
+    glyph: template.glyph ?? "?",
+    color: template.color ?? "#fff",
+    baseDelay: template.baseDelay ?? 1,
+  });
 }
 
 /**

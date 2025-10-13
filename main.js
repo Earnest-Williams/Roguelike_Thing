@@ -37,6 +37,7 @@ import {
   createDefaultModCache,
   createEmptyStatusDerivedMods,
 } from "./src/game/utils.js";
+import { AIPlanner } from "./src/combat/ai-planner.js";
 import {
   Item,
   ItemStack,
@@ -825,6 +826,15 @@ const Game = (() => {
       this.nextActAt = o.nextActAt ?? 0;
       this.glyph = o.glyph ?? "?";
       this.color = o.color ?? "#fff";
+      this.factions = Array.isArray(o.factions) && o.factions.length
+        ? [...o.factions]
+        : ["unaligned"];
+      if (this.factions.includes("unaligned") && this.factions.length > 1) {
+        this.factions = ["unaligned"];
+      }
+      this.affiliations = Array.isArray(o.affiliations)
+        ? [...o.affiliations]
+        : [];
       this.equipment = new Equipment();
       this.inventory = new Inventory(DEFAULT_INVENTORY_CAPACITY);
       this.statuses = [];
@@ -949,6 +959,7 @@ const Game = (() => {
 
       const occupancyView = {
         getMobAt: (x, y) => startIndex.get(`${x},${y}`) || null,
+        list: mobsThisTurn,
       };
 
       for (const m of mobsThisTurn) {
@@ -1618,13 +1629,11 @@ const Game = (() => {
     fovState.overlayRgb = overlay.rgb;
   }
 
-  function getLightRadius() {
-    return getLightProperties().radius;
-  }
-
   function computeVisibleCells(pos) {
     const key = posKey(pos);
-    const radius = getLightRadius();
+    const radius = typeof player?.getLightRadius === "function"
+      ? player.getLightRadius()
+      : getLightProperties().radius;
     if (
       fovState.lastCache.visible &&
       fovState.lastCache.key === key &&
@@ -3446,7 +3455,9 @@ const Game = (() => {
   // records which tiles were ever seen (explorationState) and promotes nearby
   // floor cells to "frontiers" so the explorer knows where to head next.
   function updateVisionAndExploration(pos) {
-    const lightRadius = getLightRadius();
+    const lightRadius = typeof player?.getLightRadius === "function"
+      ? player.getLightRadius()
+      : getLightProperties().radius;
     const radiusSq = lightRadius * lightRadius;
     explorationState.newlyExplored = [];
     const visibleCells = computeFieldOfView(pos, lightRadius, mapState, {
@@ -3520,7 +3531,9 @@ const Game = (() => {
   // aimless oscillation.
   function explorationScore(pos, shortTermMemory) {
     let score = 0;
-    const lightRadius = getLightRadius();
+    const lightRadius = typeof player?.getLightRadius === "function"
+      ? player.getLightRadius()
+      : getLightProperties().radius;
     const visibleCells = computeFieldOfView(pos, lightRadius, mapState, {
       useKnownGrid: true,
     });
@@ -3858,7 +3871,28 @@ const Game = (() => {
       mobManager,
       maze: mapState.grid,
       state,
+      AIPlanner,
     };
+
+    if (!gameState.__didInitialSpawns) {
+      const { spawnMonsters } = await import("./src/game/spawn.js");
+      const tags = gameState.chapter?.theme?.monsterTags ?? [];
+      const rngSource = gameState.rng;
+      const rng = typeof rngSource === "function"
+        ? rngSource
+        : typeof rngSource?.random === "function"
+        ? () => rngSource.random()
+        : Math.random;
+      const spawned = spawnMonsters(gameCtx, {
+        count: 8,
+        includeTags: tags,
+        rng,
+      });
+      console.log(
+        `[SPAWN] ${spawned} mobs (tags: ${tags.join(", ") || "all"})`,
+      );
+      gameState.__didInitialSpawns = true;
+    }
 
     function processPlayerTurn() {
       const currentPlayerX = player.x;
@@ -4199,7 +4233,12 @@ const Game = (() => {
   }
 
   function setupPlayer() {
-    const newPlayer = new Player({ name: "Player", x: 0, y: 0 });
+    const newPlayer = new Player({
+      name: "Player",
+      x: 0,
+      y: 0,
+      factions: ["player"],
+    });
 
     if (!mobManager) {
       throw new Error(
@@ -4338,7 +4377,7 @@ const Game = (() => {
     }
   }
 
-  function initializeSimulation(dungeonData) {
+  async function initializeSimulation(dungeonData) {
     const startPos = dungeonData.start;
     const endPos = dungeonData.end;
     currentEndPos = endPos;
@@ -4443,6 +4482,7 @@ const Game = (() => {
     gameState.mobManager = mobManager;
     player = setupPlayer();
     gameState.player = player;
+    gameState.__didInitialSpawns = false;
     rendererReady = false;
     gameState.render.ready = rendererReady;
 

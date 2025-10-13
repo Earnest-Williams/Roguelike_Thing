@@ -1420,6 +1420,7 @@ export function foldModsFromEquipment(actor) {
       onHitBias: Object.create(null),
       defenseBias: Object.create(null),
     },
+    vision: { lightBonus: 0 },
   };
 
   if (typeof actor.setPolarity === "function") {
@@ -1968,6 +1969,59 @@ export function foldModsFromEquipment(actor) {
   // Rebuild status-derived (equip can change it)
   actor.statusDerived = rebuildDerived(actor);
   return mc;
+}
+
+/**
+ * Folds innate template bonuses into an actor's mod cache.
+ * @param {import("./actor.js").Actor} actor
+ */
+export function foldInnatesIntoModCache(actor) {
+  if (!actor || !actor.__template) return;
+  const innate = actor.__template.innate || {};
+
+  if (innate.vision && typeof innate.vision === "object") {
+    const bonus = Number(innate.vision.lightBonus) || 0;
+    if (bonus) {
+      if (!actor.modCache.vision) {
+        actor.modCache.vision = { lightBonus: 0 };
+      }
+      actor.modCache.vision.lightBonus += bonus;
+    }
+  }
+
+  if (innate.resists && typeof innate.resists === "object") {
+    for (const [type, value] of Object.entries(innate.resists)) {
+      const amount = Number(value) || 0;
+      if (!Number.isFinite(amount)) continue;
+      actor.modCache.resists[type] = (actor.modCache.resists[type] || 0) + amount;
+      if (actor.modCache.defense?.resists) {
+        actor.modCache.defense.resists[type] =
+          (actor.modCache.defense.resists[type] || 0) + amount;
+      }
+      actor.modCache.resists[type] = Math.max(
+        COMBAT_RESIST_MIN,
+        Math.min(COMBAT_RESIST_MAX, actor.modCache.resists[type]),
+      );
+      if (actor.modCache.defense?.resists?.[type] != null) {
+        actor.modCache.defense.resists[type] = Math.max(
+          COMBAT_RESIST_MIN,
+          Math.min(COMBAT_RESIST_MAX, actor.modCache.defense.resists[type]),
+        );
+      }
+    }
+  }
+
+  if (innate.affinities && typeof innate.affinities === "object") {
+    for (const [type, value] of Object.entries(innate.affinities)) {
+      const amount = Number(value) || 0;
+      if (!Number.isFinite(amount) || amount === 0) continue;
+      actor.modCache.affinities[type] = (actor.modCache.affinities[type] || 0) + amount;
+      if (actor.modCache.offense?.affinities) {
+        actor.modCache.offense.affinities[type] =
+          (actor.modCache.offense.affinities[type] || 0) + amount;
+      }
+    }
+  }
 }
 
 /**

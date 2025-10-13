@@ -82,6 +82,7 @@ export function createInitialState() {
     isEndRendered: false,
     initRetries: 0,
     chapter: null,
+    __didInitialSpawns: false,
   };
 }
 
