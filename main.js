@@ -1581,11 +1581,8 @@ const Game = (() => {
 
   function readPlayerLightRadius() {
     /** [Unified Implementation] All lighting reads delegate to Actor.getLightRadius(). */
-    const radius =
-      typeof player?.getLightRadius === "function"
-        ? Number(player.getLightRadius())
-        : 0;
-    return Math.max(0, Number.isFinite(radius) ? radius : 0);
+    const radius = Number(player?.getLightRadius?.() ?? 0);
+    return Number.isFinite(radius) ? Math.max(0, radius) : 0;
   }
 
   function getLightProperties() {

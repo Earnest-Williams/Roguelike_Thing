@@ -64,10 +64,7 @@ export function buildMainViewBatch({
 
   const overlayRgb = normalizeColor(overlayColor) || null;
 
-  const rawPlayerLightRadius =
-    typeof player?.getLightRadius === "function"
-      ? Number(player.getLightRadius())
-      : 0;
+  const rawPlayerLightRadius = Number(player?.getLightRadius?.() ?? 0);
   const playerLightRadius = Number.isFinite(rawPlayerLightRadius)
     ? Math.max(0, rawPlayerLightRadius)
     : 0;
