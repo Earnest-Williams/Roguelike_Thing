@@ -140,7 +140,8 @@ export class Monster {
 
   getLightRadius() {
     /** [Unified Implementation] Delegate vision to the Actor. */
-    return this.__actor?.getLightRadius?.() ?? 0;
+    const radius = this.__actor?.getLightRadius?.();
+    return Number.isFinite(radius) ? radius : 0;
   }
 
   onTurnStart(turn) {
