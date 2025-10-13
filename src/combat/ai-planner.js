@@ -67,8 +67,8 @@ function selectTarget(self, ctx = {}) {
     pushEntity(ctx.target);
   }
 
-  const hostiles = candidates.filter(({ actor }) =>
-    FactionService.isHostile(selfActor, actor),
+  const hostiles = candidates.filter(({ actor, entity }) =>
+    FactionService.isHostile(self, actor ?? entity),
   );
   if (hostiles.length === 0) {
     return null;
@@ -135,9 +135,11 @@ export const AIPlanner = {
       : AIPlanner.defaultActions(actor);
 
     const selection = selectTarget(actor, { ...context, selfMob });
-    const fallbackTarget = context.target ?? context.player ?? null;
-    const targetEntity = selection?.entity ?? fallbackTarget;
-    const targetActor = selection?.actor ?? asActor(targetEntity);
+    if (!selection) {
+      return;
+    }
+    const targetEntity = selection.entity;
+    const targetActor = selection.actor ?? asActor(targetEntity);
     const distance = AIPlanner.distanceBetween(selfMob, targetEntity, context);
     const scope = {
       actor,
