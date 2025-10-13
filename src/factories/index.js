@@ -6,6 +6,7 @@ import { SLOT } from "../../js/constants.js";
 import { makeItem, registerItem, upsertItem } from "../../js/item-system.js";
 import { Actor } from "../combat/actor.js";
 import { foldInnatesIntoModCache, foldModsFromEquipment } from "../combat/mod-folding.js";
+// [Unified Implementation] Always use the canonical Monster wrapper.
 import { Monster } from "../game/monster.js";
 
 // One-time registration (idempotent safe-guard)

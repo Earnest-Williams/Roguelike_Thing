@@ -3,6 +3,7 @@ import { strict as assert } from "node:assert";
 import { Actor } from "../src/combat/actor.js";
 import { MOB_TEMPLATES } from "../src/content/mobs.js";
 import { FactionService } from "../src/game/faction-service.js";
+// [Unified Implementation] Pull the Monster wrapper from its canonical module.
 import { Monster } from "../src/game/monster.js";
 import {
   foldInnatesIntoModCache,
