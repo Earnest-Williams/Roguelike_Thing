@@ -67,10 +67,12 @@ function selectTarget(self, ctx = {}) {
     allEntities.push(ctx.target);
   }
 
-  const candidates = allEntities
+  const normalized = allEntities
     .filter(Boolean)
     .map((entity) => ({ entity, actor: toActor(entity) }))
-    .filter(({ actor }) => actor && actor !== selfActor);
+    .filter(({ actor }) => Boolean(actor));
+
+  const candidates = normalized.filter(({ actor }) => actor !== selfActor);
 
   const hostiles = candidates
     .map((entry) => ({
