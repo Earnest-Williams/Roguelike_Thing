@@ -55,6 +55,8 @@ function mergeRecord(into, add) {
 export function rebuildModCache(actor) {
   if (!actor) return;
 
+  const previous = actor.modCache || {};
+
   const resists = Object.create(null);
   const affinities = Object.create(null);
   const immunities = new Set();
@@ -122,8 +124,8 @@ export function rebuildModCache(actor) {
     resists,
     affinities,
     immunities,
-    dmgMult: actor.modCache?.dmgMult ?? 1,
-    speedMult: actor.modCache?.speedMult ?? 1,
+    dmgMult: Number(previous?.dmgMult) || 1,
+    speedMult: Number(previous?.speedMult) || 1,
     brands: offenseBrands,
     attunementRules: Object.create(null),
     offense: {
@@ -142,6 +144,9 @@ export function rebuildModCache(actor) {
     status: statusBucket,
     statusInteraction: statusBucket,
     polarity: { grant: Object.create(null), onHitBias: Object.create(null), defenseBias: Object.create(null) },
+    vision: {
+      lightBonus: Number(previous?.vision?.lightBonus) || 0,
+    },
   };
 
   const equipment = actor.equipment || {};
