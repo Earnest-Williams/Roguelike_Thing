@@ -138,10 +138,11 @@ export class Monster {
     this.y = p.y | 0;
   }
 
+  /** Visible-light radius is defined by the Actor. */
   getLightRadius() {
-    /** [Unified Implementation] Delegate vision to the Actor. */
-    const radius = this.__actor?.getLightRadius?.();
-    return Number.isFinite(radius) ? radius : 0;
+    return typeof this.__actor?.getLightRadius === "function"
+      ? this.__actor.getLightRadius()
+      : 0;
   }
 
   onTurnStart(turn) {
