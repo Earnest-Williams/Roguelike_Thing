@@ -497,6 +497,60 @@ export class Actor {
 }
 
 /**
+ * Coerce an arbitrary entity into an Actor instance when possible.
+ * This consolidates the duck-typing logic that used to live in various
+ * AI helpers so a missing export does not break module loading in the
+ * browser build.
+ * @param {any} entity
+ * @returns {Actor | null}
+ */
+export function asActor(entity) {
+  if (!entity || typeof entity !== "object") {
+    return null;
+  }
+
+  if (entity instanceof Actor) {
+    return entity;
+  }
+
+  if (entity.actor instanceof Actor) {
+    return entity.actor;
+  }
+
+  if (entity.__actor instanceof Actor) {
+    return entity.__actor;
+  }
+
+  if (typeof entity.getActor === "function") {
+    try {
+      const result = entity.getActor();
+      if (result instanceof Actor) {
+        return result;
+      }
+      if (result && typeof result === "object") {
+        return /** @type {Actor} */ (result);
+      }
+    } catch {
+      // Ignore accessor failures and fall through to shape checks below.
+    }
+  }
+
+  if (entity.actor && typeof entity.actor === "object") {
+    return /** @type {Actor} */ (entity.actor);
+  }
+
+  if (
+    typeof entity.base === "object" &&
+    typeof entity.res === "object" &&
+    Array.isArray(entity.factions)
+  ) {
+    return /** @type {Actor} */ (entity);
+  }
+
+  return null;
+}
+
+/**
  * Helper to clear all keys from target and assign properties from source.
  * @param {Object} target
  * @param {Object} source
