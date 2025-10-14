@@ -14,11 +14,11 @@ export const DEFAULT_LIGHT_FALLOFF_SETTINGS = Object.freeze({
    * Multiplier applied to the smoothstep denominator, effectively changing the
    * reach of each light.
    */
-  smoothstepRangeMultiplier: 1.35,
+  smoothstepRangeMultiplier: 1.75,
   /**
    * Power applied after the smoothstep to shape the overall intensity curve.
    */
-  falloffPower: 0.6,
+  falloffPower: 0.8,
 });
 
 /** @typedef {{ deadZoneTiles: number | null, smoothstepRangeMultiplier: number, falloffPower: number }} LightFalloffSettings */
