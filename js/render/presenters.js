@@ -19,6 +19,7 @@ import { colorStringToRgba as toRgba } from "../utils.js";
  * @param {{ x: number, y: number } | null | undefined} [params.endPos]
  * @param {Record<string, string>} params.colors
  * @param {(x: number, y: number) => number | undefined} params.overlayAlphaAt
+ * @param {(x: number, y: number) => import("./types.js").RGBA | undefined | null} [params.overlayColorAt]
  * @param {RGBA | null | undefined} [params.overlayColor]
  * @param {Array<{
  *   x: number,
@@ -44,6 +45,7 @@ export function buildMainViewBatch({
   endPos = null,
   colors,
   overlayAlphaAt,
+  overlayColorAt = null,
   overlayColor = null,
   entities = [],
 }) {
@@ -107,8 +109,10 @@ export function buildMainViewBatch({
           const clamped = Math.max(0, Math.min(1, overlayA));
           if (clamped > 0) {
             base.overlayA = clamped;
-            if (overlayRgb) {
-              base.overlayColor = overlayRgb;
+            const oc =
+              typeof overlayColorAt === "function" ? overlayColorAt(x, y) : overlayRgb;
+            if (oc) {
+              base.overlayColor = oc;
             }
           }
         }

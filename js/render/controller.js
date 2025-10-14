@@ -51,6 +51,7 @@ export class RenderController {
    * @param {{ x: number, y: number } | null | undefined} [state.end]
    * @param {Record<string, string>} state.colors
    * @param {(x: number, y: number) => number | undefined} state.overlayAlphaAt
+   * @param {(x: number, y: number) => import("./types.js").RGBA | undefined | null} [state.overlayColorAt]
    * @param {import("./types.js").RGBA | null | undefined} [state.overlayColor]
    * @param {Array<any>} [state.entities]
    * @param {ViewTransform} view
@@ -66,6 +67,7 @@ export class RenderController {
       endPos: state.end ?? null,
       colors: state.colors,
       overlayAlphaAt: state.overlayAlphaAt,
+      overlayColorAt: state.overlayColorAt ?? null,
       overlayColor: state.overlayColor ?? null,
       entities: state.entities ?? [],
     });
