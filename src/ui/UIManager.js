@@ -22,7 +22,8 @@ export class UIManager {
     this.equipmentSlotMap = new Map();
     /** @type {HTMLElement[]} */
     this.inventorySlotList = [];
-    this.statusPriority = "system";
+    this.statusPriority = "combat";
+    this.lastSystemMessageTime = 0;
     this.domTaskQueue = Promise.resolve();
     this.subscriptions = [
       subscribe(EVENT.STATUS, (entry) => this.handleStatusEvent(entry.payload)),
@@ -289,9 +290,15 @@ export class UIManager {
     const statusEl = this.elements.status;
     if (!statusEl) return;
     const normalizedPriority = priority === "combat" ? "combat" : "system";
+    const now = typeof performance !== "undefined" && typeof performance.now === "function"
+      ? performance.now()
+      : Date.now();
+    const SYSTEM_MESSAGE_BLOCK_DURATION_MS = 2000;
+    
     if (normalizedPriority === "system") {
       this.statusPriority = "system";
-    } else if (this.statusPriority === "system") {
+      this.lastSystemMessageTime = now;
+    } else if (this.statusPriority === "system" && (now - this.lastSystemMessageTime) < SYSTEM_MESSAGE_BLOCK_DURATION_MS) {
       return;
     }
     statusEl.textContent = message || "";
