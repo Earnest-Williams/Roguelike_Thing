@@ -13,6 +13,14 @@ function makeMap(width, height) {
   mapState.features = [
     { id: "sconce", x: 2, y: 1, light: { radius: 4, color: "#ffaa66" } },
   ];
+  mapState.furniture = [
+    {
+      position: { x: 4, y: 2 },
+      furniture: {
+        id: "lamp", light: { radius: 3, color: "#ddeeff", intensity: 0.75 },
+      },
+    },
+  ];
 
   const droppedTorch = {
     id: "drop-torch",
@@ -36,7 +44,11 @@ function makeMap(width, height) {
     mobs: [],
     mapState,
   });
-  assert.equal(lights.length, 3, "expected actor, feature, and dropped item lights to be collected");
+  assert.equal(
+    lights.length,
+    4,
+    "expected actor, feature, fixture, and dropped item lights to be collected",
+  );
   const carried = lights.find((entry) => entry.id.startsWith("actor:player"));
   assert(carried, "should track carried light source");
   assert.equal(carried.radius, 5, "should preserve carried light radius");
@@ -44,6 +56,9 @@ function makeMap(width, height) {
   const sconce = lights.find((entry) => entry.id.includes("sconce"));
   assert(sconce, "should include feature light sources");
   assert(sconce?.color, "feature light should provide rgb color data");
+  const lamp = lights.find((entry) => entry.id.includes("lamp"));
+  assert(lamp, "should include furniture fixtures with lights");
+  assert.equal(lamp.radius, 3, "fixture light radius should be preserved");
   const torch = lights.find((entry) => entry.id.includes("drop-torch"));
   assert(torch, "should include dropped item light sources");
   assert.equal(torch.intensity, 0.9, "should preserve dropped item intensity");
