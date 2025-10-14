@@ -221,6 +221,17 @@ function computeActorDelay(actor) {
   return delay > 0 ? delay : 0.1;
 }
 
+function resolveTurnRng(source) {
+  if (typeof source === "function") return source;
+  if (typeof source?.next === "function") {
+    return () => source.next();
+  }
+  if (typeof source?.random === "function") {
+    return () => source.random();
+  }
+  return Math.random;
+}
+
 function handleDeath(gameCtx, actor) {
   // Centralized death handling ensures UI, mob management, and state bookkeeping
   // stay consistent regardless of what triggered the fatal blow.
@@ -1202,6 +1213,8 @@ const Game = (() => {
         list: mobsThisTurn,
       };
 
+      const rngFn = resolveTurnRng(gameCtx?.rng ?? gameCtx?.state?.rng ?? Math.random);
+
       for (const m of mobsThisTurn) {
         const startKey = `${m.x},${m.y}`;
 
@@ -1249,8 +1262,8 @@ const Game = (() => {
         }
 
         const from = { x: m.x, y: m.y };
-        const turnCtx = { ...gameCtx, mobManager: occupancyView };
-        const delayResult = m.takeTurn(turnCtx);
+        const worldCtx = { ...gameCtx, mobManager: occupancyView };
+        const delayResult = m.takeTurn({ world: worldCtx, rng: rngFn, now: turn });
         const to = { x: m.x, y: m.y };
 
         if (to.x !== from.x || to.y !== from.y) {
