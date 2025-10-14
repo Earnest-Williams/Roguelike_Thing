@@ -3,6 +3,35 @@
 import { EVENT, subscribe } from "./event-log.js";
 
 /**
+ * @typedef {Object} UIManagerElements
+ * @property {HTMLElement | null | undefined} [status]
+ * @property {HTMLElement | null | undefined} [restartButton]
+ * @property {HTMLElement | null | undefined} [pauseIndicator]
+ * @property {HTMLElement | null | undefined} [speedValue]
+ * @property {HTMLElement | null | undefined} [equipmentSlots]
+ * @property {HTMLElement | null | undefined} [inventorySlots]
+ */
+
+/**
+ * @typedef {(value?: unknown) => void} Unsubscribe
+ */
+
+/**
+ * Microtask scheduler used to queue DOM operations in the order they were requested.
+ * Extracted so that it is evaluated once and reused for every {@link UIManager} instance.
+ * @type {(cb: () => void) => void}
+ */
+const enqueueMicrotask =
+  typeof queueMicrotask === "function" ? queueMicrotask : (cb) => Promise.resolve().then(cb);
+
+/**
+ * Amount of time (in milliseconds) a system level status message will block combat messages
+ * from replacing it. This prevents an important message such as "You died" from being
+ * immediately overwritten by combat log spam.
+ */
+const SYSTEM_MESSAGE_BLOCK_DURATION_MS = 2000;
+
+/**
  * Central coordinator for DOM updates based on simulation events.
  */
 export class UIManager {
@@ -17,14 +46,20 @@ export class UIManager {
    * }} elements
    */
   constructor(elements = {}) {
-    this.elements = { ...elements };
+    /** @type {UIManagerElements} */
+    this.elements = {};
+    this.setElements(elements);
     /** @type {Map<string, HTMLElement>} */
     this.equipmentSlotMap = new Map();
     /** @type {HTMLElement[]} */
     this.inventorySlotList = [];
+    /** @type {"system" | "combat"} */
     this.statusPriority = "combat";
+    /** @type {number} */
     this.lastSystemMessageTime = 0;
+    /** @type {Promise<void>} */
     this.domTaskQueue = Promise.resolve();
+    /** @type {Unsubscribe[]} */
     this.subscriptions = [
       subscribe(EVENT.STATUS, (entry) => this.handleStatusEvent(entry.payload)),
       subscribe(EVENT.COMBAT, (entry) => this.renderCombatEvent(entry.payload)),
@@ -38,14 +73,13 @@ export class UIManager {
    * @returns {Promise<void>}
    */
   scheduleDomTask(fn) {
-    const enqueue = typeof queueMicrotask === "function"
-      ? queueMicrotask
-      : (cb) => Promise.resolve().then(cb);
-
+    if (typeof fn !== "function") {
+      return this.domTaskQueue;
+    }
     this.domTaskQueue = this.domTaskQueue.then(
       () =>
         new Promise((resolve) => {
-          enqueue(() => {
+          enqueueMicrotask(() => {
             try {
               fn();
             } catch (err) {
@@ -74,6 +108,34 @@ export class UIManager {
       }
     }
     this.subscriptions.length = 0;
+    this.equipmentSlotMap.clear();
+    this.inventorySlotList.length = 0;
+  }
+
+  /**
+   * Replace element references at runtime. Any keys omitted from {@link nextElements}
+   * retain their previous references, which is helpful in tests when partial DOM fixtures
+   * are provided.
+   *
+   * @param {UIManagerElements} nextElements
+   */
+  setElements(nextElements = {}) {
+    /** @type {(keyof UIManagerElements)[]} */
+    const keys = [
+      "status",
+      "restartButton",
+      "pauseIndicator",
+      "speedValue",
+      "equipmentSlots",
+      "inventorySlots",
+    ];
+    for (const key of keys) {
+      if (key in nextElements) {
+        this.elements[key] = nextElements[key];
+      } else if (!(key in this.elements)) {
+        this.elements[key] = undefined;
+      }
+    }
   }
 
   /**
@@ -293,8 +355,7 @@ export class UIManager {
     const now = typeof performance !== "undefined" && typeof performance.now === "function"
       ? performance.now()
       : Date.now();
-    const SYSTEM_MESSAGE_BLOCK_DURATION_MS = 2000;
-    
+
     if (normalizedPriority === "system") {
       this.statusPriority = "system";
       this.lastSystemMessageTime = now;
