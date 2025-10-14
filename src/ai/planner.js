@@ -161,7 +161,21 @@ export function evaluateCandidates(candidates, ctx = {}) {
     }
   }
 
-  return best;
+  const result = best;
+
+  /**
+   * DEV: expose the latest decision for a DOM overlay.
+   * This is a no-op in non-browser environments.
+   */
+  try {
+    if (typeof window !== "undefined") {
+      window.__AI_LAST_DECISION = result;
+    }
+  } catch {
+    // ignore errors when the global object is unavailable or read-only
+  }
+
+  return result;
 }
 
 export function explainDecision(decision) {
