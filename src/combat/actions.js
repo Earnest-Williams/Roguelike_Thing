@@ -505,6 +505,17 @@ function applyStep(entity, step, world) {
 
   const door = resolveDoorAt(world, x, y);
   if (door && !isDoorOpen(door)) {
+    if (typeof world?.onAttemptOpenDoor === "function") {
+      try {
+        const allow = world.onAttemptOpenDoor(entity, door, { x, y });
+        if (!allow) {
+          return false;
+        }
+      } catch (err) {
+        console.error("[runes] onAttemptOpenDoor failed", err);
+        return false;
+      }
+    }
     if (canDoorBeOpenedNow(door) && openDoorThroughBump(door)) {
       Sound.playDoor();
       if (typeof world?.onDoorOpened === "function") {
@@ -537,6 +548,13 @@ function applyStep(entity, step, world) {
   entity.y = y;
   if (entity?.__actor) {
     entity.__actor._turnDidMove = true;
+  }
+  if (typeof world?.onStepIntoTile === "function") {
+    try {
+      world.onStepIntoTile(entity, x, y, world?.layer ?? 0);
+    } catch (err) {
+      console.error("[runes] onStepIntoTile failed", err);
+    }
   }
   return true;
 }
