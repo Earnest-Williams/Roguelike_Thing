@@ -145,7 +145,7 @@ export function rebuildModCache(actor) {
     statusInteraction: statusBucket,
     polarity: { grant: Object.create(null), onHitBias: Object.create(null), defenseBias: Object.create(null) },
     vision: {
-      lightBonus: Number(previous?.vision?.lightBonus) || 0,
+      lightBonus: 0,
     },
   };
 
@@ -174,6 +174,8 @@ export function rebuildModCache(actor) {
       deepMerge(cache.resource, item.resource);
     }
   }
+
+  foldInnatesIntoModCache(actor, cache);
 
   for (const key of Object.keys(cache.defense.resists)) {
     cache.defense.resists[key] = Math.max(
@@ -1980,23 +1982,27 @@ export function foldModsFromEquipment(actor) {
  * Folds innate template bonuses into an actor's mod cache.
  * @param {import("./actor.js").Actor} actor
  */
-export function foldInnatesIntoModCache(actor) {
-  if (!actor || !actor.__template) return;
-  const innate = actor.__template.innate || {};
+export function foldInnatesIntoModCache(actor, cache = actor?.modCache) {
+  if (!actor || !cache) return cache;
+  const source = actor.innates && typeof actor.innates === "object"
+    ? actor.innates
+    : actor.__template?.innate;
+  if (!source || typeof source !== "object") return cache;
 
-  // Fold vision bonuses
-  if (innate.vision?.lightBonus) {
+  const innate = source;
+
+  if (innate.vision && typeof innate.vision === "object") {
     const bonus = Number(innate.vision.lightBonus) || 0;
     if (bonus) {
-      const vision = actor.modCache.vision || (actor.modCache.vision = { lightBonus: 0 });
-      vision.lightBonus += bonus;
+      const vision = cache.vision || (cache.vision = { lightBonus: 0 });
+      const current = Number(vision.lightBonus) || 0;
+      vision.lightBonus = current + bonus;
     }
   }
 
-  // Fold innate resists
   if (innate.resists && typeof innate.resists === "object") {
-    const resistBucket = actor.modCache.resists || (actor.modCache.resists = {});
-    const defenseResists = actor.modCache.defense?.resists || null;
+    const resistBucket = cache.resists || (cache.resists = {});
+    const defenseResists = cache.defense?.resists || null;
 
     for (const [type, value] of Object.entries(innate.resists)) {
       const amount = Number(value) || 0;
@@ -2027,16 +2033,18 @@ export function foldInnatesIntoModCache(actor) {
   }
 
   if (innate.affinities && typeof innate.affinities === "object") {
+    const offenseAff = cache.offense?.affinities || null;
     for (const [type, value] of Object.entries(innate.affinities)) {
       const amount = Number(value) || 0;
       if (!Number.isFinite(amount) || amount === 0) continue;
-      actor.modCache.affinities[type] = (actor.modCache.affinities[type] || 0) + amount;
-      if (actor.modCache.offense?.affinities) {
-        actor.modCache.offense.affinities[type] =
-          (actor.modCache.offense.affinities[type] || 0) + amount;
+      cache.affinities[type] = (cache.affinities[type] || 0) + amount;
+      if (offenseAff) {
+        offenseAff[type] = (offenseAff[type] || 0) + amount;
       }
     }
   }
+
+  return cache;
 }
 
 /**

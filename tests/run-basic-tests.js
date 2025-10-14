@@ -17,6 +17,7 @@ import "./faction-service.test.js";
 import "./spawn.test.js";
 import "./senses.test.js";
 import "./monster-loadout.test.js";
+import "./mod-folding-innates.test.js";
 import "./number-clamp.test.js";
 
 import { strict as assert } from "node:assert";

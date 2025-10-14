@@ -79,6 +79,8 @@ export function spawnMonsters(
 
     mob.x = pos.x;
     mob.y = pos.y;
+    mob.spawnPos = { x: pos.x, y: pos.y };
+    mob.homePos = { x: pos.x, y: pos.y };
     applyLoadout(mob, id, rng, createItem);
     mobManager.add(mob);
     spawned++;
@@ -122,6 +124,8 @@ export function spawnByIdCounts(
       if (!pos) continue;
       mob.x = pos.x;
       mob.y = pos.y;
+      mob.spawnPos = { x: pos.x, y: pos.y };
+      mob.homePos = { x: pos.x, y: pos.y };
       applyLoadout(mob, id, rng, createItem);
       mobManager.add(mob);
       spawned++;

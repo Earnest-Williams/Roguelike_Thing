@@ -16,6 +16,7 @@ import {
   MIN_AP_COST,
   MIN_ATTACK_DAMAGE,
   SLOT,
+  TILE_FLOOR,
 } from "../../js/constants.js";
 import { canPay, eventGain } from "./resources.js";
 import { noteAttacked, noteMoved } from "./actor.js";
@@ -202,4 +203,259 @@ export function tryAttackEquipped(
   startCooldown(attacker, plan.key, plan.action.baseCooldown);
 
   return true;
+}
+
+const CARDINAL_DIRS = [
+  { dx: 1, dy: 0 },
+  { dx: -1, dy: 0 },
+  { dx: 0, dy: 1 },
+  { dx: 0, dy: -1 },
+];
+
+const DEFAULT_WANDER_RADIUS = 6;
+
+/**
+ * Execute a planner decision and return the delay before the actor may act again.
+ * Falls back to the actor's base delay when the decision does not supply one.
+ *
+ * @param {{ actor: any, combatant?: Actor, world?: any, decision?: any, rng?: (() => number) | null }} params
+ */
+export function executeDecision({ actor, combatant, world, decision, rng }) {
+  const baseDelay = resolveDelayBase(actor, combatant);
+  if (!decision || typeof decision !== "object") {
+    return baseDelay;
+  }
+
+  const performer = resolveCombatant(actor, combatant);
+  const rngFn = resolveRng(rng);
+
+  switch (decision.type) {
+    case "ATTACK": {
+      const target = resolveTarget(decision.target ?? decision.targetActor ?? decision.entity);
+      if (performer && target) {
+        const selfPos = resolvePosition(actor);
+        const targetPos = resolvePosition(decision.target ?? decision.targetEntity ?? target) ?? null;
+        const dist = selfPos && targetPos ? chebyshevDistance(selfPos, targetPos) : 1;
+        const success =
+          tryAttackEquipped(performer, target, Math.max(1, dist)) ||
+          tryAttack(performer, target);
+        if (!success && targetPos) {
+          const step = stepToward(selfPos, targetPos, world, actor);
+          if (step && applyStep(actor, step, world)) {
+            noteMoved(performer);
+          }
+        }
+      }
+      return baseDelay;
+    }
+
+    case "MOVE": {
+      const selfPos = resolvePosition(actor);
+      let targetPos = decision.to ?? decision.targetPos ?? null;
+      if (!targetPos && decision.target) {
+        targetPos = resolvePosition(decision.target);
+      }
+      const step = targetPos
+        ? stepToward(selfPos, targetPos, world, actor)
+        : decision.to;
+      if (step && applyStep(actor, step, world)) {
+        noteMoved(performer);
+      }
+      return baseDelay;
+    }
+
+    case "GUARD": {
+      const anchor = decision.at ?? actor?.homePos ?? actor?.spawnPos ?? resolvePosition(actor);
+      const radius = Number.isFinite(decision.radius)
+        ? decision.radius
+        : Number.isFinite(actor?.guardRadius)
+        ? actor.guardRadius
+        : 3;
+      const selfPos = resolvePosition(actor);
+      if (anchor && selfPos) {
+        const dist = manhattanDistance(selfPos, anchor);
+        if (dist > radius) {
+          const step = stepToward(selfPos, anchor, world, actor);
+          if (step && applyStep(actor, step, world)) {
+            noteMoved(performer);
+          }
+        }
+      }
+      return baseDelay;
+    }
+
+    case "WANDER": {
+      const leash = resolveLeash(decision.leash, actor);
+      const step = randomLeashedStep(actor, leash, world, rngFn);
+      if (step && applyStep(actor, step, world)) {
+        noteMoved(performer);
+      }
+      return baseDelay;
+    }
+
+    default:
+      return baseDelay;
+  }
+}
+
+function resolveDelayBase(actor, combatant) {
+  const entity = actor ?? combatant;
+  const base = Number.isFinite(entity?.baseDelay)
+    ? entity.baseDelay
+    : Number.isFinite(combatant?.baseDelay)
+    ? combatant.baseDelay
+    : 1;
+  const pct = Number.isFinite(combatant?.statusDerived?.actionSpeedPct)
+    ? combatant.statusDerived.actionSpeedPct
+    : Number.isFinite(actor?.statusDerived?.actionSpeedPct)
+    ? actor.statusDerived.actionSpeedPct
+    : 0;
+  const delay = base * (1 + pct);
+  return delay > 0 ? delay : base;
+}
+
+function resolveCombatant(actor, combatant) {
+  if (combatant) return combatant;
+  if (actor?.__actor) return actor.__actor;
+  return actor;
+}
+
+function resolveTarget(candidate) {
+  if (!candidate) return null;
+  if (candidate.__actor) return resolveTarget(candidate.__actor);
+  if (candidate.actor && candidate.actor !== candidate) return resolveTarget(candidate.actor);
+  return candidate;
+}
+
+function resolvePosition(entity) {
+  if (!entity) return null;
+  if (typeof entity.x === "number" && typeof entity.y === "number") {
+    return { x: entity.x | 0, y: entity.y | 0 };
+  }
+  const pos = typeof entity.pos === "function" ? entity.pos() : entity.pos;
+  if (pos && typeof pos.x === "number" && typeof pos.y === "number") {
+    return { x: pos.x | 0, y: pos.y | 0 };
+  }
+  return null;
+}
+
+function chebyshevDistance(a, b) {
+  if (!a || !b) return Infinity;
+  return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
+}
+
+function manhattanDistance(a, b) {
+  if (!a || !b) return Infinity;
+  return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+}
+
+function stepToward(from, to, world, self) {
+  if (!from || !to) return null;
+  const candidates = [];
+  for (const dir of CARDINAL_DIRS) {
+    const nx = from.x + dir.dx;
+    const ny = from.y + dir.dy;
+    if (!isPassable(world, nx, ny, self)) continue;
+    candidates.push({ x: nx, y: ny });
+  }
+  candidates.sort((a, b) => manhattanDistance(a, to) - manhattanDistance(b, to));
+  return candidates[0] ?? null;
+}
+
+function randomLeashedStep(actor, leash, world, rng) {
+  const origin = actor?.spawnPos ?? actor?.homePos ?? resolvePosition(actor);
+  if (!origin) return null;
+  const current = resolvePosition(actor);
+  if (!current) return null;
+
+  const options = [];
+  for (const dir of CARDINAL_DIRS) {
+    const nx = current.x + dir.dx;
+    const ny = current.y + dir.dy;
+    if (!isPassable(world, nx, ny, actor)) continue;
+    const dist = manhattanDistance(origin, { x: nx, y: ny });
+    if (dist > leash) continue;
+    options.push({ x: nx, y: ny });
+  }
+  if (!options.length) return null;
+  const pick = Math.max(0, Math.floor(rng() * options.length));
+  return options[pick] ?? null;
+}
+
+function resolveLeash(raw, actor) {
+  if (Number.isFinite(raw) && raw >= 0) return raw;
+  if (Number.isFinite(actor?.wanderRadius)) return actor.wanderRadius;
+  return DEFAULT_WANDER_RADIUS;
+}
+
+function applyStep(entity, step, world) {
+  if (!step) return false;
+  const { x, y } = step;
+  if (!isPassable(world, x, y, entity)) return false;
+  entity.x = x;
+  entity.y = y;
+  if (entity?.__actor) {
+    entity.__actor._turnDidMove = true;
+  }
+  return true;
+}
+
+function isPassable(world, x, y, self) {
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
+  const grid = resolveGrid(world);
+  if (grid) {
+    const tile = grid[y]?.[x];
+    if (tile == null) return false;
+    if (tile !== TILE_FLOOR) return false;
+  }
+  return !isOccupied(world, x, y, self);
+}
+
+function resolveGrid(world) {
+  if (!world) return null;
+  if (Array.isArray(world?.mapState?.grid)) return world.mapState.grid;
+  if (Array.isArray(world?.maze)) return world.maze;
+  if (Array.isArray(world?.grid)) return world.grid;
+  return null;
+}
+
+function isOccupied(world, x, y, self) {
+  if (!world) return false;
+  const mgr = world.mobManager;
+  if (mgr?.getMobAt) {
+    const occupant = mgr.getMobAt(x, y);
+    if (occupant && occupant !== self) return true;
+  }
+  for (const mob of resolveMobList(mgr)) {
+    if (!mob || mob === self) continue;
+    if (mob.x === x && mob.y === y) return true;
+  }
+  return false;
+}
+
+function resolveMobList(mobManager) {
+  if (!mobManager) return [];
+  if (typeof mobManager.list === "function") {
+    try {
+      const out = mobManager.list();
+      return Array.isArray(out) ? out : [];
+    } catch (err) {
+      console.warn("mobManager.list() threw while checking occupancy", err);
+      return [];
+    }
+  }
+  if (Array.isArray(mobManager.list)) return mobManager.list;
+  if (Array.isArray(mobManager)) return mobManager;
+  return [];
+}
+
+function resolveRng(source) {
+  if (typeof source === "function") return source;
+  if (typeof source?.next === "function") {
+    return () => source.next();
+  }
+  if (typeof source?.random === "function") {
+    return () => source.random();
+  }
+  return Math.random;
 }
