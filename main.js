@@ -33,6 +33,7 @@ import { createInitialState } from "./src/game/state.js";
 import { ChapterState } from "./src/game/chapter-state.js";
 import { FactionService } from "./src/game/faction-service.js";
 import { mulberry32 } from "./src/sim/sim.js";
+import { collectWorldLightSources } from "./src/sim/lights.js";
 import { AIPlanner } from "./src/combat/ai-planner.js";
 import { updatePerception } from "./src/sim/senses.js";
 import { Actor } from "./src/combat/actor.js";
@@ -69,9 +70,8 @@ import { generateDoorsForDungeon } from "./src/world/dungeon/door-placement.js";
 import {
   computeFieldOfView,
   computeLightOverlayVisuals,
-  computeTileOverlayAlpha,
-  createLightOverlayContext,
 } from "./src/world/fov.js";
+import { createCompositeLightContext, compositeOverlayAt } from "./src/world/light_math.js";
 import "./src/combat/status-registry.js";
 import {
   STATUS_REGISTRY,
@@ -1842,17 +1842,10 @@ const Game = (() => {
 
   function getLightProperties() {
     const radius = readPlayerLightRadius();
-    const defaults = {
-      radius,
-      color: LIGHT_CONFIG.fallbackColor,
-      flickerRate: LIGHT_CONFIG.fallbackFlickerRate,
-    };
-    if (!player?.equipment?.getLightSourceProperties) {
-      return defaults;
-    }
-    const props =
-      player.equipment.getLightSourceProperties(defaults) ?? defaults;
-    return { ...props, radius };
+    const fallback = { radius, color: LIGHT_CONFIG.fallbackColor, flickerRate: LIGHT_CONFIG.fallbackFlickerRate };
+    const color = typeof player?.getLightColor === "function" ? player.getLightColor() : player?.equipment?.getLightColor?.();
+    const flickerRate = typeof player?.getLightFlickerRate === "function" ? player.getLightFlickerRate() : player?.equipment?.getLightFlickerRate?.();
+    return { radius, color: color ?? fallback.color, flickerRate: Number.isFinite(flickerRate) ? +flickerRate : fallback.flickerRate };
   }
 
   function refreshLightingVisuals(lightProps = null) {
@@ -3468,7 +3461,6 @@ const Game = (() => {
 
     const lightProps = getLightProperties();
     refreshLightingVisuals(lightProps);
-    const lightCtx = createLightOverlayContext(player, LIGHT_CONFIG, getNow);
     if (
       currentEndPos &&
       mapState.explored[currentEndPos.y]?.[currentEndPos.x]
@@ -3476,10 +3468,6 @@ const Game = (() => {
       isEndRendered = true;
       gameState.isEndRendered = isEndRendered;
     }
-
-    const overlayColor = fovState.overlayRgb
-      ? { ...fovState.overlayRgb, a: 1 }
-      : null;
 
     const furnitureEntities = buildFurnitureVisuals(
       mapState,
@@ -3492,6 +3480,19 @@ const Game = (() => {
         ? furnitureEntities.concat(mobEntities)
         : mobEntities;
 
+    const worldLights = collectWorldLightSources({
+      player,
+      entities,
+      mobs: mobManager?.all?.() ?? [],
+      mapState,
+    });
+    const compCtx = createCompositeLightContext(worldLights, LIGHT_CONFIG, getNow);
+    const sample = (x, y) => compositeOverlayAt(x, y, compCtx, LIGHT_CONFIG);
+
+    const overlayColor = fovState.overlayRgb
+      ? { ...fovState.overlayRgb, a: 1 }
+      : null;
+
     renderController.render(
       {
         map: { grid: mapState.grid, explored: mapState.explored },
@@ -3500,15 +3501,16 @@ const Game = (() => {
         start: player.startPos ?? null,
         end: isEndRendered ? currentEndPos : null,
         colors: CONFIG.visual.colors,
-        overlayAlphaAt: (x, y) =>
-          computeTileOverlayAlpha(x, y, lightCtx, LIGHT_CONFIG),
+        overlayAlphaAt: (x, y) => sample(x, y).a,
+        overlayColorAt: (x, y) => sample(x, y).rgb,
         overlayColor,
         entities,
       },
       view,
     );
 
-    updateLightAnimationState(lightProps?.flickerRate ?? 0, fromAnimationFrame);
+    const flicker = Math.max(lightProps?.flickerRate ?? 0, compCtx.maxFlickerRate ?? 0);
+    updateLightAnimationState(flicker, fromAnimationFrame);
   }
   function buildFurnitureVisuals(map, visibleSet, colors) {
     if (!map || !Array.isArray(map.furniture)) return [];
