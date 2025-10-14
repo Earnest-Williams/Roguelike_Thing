@@ -1,7 +1,7 @@
 // src/sim/sim.js
 // @ts-check
 import { createActorFromTemplate, ensureItemsRegistered } from "../factories/index.js";
-import { runTurn } from "../combat/loop.js";
+import { runTurn, runTurnAsync } from "../combat/loop.js";
 import { AIPlanner } from "../combat/ai-planner.js";
 import {
   SIM_DEFAULT_RUN_COUNT,
@@ -90,6 +90,66 @@ export function simulate({
     turnsAvg: +(turnsSum/N).toFixed(2),
     dpsAvg: +(dmgSum/N).toFixed(2),
     N, seed
+  };
+}
+
+/**
+ * Async variant of {@link simulate} that awaits planners and turn events.
+ * @param {{ a?: string, b?: string, N?: number, seed?: number }} [options]
+ */
+export async function simulateAsync({
+  a = "brigand",
+  b = "dummy",
+  N = SIM_DEFAULT_RUN_COUNT,
+  seed = SIM_DEFAULT_SEED,
+} = {}) {
+  ensureItemsRegistered();
+  const rng = mulberry32(seed);
+  let winsA = 0;
+  let winsB = 0;
+  let turnsSum = 0;
+  let dmgSum = 0;
+
+  for (let i = 0; i < N; i += 1) {
+    const A = createActorFromTemplate(a);
+    const B = createActorFromTemplate(b);
+    let turns = 0;
+    let dmg = 0;
+
+    const planA = (actor) => AIPlanner.takeTurn(actor, { target: B, distance: 1 });
+    const planB = (actor) => AIPlanner.takeTurn(actor, { target: A, distance: 1 });
+
+    let partialTurn = 0;
+    while (A.res.hp > 0 && B.res.hp > 0 && turns < SIM_MAX_TURNS) {
+      const aDefeated = await runTurnAsync(A, planA);
+      if (aDefeated || B.res.hp <= 0) {
+        partialTurn = SIM_PARTIAL_TURN_CREDIT;
+        break;
+      }
+
+      const bDefeated = await runTurnAsync(B, planB);
+      if (bDefeated || A.res.hp <= 0) {
+        turns += 1;
+        break;
+      }
+
+      turns += 1;
+    }
+
+    const totalTurns = Math.max(turns + partialTurn, SIM_PARTIAL_TURN_CREDIT);
+    if (A.res.hp > 0) winsA += 1; else winsB += 1;
+    dmg += (A.base.maxHP - A.res.hp) + (B.base.maxHP - B.res.hp);
+    turnsSum += totalTurns;
+    dmgSum += dmg / totalTurns;
+  }
+
+  return {
+    winsA,
+    winsB,
+    turnsAvg: +(turnsSum / N).toFixed(2),
+    dpsAvg: +(dmgSum / N).toFixed(2),
+    N,
+    seed,
   };
 }
 

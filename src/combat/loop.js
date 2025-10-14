@@ -10,7 +10,7 @@ import {
 import { gainAP, tickCooldowns, initiativeWithTemporal } from "./time.js";
 import { tickResources, isDefeated } from "./resources.js";
 import { tickAttunements } from "./attunement.js";
-import { EVENT, emit } from "../ui/event-log.js";
+import { EVENT, emit, emitAsync } from "../ui/event-log.js";
 import { logTurnEvt } from "./debug-log.js";
 import { tickFreeAction } from "./actor.js";
 
@@ -111,7 +111,11 @@ export function endTurn(actor) {
  * @param {import("./actor.js").Actor} actor
  * @param {(actor: import("./actor.js").Actor)=>void} [actionPlanner]
  */
-export function runTurn(actor, actionPlanner) {
+function isPromiseLike(value) {
+  return !!(value && typeof value === "object" && typeof value.then === "function");
+}
+
+function runTurnCore(actor, actionPlanner) {
   startTurn(actor);
   if (actor) {
     actor.resources ||= { pools: Object.create(null) };
@@ -122,13 +126,44 @@ export function runTurn(actor, actionPlanner) {
   }
   gainAP(actor);
 
-  actionPlanner?.(actor);
+  const plannerResult = typeof actionPlanner === "function" ? actionPlanner(actor) : null;
+  return plannerResult;
+}
 
+function finalizeTurn(actor) {
   tickCooldowns(actor);
-
   endTurn(actor);
+}
+
+export function runTurn(actor, actionPlanner) {
+  const plannerResult = runTurnCore(actor, actionPlanner);
+  if (isPromiseLike(plannerResult)) {
+    if (typeof console !== "undefined" && console.warn) {
+      console.warn(
+        "runTurn received an async planner; prefer runTurnAsync to await the result.",
+      );
+    }
+    plannerResult.catch((err) => {
+      if (typeof console !== "undefined" && console.error) {
+        console.error("async actionPlanner rejected", err);
+      }
+    });
+  }
+
+  finalizeTurn(actor);
 
   emit(EVENT.TURN, { who: actor.name, ap: actor.ap, hp: actor.res.hp });
+
+  return isDefeated(actor);
+}
+
+export async function runTurnAsync(actor, actionPlanner) {
+  const plannerResult = runTurnCore(actor, actionPlanner);
+  await plannerResult;
+
+  finalizeTurn(actor);
+
+  await emitAsync(EVENT.TURN, { who: actor.name, ap: actor.ap, hp: actor.res.hp });
 
   return isDefeated(actor);
 }
