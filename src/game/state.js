@@ -72,6 +72,7 @@ export function createInitialState() {
       devPanelMounted: false,
       debugOverlayMounted: false,
       debugOverlayInstance: null,
+      showAIOverlay: false,
     },
     prevPlayerPos: {
       x: INVALID_POSITION_COORD,

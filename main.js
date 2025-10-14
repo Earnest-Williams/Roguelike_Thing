@@ -72,6 +72,7 @@ import {
   computeLightOverlayVisuals,
 } from "./src/world/fov.js";
 import { createCompositeLightContext, compositeOverlayAt } from "./src/world/light_math.js";
+import { setAIOverlayEnabled, updateAIOverlay } from "./src/debug/ai_overlay.js";
 import "./src/combat/status-registry.js";
 import {
   STATUS_REGISTRY,
@@ -303,6 +304,21 @@ const Game = (() => {
   // elements, rendering systems, and the persistent `gameState` object.
   const gameState = createInitialState();
   gameState.config = gameState.config || {};
+
+  if (typeof window !== "undefined") {
+    window.addEventListener("keydown", (event) => {
+      if (event.code === "F9") {
+        event.preventDefault();
+        const debug = gameState?.debug;
+        if (!debug) return;
+        debug.showAIOverlay = !debug.showAIOverlay;
+        setAIOverlayEnabled(debug.showAIOverlay);
+        if (debug.showAIOverlay) {
+          updateAIOverlay(window.__AI_LAST_DECISION ?? null);
+        }
+      }
+    });
+  }
 
   const DEFAULT_TICKS_PER_SECOND = Number.isFinite(CONFIG?.ai?.ticksPerSecond)
     ? CONFIG.ai.ticksPerSecond
@@ -3544,6 +3560,12 @@ const Game = (() => {
       },
       view,
     );
+
+    if (debugState.showAIOverlay) {
+      const lastDecision =
+        typeof window !== "undefined" ? window.__AI_LAST_DECISION ?? null : null;
+      updateAIOverlay(lastDecision);
+    }
 
     const flicker = Math.max(lightProps?.flickerRate ?? 0, compCtx.maxFlickerRate ?? 0);
     updateLightAnimationState(flicker, fromAnimationFrame);
