@@ -46,7 +46,7 @@ export class RenderController {
    * @param {Object} state
    * @param {{ grid: number[][], explored: boolean[][] }} state.map
    * @param {{ visible: Set<string> }} state.fov
-   * @param {{ x: number, y: number }} state.player
+   * @param {{ x: number, y: number, lightRadius?: number }} state.player
    * @param {{ x: number, y: number } | null | undefined} [state.start]
    * @param {{ x: number, y: number } | null | undefined} [state.end]
    * @param {Record<string, string>} state.colors
@@ -86,6 +86,12 @@ export class RenderController {
         }
       : state.overlayColorAt;
 
+    const playerLightRadius = Number.isFinite(state.lightRadius)
+      ? Math.max(0, state.lightRadius)
+      : Number.isFinite(state.player?.lightRadius)
+        ? Math.max(0, state.player.lightRadius)
+        : 0;
+
     const batch = buildMainViewBatch({
       grid: state.map.grid,
       explored: state.map.explored,
@@ -94,7 +100,7 @@ export class RenderController {
       startPos: state.start ?? null,
       endPos: state.end ?? null,
       colors: state.colors,
-      lightRadius: state.lightRadius ?? 0,
+      lightRadius: playerLightRadius,
       overlayAlphaAt,
       overlayColorAt: overlayColorAt ?? null,
       overlayColor: state.overlayColor ?? null,
