@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "target": "ES2021",
+    "module": "ES2020",
+    "moduleResolution": "Node",
+    "strict": true,
+    "noImplicitOverride": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+
+    "allowJs": true,
+    "checkJs": false,
+    "outDir": "dist",
+    "baseUrl": ".",
+    "paths": {
+      "@types/*": ["src/types/*"],
+      "@spells/*": ["src/spells/*"],
+      "@spellcraft/*": ["src/spellcraft/*"],
+      "@runes/*": ["src/runes/*"]
+    }
+  },
+  "include": ["src/**/*"]
+}
