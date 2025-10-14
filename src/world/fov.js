@@ -41,30 +41,38 @@ export function createLightOverlayContext(player, lightConfig = {}, getNow = def
  */
 export function computeTileOverlayAlpha(x, y, lightCtx, lightConfig = {}) {
   const baseA = clampUnitInterval(lightConfig.baseOverlayAlpha ?? 0);
-  const variance = Math.max(0, lightConfig.flickerVariance ?? 0);
-  if (!lightCtx || variance <= 0) {
+  if (!lightCtx) {
     return baseA;
   }
+
   const radius = Number.isFinite(lightCtx.radius) ? Math.max(0, lightCtx.radius) : 0;
   if (radius <= 0) {
     return baseA;
   }
-  const osc = lightCtx.osc || 0;
-  if (osc === 0) {
-    return baseA;
-  }
+
   const dx = x - (lightCtx.playerX ?? 0);
   const dy = y - (lightCtx.playerY ?? 0);
-  const dist = Math.max(Math.abs(dx), Math.abs(dy));
-  const dead = lightConfig.flickerNearDeadZoneTiles ?? 0;
+  const dist = Math.hypot(dx, dy);
+  const dead = Math.max(0, lightConfig.flickerNearDeadZoneTiles ?? 0);
   const denom = Math.max(1e-6, radius - dead);
-  const u0 = (dist - dead) / denom;
-  const u = smoothstep01(u0);
-  const falloffPower = Number.isFinite(lightConfig.flickerFalloffPower)
-    ? lightConfig.flickerFalloffPower
-    : 1;
-  const amp = variance * Math.pow(u, falloffPower);
-  const alpha = baseA + osc * amp;
+  const normalized = (dist - dead) / denom;
+  const falloff = 1 - smoothstep01(normalized);
+  if (falloff <= 0) {
+    return 0;
+  }
+
+  let alpha = baseA * falloff;
+
+  const variance = Math.max(0, lightConfig.flickerVariance ?? 0);
+  const osc = Number.isFinite(lightCtx.osc) ? lightCtx.osc : 0;
+  if (variance > 0 && osc !== 0) {
+    const falloffPower = Number.isFinite(lightConfig.flickerFalloffPower)
+      ? lightConfig.flickerFalloffPower
+      : 1;
+    const flickerScale = Math.pow(Math.max(falloff, 0), falloffPower);
+    alpha += osc * variance * flickerScale;
+  }
+
   if (alpha <= 0) return 0;
   if (alpha >= 1) return 1;
   return alpha;
