@@ -10,6 +10,7 @@ import "./affixes-items.test.js";
 import "./items-brand-catalog.test.js";
 import "./fov.test.js";
 import "./light-radius-unified.test.js";
+import "./light-math.test.js";
 import "./theme-generation.test.js";
 import "./loot-budget.test.js";
 import "./faction-service.test.js";
