@@ -135,6 +135,22 @@ function normalizeThrowProfile(profile, item) {
   };
 }
 
+function cloneRangeDescriptor(range) {
+  if (!range || typeof range !== "object") {
+    return null;
+  }
+  const min = Number.isFinite(range.min) ? Number(range.min) : 0;
+  const optimalCandidate = Number.isFinite(range.optimal)
+    ? Number(range.optimal)
+    : min;
+  const maxCandidate = Number.isFinite(range.max)
+    ? Number(range.max)
+    : optimalCandidate;
+  const optimal = Math.max(min, optimalCandidate);
+  const max = Math.max(optimal, maxCandidate);
+  return { min, optimal, max };
+}
+
 export function classifyThrowability(item) {
   if (!item) return THROW_CLASS.UNSUITABLE;
   const mass = item.mass ?? 0.1;
@@ -316,12 +332,12 @@ export function getAttackModesForItem(item) {
 export function cloneThrowProfile(profile) {
   if (!profile) return null;
   return {
-    range: profile.range ? { ...profile.range } : null,
+    range: cloneRangeDescriptor(profile.range),
     damage: profile.damage ? { ...profile.damage } : null,
     accuracy: profile.accuracy,
     consumesItem: profile.consumesItem,
     recoveryChance: profile.recoveryChance,
-    notes: profile.notes || null,
+    notes: profile.notes ?? null,
   };
 }
 
@@ -333,15 +349,22 @@ function normalizeAmmoProfile(ammo) {
       typePrefix: ammo,
       perShot: 1,
       consumesItem: false,
+      itemId: null,
+      label: null,
     };
   }
+  const perShotCandidate = Number(ammo.perShot);
+  const perShot =
+    Number.isFinite(perShotCandidate) && perShotCandidate > 0
+      ? Math.floor(perShotCandidate)
+      : 1;
   return {
     type: ammo.type ?? null,
     typePrefix: ammo.typePrefix ?? ammo.type ?? null,
     itemId: ammo.itemId ?? null,
-    perShot: Math.max(1, ammo.perShot ?? 1),
+    perShot: Math.max(1, perShot),
     consumesItem: !!ammo.consumesItem,
-    label: ammo.label || null,
+    label: ammo.label ?? null,
   };
 }
 
@@ -372,10 +395,11 @@ export function normalizeWeaponProfile(profile) {
 
 export function cloneWeaponProfile(profile) {
   if (!profile) return null;
+  const range = cloneRangeDescriptor(profile.range) ?? { min: 0, optimal: 0, max: 0 };
   return {
     category: profile.category,
     isRanged: profile.isRanged,
-    range: profile.range ? { ...profile.range } : null,
+    range,
     reloadTime: profile.reloadTime,
     aimTime: profile.aimTime,
     volley: profile.volley,
@@ -384,7 +408,7 @@ export function cloneWeaponProfile(profile) {
     accuracy: profile.accuracy,
     consumeWeaponOnUse: profile.consumeWeaponOnUse,
     recoveryChance: profile.recoveryChance,
-    notes: profile.notes,
+    notes: profile.notes ?? null,
   };
 }
 
