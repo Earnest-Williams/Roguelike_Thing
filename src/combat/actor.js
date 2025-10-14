@@ -430,11 +430,24 @@ export class Actor {
   _sumEquipmentLightRadius() {
     const slots = this.equipment?.slots || this.equipment || {};
     let sum = 0;
-    for (const key of Object.keys(slots)) {
-      const entry = slots[key];
-      if (entry && typeof entry.lightRadius === "number") {
-        sum += entry.lightRadius;
+    const addRadius = (entry) => {
+      if (!entry || typeof entry !== "object") return;
+      const item = "item" in entry && entry.item ? entry.item : entry;
+      const radius = Number.isFinite(item?.lightRadius) ? item.lightRadius : 0;
+      if (radius > 0) {
+        sum += radius;
       }
+    };
+
+    if (slots instanceof Map) {
+      for (const entry of slots.values()) {
+        addRadius(entry);
+      }
+      return sum;
+    }
+
+    for (const key of Object.keys(slots)) {
+      addRadius(slots[key]);
     }
     return sum;
   }

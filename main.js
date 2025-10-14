@@ -889,13 +889,17 @@ const Game = (() => {
       let best = { ...fallback };
       let usingFallback = true;
       for (const [, it] of this.slots) {
-        if (!it || !it.lightRadius) continue;
+        if (!it || typeof it !== "object") continue;
+        const item = "item" in it && it.item ? it.item : it;
+        if (!Number.isFinite(item?.lightRadius) || item.lightRadius <= 0) {
+          continue;
+        }
         const candidate = {
-          radius: it.lightRadius,
-          color: it.lightColor || fallback.color,
+          radius: item.lightRadius,
+          color: item.lightColor || fallback.color,
           flickerRate:
-            typeof it.flickerRate === "number"
-              ? it.flickerRate
+            typeof item.flickerRate === "number"
+              ? item.flickerRate
               : fallback.flickerRate,
         };
         if (
