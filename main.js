@@ -3588,7 +3588,11 @@ const Game = (() => {
       {
         map: { grid: mapState.grid, explored: mapState.explored },
         fov: { visible: currentVisible },
-        player: { x: playerPos.x, y: playerPos.y },
+        player: {
+          x: playerPos.x,
+          y: playerPos.y,
+          lightRadius: lightProps.radius,
+        },
         start: player.startPos ?? null,
         end: isEndRendered ? currentEndPos : null,
         colors: CONFIG.visual.colors,
