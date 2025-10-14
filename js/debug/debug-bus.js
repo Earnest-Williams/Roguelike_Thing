@@ -18,5 +18,25 @@ export const DebugBus = (() => {
         }
       }
     },
+    async emitAsync(evt) {
+      const promises = [];
+      for (const fn of listeners) {
+        try {
+          const result = fn(evt);
+          if (result && typeof result.then === "function") {
+            promises.push(result);
+          }
+        } catch (err) {
+          console.error("DebugBus listener error", err);
+        }
+      }
+      if (promises.length === 0) return;
+      const results = await Promise.allSettled(promises);
+      for (const outcome of results) {
+        if (outcome.status === "rejected") {
+          console.error("DebugBus async listener rejected", outcome.reason);
+        }
+      }
+    },
   };
 })();

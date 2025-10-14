@@ -23,11 +23,42 @@ export class UIManager {
     /** @type {HTMLElement[]} */
     this.inventorySlotList = [];
     this.statusPriority = "system";
+    this.domTaskQueue = Promise.resolve();
     this.subscriptions = [
       subscribe(EVENT.STATUS, (entry) => this.handleStatusEvent(entry.payload)),
       subscribe(EVENT.COMBAT, (entry) => this.renderCombatEvent(entry.payload)),
       subscribe(EVENT.TURN, (entry) => this.updateTurnInfo(entry.payload)),
     ];
+  }
+
+  /**
+   * Schedule a DOM update to run asynchronously in order.
+   * @param {() => void} fn
+   * @returns {Promise<void>}
+   */
+  scheduleDomTask(fn) {
+    const enqueue = typeof queueMicrotask === "function"
+      ? queueMicrotask
+      : (cb) => Promise.resolve().then(cb);
+
+    this.domTaskQueue = this.domTaskQueue.then(
+      () =>
+        new Promise((resolve) => {
+          enqueue(() => {
+            try {
+              fn();
+            } catch (err) {
+              if (typeof console !== "undefined" && console.error) {
+                console.error("UIManager DOM update failed", err);
+              }
+            } finally {
+              resolve();
+            }
+          });
+        }),
+    );
+
+    return this.domTaskQueue;
   }
 
   /**
@@ -194,7 +225,7 @@ export class UIManager {
    * Respond to combat events with a low-priority status message.
    * @param {any} payload
    */
-  renderCombatEvent(payload) {
+  async renderCombatEvent(payload) {
     if (!payload) return;
     const who = payload.who || payload.attacker?.name || payload.attacker?.id;
     const vs = payload.vs || payload.defender?.name || payload.defender?.id;
@@ -204,7 +235,7 @@ export class UIManager {
       dmg != null
         ? `${who} attacks ${vs} for ${dmg} damage!`
         : `${who} attacks ${vs}!`;
-    this.setStatusMessage(message, "combat", who || "combatant");
+    await this.setStatusMessageAsync(message, "combat", who || "combatant");
   }
 
   /**
@@ -219,10 +250,11 @@ export class UIManager {
    * Handle high-priority status events from the simulation.
    * @param {any} payload
    */
-  handleStatusEvent(payload) {
+  async handleStatusEvent(payload) {
     if (!payload) return;
     const hasMsg = Object.prototype.hasOwnProperty.call(payload, "msg");
     const hasLegacy = Object.prototype.hasOwnProperty.call(payload, "message");
+    const tasks = [];
     if (hasMsg || hasLegacy) {
       const whoField =
         typeof payload.who === "string" && payload.who.trim().length
@@ -231,16 +263,19 @@ export class UIManager {
       const message = hasMsg ? payload.msg ?? "" : payload.message ?? "";
       const priority =
         payload.priority ?? (whoField === "system" ? "system" : "combat");
-      this.setStatusMessage(message, priority, whoField);
+      tasks.push(this.setStatusMessageAsync(message, priority, whoField));
     }
     if (Object.prototype.hasOwnProperty.call(payload, "restartVisible")) {
-      this.setRestartVisible(Boolean(payload.restartVisible));
+      tasks.push(this.setRestartVisibleAsync(Boolean(payload.restartVisible)));
     }
     if (Object.prototype.hasOwnProperty.call(payload, "paused")) {
-      this.setPaused(Boolean(payload.paused));
+      tasks.push(this.setPausedAsync(Boolean(payload.paused)));
     }
     if (Object.prototype.hasOwnProperty.call(payload, "speed")) {
-      this.setSpeed(payload.speed);
+      tasks.push(this.setSpeedAsync(payload.speed));
+    }
+    if (tasks.length) {
+      await Promise.allSettled(tasks);
     }
   }
 
@@ -275,6 +310,16 @@ export class UIManager {
   }
 
   /**
+   * Asynchronous convenience wrapper for {@link setStatusMessage}.
+   * @param {string} message
+   * @param {"system" | "combat"} priority
+   * @param {string} [who]
+   */
+  setStatusMessageAsync(message, priority = "system", who = "system") {
+    return this.scheduleDomTask(() => this.setStatusMessage(message, priority, who));
+  }
+
+  /**
    * Toggle restart button visibility.
    * @param {boolean} visible
    */
@@ -285,6 +330,13 @@ export class UIManager {
   }
 
   /**
+   * @param {boolean} visible
+   */
+  setRestartVisibleAsync(visible) {
+    return this.scheduleDomTask(() => this.setRestartVisible(visible));
+  }
+
+  /**
    * Update pause indicator text.
    * @param {boolean} paused
    */
@@ -292,6 +344,13 @@ export class UIManager {
     const el = this.elements.pauseIndicator;
     if (!el) return;
     el.textContent = paused ? "PAUSED" : "";
+  }
+
+  /**
+   * @param {boolean} paused
+   */
+  setPausedAsync(paused) {
+    return this.scheduleDomTask(() => this.setPaused(paused));
   }
 
   /**
@@ -306,6 +365,15 @@ export class UIManager {
       el.textContent = `${num} tps`;
     } else if (speed != null) {
       el.textContent = String(speed);
+    } else {
+      el.textContent = "";
     }
+  }
+
+  /**
+   * @param {number|string} speed
+   */
+  setSpeedAsync(speed) {
+    return this.scheduleDomTask(() => this.setSpeed(speed));
   }
 }
