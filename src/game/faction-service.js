@@ -39,17 +39,37 @@ export const FactionService = {
   },
 
   /**
-   * Determines if two actors are hostile. This is the inverse of `isAllied`.
+   * Determines if two actors are hostile based on faction overlap.
    * @param {import('../combat/actor.js').Actor|any} a
    * @param {import('../combat/actor.js').Actor|any} b
    * @returns {boolean}
    */
   isHostile(a, b) {
-    return this.relation(a, b) < 0;
+    const actorA = toActor(a);
+    const actorB = toActor(b);
+    if (!actorA || !actorB) return false;
+    if (actorA === actorB) return false;
+    if (this.isAllied(actorA, actorB)) return false;
+
+    const factionsA = sanitizeFactions(actorA);
+    const factionsB = sanitizeFactions(actorB);
+    if (factionsA.length === 0 && factionsB.length === 0) return false;
+    if (factionsA.length === 0 || factionsB.length === 0) return true;
+    return !factionsA.some((fa) => factionsB.includes(fa));
   },
 
   /**
-   * Canonical relation score between two entities.
+   * Friendly relation mirrors the allied check but is exposed for clarity.
+   * @param {import('../combat/actor.js').Actor|any} a
+   * @param {import('../combat/actor.js').Actor|any} b
+   * @returns {boolean}
+   */
+  isFriendly(a, b) {
+    return this.isAllied(a, b);
+  },
+
+  /**
+   * Canonical relation score between two entities (-1 hostile, 0 neutral, 1 friendly).
    * @param {import('../combat/actor.js').Actor|any} a
    * @param {import('../combat/actor.js').Actor|any} b
    * @returns {-1|0|1}
@@ -59,26 +79,9 @@ export const FactionService = {
     const actorB = toActor(b);
     if (!actorA || !actorB) return 0;
     if (actorA === actorB) return 1;
-    if (this.isAllied(actorA, actorB)) return 1;
-
-    const factionsA = Array.isArray(actorA.factions) ? actorA.factions : [];
-    const factionsB = Array.isArray(actorB.factions) ? actorB.factions : [];
-    if (factionsA.length === 0 || factionsB.length === 0) {
-      return 0;
-    }
-
-    const filteredA = factionsA.filter((id) => id && id !== "unaligned");
-    const filteredB = factionsB.filter((id) => id && id !== "unaligned");
-
-    if (filteredA.length === 0 && filteredB.length === 0) {
-      return 0;
-    }
-
-    if (filteredA.length === 0 || filteredB.length === 0) {
-      return -1;
-    }
-
-    return -1;
+    if (this.isFriendly(actorA, actorB)) return 1;
+    if (this.isHostile(actorA, actorB)) return -1;
+    return 0;
   },
 };
 
@@ -93,5 +96,25 @@ function toActor(entity) {
   if (entity.actor && entity.actor !== entity) return toActor(entity.actor);
   if (Array.isArray(entity.factions)) return entity;
   return null;
+}
+
+function sanitizeFactions(actor) {
+  const set = new Set();
+  if (typeof actor?.faction === "string") {
+    set.add(actor.faction);
+  }
+  if (Array.isArray(actor?.factions)) {
+    for (const id of actor.factions) {
+      if (typeof id === "string") {
+        set.add(id);
+      }
+    }
+  }
+  const result = [];
+  for (const id of set) {
+    if (!id || id === "unaligned") continue;
+    result.push(id);
+  }
+  return result;
 }
 

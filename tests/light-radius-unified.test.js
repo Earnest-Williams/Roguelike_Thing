@@ -72,8 +72,24 @@ function testMonsterDelegatesToActorGetter() {
 }
 
 function testActorReadsLightPropertiesFromPlainEquipment() {
-  const torch = { id: "torch", lightRadius: 2, flickerRate: 3.5, lightColor: "#f80" };
-  const lantern = { id: "lantern", lightRadius: 5, flickerRate: 1.2, lightColor: "#fff" };
+  const torch = {
+    id: "torch",
+    emitsLight: true,
+    lit: true,
+    radius: 2,
+    lightRadius: 2,
+    flickerRate: 3.5,
+    lightColor: "#f80",
+  };
+  const lantern = {
+    id: "lantern",
+    emitsLight: true,
+    lit: true,
+    radius: 5,
+    lightRadius: 5,
+    flickerRate: 1.2,
+    lightColor: "#fff",
+  };
   const actor = new Actor({
     id: "torch-test",
     baseStats: { baseSpeed: 1, maxHP: 1 },
@@ -102,6 +118,13 @@ function testActorReadsLightPropertiesFromPlainEquipment() {
     actor.getLightColor(),
     lantern.lightColor,
     "actor should update light color to match the strongest light source",
+  );
+
+  lantern.lit = false;
+  assert.equal(
+    actor.getLightRadius(),
+    2,
+    "unlit light sources should not contribute to the actor's light radius",
   );
 }
 

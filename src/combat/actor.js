@@ -462,13 +462,13 @@ export class Actor {
     let usingFallback = true;
 
     this._forEachEquipmentItem((item) => {
-      const radius = Number.isFinite(item?.lightRadius) ? Math.max(0, item.lightRadius) : 0;
-      if (radius <= 0) return;
-      const color =
-        typeof item.lightColor === "string" && item.lightColor
-          ? item.lightColor
-          : fallback.color;
-      const flickerRate = Number.isFinite(item?.flickerRate) ? item.flickerRate : fallback.flickerRate;
+      const descriptor = readItemLightDescriptor(item);
+      if (!descriptor) return;
+      const radius = descriptor.radius;
+      const color = descriptor.color ?? fallback.color;
+      const flickerRate = Number.isFinite(descriptor.flickerRate)
+        ? descriptor.flickerRate
+        : fallback.flickerRate;
       const candidate = { radius, color, flickerRate };
       if (radius > best.radius || (usingFallback && radius === best.radius)) {
         best = candidate;
@@ -626,6 +626,26 @@ export function asActor(entity) {
 function clearAndAssign(target, source) {
   for (const key of Object.keys(target)) delete target[key];
   Object.assign(target, source);
+}
+
+function readItemLightDescriptor(item) {
+  if (!item || typeof item !== "object") return null;
+  if (item.lit === false) return null;
+  if (item.emitsLight === false) return null;
+  let radius = 0;
+  for (const value of [item.radius, item.lightRadius]) {
+    if (!Number.isFinite(value)) continue;
+    radius = Math.max(radius, Number(value));
+  }
+  if (!Number.isFinite(radius) || radius <= 0) return null;
+  const color =
+    typeof item.lightColor === "string" && item.lightColor
+      ? item.lightColor
+      : typeof item.color === "string" && item.color
+      ? item.color
+      : null;
+  const flickerRate = Number.isFinite(item.flickerRate) ? item.flickerRate : undefined;
+  return { radius, color, flickerRate };
 }
 function ensureTurnFlags(actor) {
   if (!actor) return { moved: false, attacked: false, channeled: false };
