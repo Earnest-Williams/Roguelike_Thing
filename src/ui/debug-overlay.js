@@ -164,6 +164,16 @@ export class DebugOverlay {
     }
     this.prevResources = currentResources;
 
+    if (a?.perception) {
+      const visibleActors = Array.isArray(a.perception.visibleActors)
+        ? a.perception.visibleActors.length
+        : 0;
+      const visibleLights = Array.isArray(a.perception.visibleLights)
+        ? a.perception.visibleLights.length
+        : 0;
+      lines.push(`Perception: actors=${visibleActors} lights=${visibleLights}`);
+    }
+
     if (this.lastCombat?.payload) {
       const p = this.lastCombat.payload;
       lines.push("Last Attack:");

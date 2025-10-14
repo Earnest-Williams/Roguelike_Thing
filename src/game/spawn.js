@@ -1,7 +1,8 @@
 import { MOB_TEMPLATES } from "../content/mobs.js";
-import { createMobFromTemplate } from "../factories/index.js";
+import { createItem, createMobFromTemplate } from "../factories/index.js";
 import { CONFIG } from "../config.js";
 import { TILE_FLOOR } from "../../js/constants.js";
+import { applyLoadout } from "./monster.js";
 
 export function buildSpawnWeights({ includeTags = [] } = {}) {
   const allow = new Set(includeTags);
@@ -78,6 +79,7 @@ export function spawnMonsters(
 
     mob.x = pos.x;
     mob.y = pos.y;
+    applyLoadout(mob, id, rng, createItem);
     mobManager.add(mob);
     spawned++;
   }
@@ -120,6 +122,7 @@ export function spawnByIdCounts(
       if (!pos) continue;
       mob.x = pos.x;
       mob.y = pos.y;
+      applyLoadout(mob, id, rng, createItem);
       mobManager.add(mob);
       spawned++;
     }

@@ -45,7 +45,40 @@ export const FactionService = {
    * @returns {boolean}
    */
   isHostile(a, b) {
-    return !this.isAllied(a, b);
+    return this.relation(a, b) < 0;
+  },
+
+  /**
+   * Canonical relation score between two entities.
+   * @param {import('../combat/actor.js').Actor|any} a
+   * @param {import('../combat/actor.js').Actor|any} b
+   * @returns {-1|0|1}
+   */
+  relation(a, b) {
+    const actorA = toActor(a);
+    const actorB = toActor(b);
+    if (!actorA || !actorB) return 0;
+    if (actorA === actorB) return 1;
+    if (this.isAllied(actorA, actorB)) return 1;
+
+    const factionsA = Array.isArray(actorA.factions) ? actorA.factions : [];
+    const factionsB = Array.isArray(actorB.factions) ? actorB.factions : [];
+    if (factionsA.length === 0 || factionsB.length === 0) {
+      return 0;
+    }
+
+    const filteredA = factionsA.filter((id) => id && id !== "unaligned");
+    const filteredB = factionsB.filter((id) => id && id !== "unaligned");
+
+    if (filteredA.length === 0 && filteredB.length === 0) {
+      return 0;
+    }
+
+    if (filteredA.length === 0 || filteredB.length === 0) {
+      return -1;
+    }
+
+    return -1;
   },
 };
 

@@ -1,6 +1,8 @@
 // src/game/monster.js
 // @ts-check
 
+import { SLOT } from "../../js/constants.js";
+
 /**
  * @file Monster
  * World-entity wrapper around a combat `Actor`. This is the **only** Monster
@@ -155,5 +157,108 @@ export class Monster {
     if (!ctx?.AIPlanner?.takeTurn) return;
     return ctx.AIPlanner.takeTurn(this.__actor, { ...ctx, selfMob: this });
   }
+}
+
+const HAND_SLOTS = [SLOT.LeftHand, SLOT.RightHand];
+
+function resolveActor(entity) {
+  if (!entity) return null;
+  if (entity.__actor && entity.__actor !== entity) return resolveActor(entity.__actor);
+  if (entity.actor && entity.actor !== entity) return resolveActor(entity.actor);
+  return entity;
+}
+
+function hasEquipped(actor, slot) {
+  if (!actor?.equipment) return false;
+  const current = actor.equipment[slot];
+  if (current) return true;
+  if (slot === SLOT.LeftHand || slot === SLOT.RightHand) {
+    const other = slot === SLOT.LeftHand ? SLOT.RightHand : SLOT.LeftHand;
+    const otherItem = actor.equipment[other];
+    if (otherItem && otherItem.handsRequired === 2) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function tryEquip(actor, item, preferredSlots = []) {
+  if (!actor || !item || typeof actor.equip !== "function") return false;
+  const slots = Array.isArray(preferredSlots) && preferredSlots.length
+    ? preferredSlots.slice()
+    : Array.isArray(item.equipSlots)
+    ? item.equipSlots.slice()
+    : [];
+  for (const slot of slots) {
+    if (!slot) continue;
+    if (typeof item.canEquipTo === "function" && !item.canEquipTo(slot)) continue;
+    if (hasEquipped(actor, slot)) continue;
+    if (item.handsRequired === 2 && HAND_SLOTS.includes(slot)) {
+      const other = slot === SLOT.LeftHand ? SLOT.RightHand : SLOT.LeftHand;
+      if (hasEquipped(actor, other)) continue;
+      actor.equip(slot, item);
+      actor.equip(other, item);
+      return true;
+    }
+    actor.equip(slot, item);
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Equipment loadouts by monster template id.
+ */
+export const MONSTER_LOADOUTS = {
+  orc(actor, rng, createItem) {
+    if (!actor || typeof createItem !== "function") return;
+    const roll = typeof rng === "function" ? rng : Math.random;
+
+    if (!hasEquipped(actor, SLOT.RightHand) && !hasEquipped(actor, SLOT.LeftHand)) {
+      const weaponId = roll() < 0.5 ? "mace" : "long_sword";
+      tryEquip(actor, createItem(weaponId), [SLOT.RightHand, SLOT.LeftHand]);
+    }
+
+    if (!hasEquipped(actor, SLOT.Head) && roll() < 0.5) {
+      tryEquip(actor, createItem("leather_cap"), [SLOT.Head]);
+    }
+    if (!hasEquipped(actor, SLOT.BodyArmor) && roll() < 0.5) {
+      tryEquip(actor, createItem("basic_clothes"), [SLOT.BodyArmor]);
+    }
+    if (!hasEquipped(actor, SLOT.Boots) && roll() < 0.6) {
+      tryEquip(actor, createItem("boots"), [SLOT.Boots]);
+    }
+
+    if (roll() < 0.25) {
+      const torch = createItem("torch");
+      tryEquip(actor, torch, [SLOT.LeftHand, SLOT.RightHand, SLOT.Belt1, SLOT.Belt2, SLOT.Belt3, SLOT.Belt4]);
+    }
+  },
+
+  skeleton(actor, rng, createItem) {
+    if (!actor || typeof createItem !== "function") return;
+    const roll = typeof rng === "function" ? rng : Math.random;
+
+    if (!hasEquipped(actor, SLOT.RightHand) && !hasEquipped(actor, SLOT.LeftHand)) {
+      const weaponId = roll() < 0.5 ? "dagger" : "short_sword";
+      tryEquip(actor, createItem(weaponId), [SLOT.RightHand, SLOT.LeftHand]);
+    }
+
+    if (!hasEquipped(actor, SLOT.BodyArmor) && roll() < 0.25) {
+      tryEquip(actor, createItem("cloak"), [SLOT.Cloak, SLOT.BodyArmor]);
+    }
+
+    // Skeletons must not produce functional lights; deliberately skip torches.
+  },
+};
+
+export function applyLoadout(entity, templateId, rng = Math.random, createItemFn = null) {
+  const actor = resolveActor(entity);
+  if (!actor) return;
+  const maker = typeof createItemFn === "function" ? createItemFn : null;
+  if (!maker) return;
+  const fn = MONSTER_LOADOUTS[templateId];
+  if (typeof fn !== "function") return;
+  fn(actor, rng, maker);
 }
 
