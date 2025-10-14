@@ -19,6 +19,8 @@ export const EVENT = Object.freeze({
   COMBAT: "combat",
   STATUS: "status",
   CONSOLE: "console",
+  SPELL_CAST: "SPELL_CAST",
+  RUNE_TRIGGER: "RUNE_TRIGGER",
 });
 
 /** @type {Map<string, Set<EventListener>>} */
