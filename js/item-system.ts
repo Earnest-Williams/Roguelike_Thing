@@ -1,3 +1,7 @@
+/// <reference lib="es2015" />
+/// <reference lib="es2016.array.include" />
+/// <reference lib="es2017.object" />
+
 import {
   WEAPON_CATEGORY,
   RANGED_WEAPON_CATEGORIES,
