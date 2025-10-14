@@ -1,0 +1,25 @@
+{
+  "id": "arena",
+  "label": "Arena",
+  "description": "Aggressive combat focus.",
+  "switches": { "pursueCombat": true, "healWhenHurt": false },
+  "thresholds": { "minimumLight": 0.2, "lowHealth": 0.35 },
+  "weights": {
+    "exploration": 0.2,
+    "light": 0.1,
+    "safety": 0.4,
+    "loot": 0.2,
+    "exit": 0.3,
+    "combat": 1.6
+  },
+  "gates": { "allowAggro": true },
+  "formulas": { "combat": "targetThreat ? Math.max(0.1, 1 - targetThreat) : 1" },
+  "pathCost": {
+    "lighting": -0.05,
+    "threat": 0.3,
+    "lava": 1.2,
+    "revisit": 0.3,
+    "loot": -0.2,
+    "unexplored": -0.4
+  }
+}
