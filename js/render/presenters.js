@@ -20,6 +20,7 @@ import { colorStringToRgba as toRgba } from "../utils.js";
  * @param {{ x: number, y: number } | null | undefined} [params.startPos]
  * @param {{ x: number, y: number } | null | undefined} [params.endPos]
  * @param {Record<string, string>} params.colors
+ * @param {number} [params.lightRadius]
  * @param {(x: number, y: number) => number | undefined} params.overlayAlphaAt
  * @param {(x: number, y: number) => import("./types.js").RGBA | undefined | null} [params.overlayColorAt]
  * @param {RGBA | null | undefined} [params.overlayColor]
@@ -46,6 +47,7 @@ export function buildMainViewBatch({
   startPos = null,
   endPos = null,
   colors,
+  lightRadius = 0,
   overlayAlphaAt,
   overlayColorAt = null,
   overlayColor = null,
@@ -67,9 +69,8 @@ export function buildMainViewBatch({
 
   const overlayRgb = normalizeColor(overlayColor) || null;
 
-  const rawPlayerLightRadius = Number(player?.getLightRadius?.() ?? 0);
-  const playerLightRadius = Number.isFinite(rawPlayerLightRadius)
-    ? Math.max(0, rawPlayerLightRadius)
+  const playerLightRadius = Number.isFinite(lightRadius)
+    ? Math.max(0, lightRadius)
     : 0;
 
   const overlayAlphaFn =

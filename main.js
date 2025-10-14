@@ -3592,6 +3592,7 @@ const Game = (() => {
         start: player.startPos ?? null,
         end: isEndRendered ? currentEndPos : null,
         colors: CONFIG.visual.colors,
+        lightRadius: lightProps.radius,
         overlayAlphaAt: (x, y, entitiesOnTile = []) => {
           const s = sample(x, y, entitiesOnTile);
           return s?.a ?? 0;

@@ -50,6 +50,7 @@ export class RenderController {
    * @param {{ x: number, y: number } | null | undefined} [state.start]
    * @param {{ x: number, y: number } | null | undefined} [state.end]
    * @param {Record<string, string>} state.colors
+   * @param {number} [state.lightRadius]
    * @param {(x: number, y: number) => number | undefined} state.overlayAlphaAt
    * @param {(x: number, y: number) => import("./types.js").RGBA | undefined | null} [state.overlayColorAt]
    * @param {import("./types.js").RGBA | null | undefined} [state.overlayColor]
@@ -93,6 +94,7 @@ export class RenderController {
       startPos: state.start ?? null,
       endPos: state.end ?? null,
       colors: state.colors,
+      lightRadius: state.lightRadius ?? 0,
       overlayAlphaAt,
       overlayColorAt: overlayColorAt ?? null,
       overlayColor: state.overlayColor ?? null,
