@@ -40,6 +40,11 @@ function makeActor({ id, factions, affiliations }) {
     true,
     "actors with matching intrinsic factions should be allied",
   );
+  assert.equal(
+    FactionService.isFriendly(a, b),
+    true,
+    "friendly helper should mirror allied checks",
+  );
 })();
 
 (function testUnalignedNeverAllies() {
@@ -49,6 +54,11 @@ function makeActor({ id, factions, affiliations }) {
     FactionService.isAllied(chaotic, other),
     false,
     "unaligned faction should never ally with other factions",
+  );
+  assert.equal(
+    FactionService.isFriendly(chaotic, other),
+    false,
+    "unaligned faction should not be marked friendly",
   );
   assert.equal(
     FactionService.isHostile(chaotic, other),
@@ -77,6 +87,11 @@ function makeActor({ id, factions, affiliations }) {
     FactionService.isAllied(a, b),
     true,
     "shared affiliations should create alliances across factions",
+  );
+  assert.equal(
+    FactionService.isFriendly(a, b),
+    true,
+    "shared affiliations should report as friendly",
   );
 })();
 

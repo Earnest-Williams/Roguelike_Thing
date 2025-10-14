@@ -259,6 +259,21 @@ export function applyLoadout(entity, templateId, rng = Math.random, createItemFn
   if (!maker) return;
   const fn = MONSTER_LOADOUTS[templateId];
   if (typeof fn !== "function") return;
-  fn(actor, rng, maker);
+  const wrappedCreate = (id) => {
+    const item = maker(id);
+    if (templateId === "skeleton") {
+      extinguishLight(item);
+    }
+    return item;
+  };
+  fn(actor, rng, wrappedCreate);
+}
+
+function extinguishLight(item) {
+  if (!item || typeof item !== "object") return;
+  if ("lit" in item) item.lit = false;
+  if ("emitsLight" in item) item.emitsLight = false;
+  if (Number.isFinite(item.radius)) item.radius = 0;
+  if (Number.isFinite(item.lightRadius)) item.lightRadius = 0;
 }
 

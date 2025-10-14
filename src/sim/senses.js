@@ -6,30 +6,34 @@ import { posKeyFromCoords } from "../../js/utils.js";
 
 /**
  * Collect all world light sources including equipment carried by actors and
- * static furniture entries defined on the map state.
+ * static furniture entries defined on the map state. A light source is any
+ * entity with a positive radius where `lit !== false` and either advertises
+ * `emitsLight === true` or exposes a radius property.
  * @param {{ player?: any, mobManager?: any, mapState?: any }} gameCtx
- * @returns {Array<{ id: string, x: number, y: number, radius: number, color?: string|null, ownerId?: string|null }>} 
+ * @returns {Array<{ id: string, x: number, y: number, radius: number, color?: string|null, ownerId?: string|null, emitsLight?: bo
+olean }>}
  */
 export function collectWorldLightSources(gameCtx = {}) {
   const lights = [];
   const actors = listActors(gameCtx);
 
   for (const entity of actors) {
+    const ownerId = getEntityId(entity) || "actor";
+    const lx = toInt(entity?.x);
+    const ly = toInt(entity?.y);
+    if (!Number.isFinite(lx) || !Number.isFinite(ly)) continue;
     const items = listEquippedItems(entity);
     for (const item of items) {
-      const radius = Number.isFinite(item?.lightRadius) ? Math.max(0, item.lightRadius) : 0;
-      if (radius <= 0) continue;
-      const ownerId = getEntityId(entity);
-      const lx = toInt(entity?.x);
-      const ly = toInt(entity?.y);
-      if (!Number.isFinite(lx) || !Number.isFinite(ly)) continue;
+      const descriptor = resolveLightDescriptor(item);
+      if (!descriptor) continue;
       lights.push({
-        id: `${ownerId || "actor"}:${item.id ?? "item"}`,
+        id: `${ownerId}:${item?.id ?? "item"}`,
         x: lx,
         y: ly,
-        radius,
-        color: item.lightColor || null,
+        radius: descriptor.radius,
+        color: descriptor.color,
         ownerId: ownerId || null,
+        emitsLight: true,
       });
     }
   }
@@ -38,24 +42,157 @@ export function collectWorldLightSources(gameCtx = {}) {
     ? gameCtx.mapState.furniture
     : [];
   for (const placement of furniture) {
-    const pos = placement?.position || placement?.pos || placement?.tile || null;
-    const px = toInt(pos?.x);
-    const py = toInt(pos?.y);
-    if (!Number.isFinite(px) || !Number.isFinite(py)) continue;
-    const meta = placement?.metadata || placement?.furniture?.metadata || {};
-    const radius = Number.isFinite(meta?.lightRadius) ? Math.max(0, meta.lightRadius) : 0;
-    if (radius <= 0) continue;
+    const pos = resolvePlacementPosition(placement);
+    if (!pos) continue;
+    const descriptor = resolveLightDescriptor(
+      placement?.metadata,
+      placement?.furniture?.metadata,
+      placement,
+    );
+    if (!descriptor) continue;
     lights.push({
-      id: placement?.id || placement?.furniture?.id || `furn:${px},${py}`,
-      x: px,
-      y: py,
-      radius,
-      color: meta?.lightColor || placement?.furniture?.metadata?.lightColor || null,
+      id: placement?.id || placement?.furniture?.id || `furn:${pos.x},${pos.y}`,
+      x: pos.x,
+      y: pos.y,
+      radius: descriptor.radius,
+      color:
+        descriptor.color ??
+        placement?.metadata?.lightColor ??
+        placement?.furniture?.metadata?.lightColor ??
+        null,
       ownerId: null,
+      emitsLight: true,
+    });
+  }
+
+  const ground = listGroundItems(gameCtx?.mapState);
+  for (const entry of ground) {
+    const item = entry.item ?? entry;
+    const descriptor = resolveLightDescriptor(item);
+    if (!descriptor) continue;
+    const gx = toInt(entry.x);
+    const gy = toInt(entry.y);
+    if (!Number.isFinite(gx) || !Number.isFinite(gy)) continue;
+    lights.push({
+      id: entry.id || item?.id || `ground:${gx},${gy}`,
+      x: gx,
+      y: gy,
+      radius: descriptor.radius,
+      color: descriptor.color,
+      ownerId: null,
+      emitsLight: true,
     });
   }
 
   return lights;
+}
+
+function resolvePlacementPosition(placement) {
+  if (!placement || typeof placement !== "object") return null;
+  const px = toInt(
+    placement.x ?? placement?.position?.x ?? placement?.pos?.x ?? placement?.tile?.x,
+  );
+  const py = toInt(
+    placement.y ?? placement?.position?.y ?? placement?.pos?.y ?? placement?.tile?.y,
+  );
+  if (!Number.isFinite(px) || !Number.isFinite(py)) return null;
+  return { x: px, y: py };
+}
+
+function listGroundItems(mapState) {
+  const out = [];
+  if (!mapState) return out;
+  const ground = mapState.groundItems;
+  const visit = (entry) => {
+    const normalized = normalizeGroundEntry(entry);
+    if (normalized) out.push(normalized);
+  };
+  if (Array.isArray(ground)) {
+    for (const entry of ground) visit(entry);
+  } else if (ground instanceof Map) {
+    for (const value of ground.values()) {
+      if (Array.isArray(value)) {
+        for (const entry of value) visit(entry);
+      } else {
+        visit(value);
+      }
+    }
+  } else if (ground && typeof ground === "object") {
+    for (const value of Object.values(ground)) {
+      if (Array.isArray(value)) {
+        for (const entry of value) visit(entry);
+      } else {
+        visit(value);
+      }
+    }
+  }
+  return out;
+}
+
+function normalizeGroundEntry(entry) {
+  if (!entry || typeof entry !== "object") return null;
+  const item = entry.item ?? entry.payload ?? entry;
+  const pos = entry.position ?? entry.pos ?? entry.tile ?? entry;
+  const gx = toInt(entry.x ?? pos?.x);
+  const gy = toInt(entry.y ?? pos?.y);
+  if (!Number.isFinite(gx) || !Number.isFinite(gy)) return null;
+  return {
+    id: entry.id ?? item?.id ?? null,
+    item,
+    x: gx,
+    y: gy,
+  };
+}
+
+function resolveLightDescriptor(...candidates) {
+  const queue = [];
+  const seen = new Set();
+  for (const candidate of candidates) {
+    if (!candidate || typeof candidate !== "object") continue;
+    if (seen.has(candidate)) continue;
+    queue.push(candidate);
+    seen.add(candidate);
+  }
+  while (queue.length) {
+    const candidate = queue.shift();
+    const descriptor = extractLightDescriptor(candidate);
+    if (descriptor) return descriptor;
+    for (const key of ["light", "source", "item", "payload"]) {
+      const value = candidate?.[key];
+      if (!value) continue;
+      if (Array.isArray(value)) {
+        for (const entry of value) {
+          if (entry && typeof entry === "object" && !seen.has(entry)) {
+            queue.push(entry);
+            seen.add(entry);
+          }
+        }
+      } else if (typeof value === "object" && !seen.has(value)) {
+        queue.push(value);
+        seen.add(value);
+      }
+    }
+  }
+  return null;
+}
+
+function extractLightDescriptor(candidate) {
+  if (!candidate || typeof candidate !== "object") return null;
+  if (candidate.lit === false) return null;
+  if (candidate.emitsLight === false) return null;
+  let radius = 0;
+  for (const value of [candidate.radius, candidate.lightRadius]) {
+    if (!Number.isFinite(value)) continue;
+    radius = Math.max(radius, Number(value));
+  }
+  if (!Number.isFinite(radius) || radius <= 0) return null;
+  const color =
+    typeof candidate.lightColor === "string" && candidate.lightColor
+      ? candidate.lightColor
+      : typeof candidate.color === "string" && candidate.color
+      ? candidate.color
+      : null;
+  return { radius, color };
 }
 
 /**
