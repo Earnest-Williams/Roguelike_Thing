@@ -1850,8 +1850,11 @@ const Game = (() => {
     return { ...props, radius };
   }
 
-  function refreshLightingVisuals() {
-    const overlay = computeLightOverlayVisuals(getLightProperties(), LIGHT_CONFIG);
+  function refreshLightingVisuals(lightProps = null) {
+    const overlay = computeLightOverlayVisuals(
+      lightProps ?? getLightProperties(),
+      LIGHT_CONFIG,
+    );
     fovState.overlayStyle = overlay.style;
     fovState.overlayRgb = overlay.rgb;
   }
@@ -3383,10 +3386,73 @@ const Game = (() => {
   const DEFAULT_BADGE_COLOR = "#f8fafc";
   const MIN_BADGE_VALUE = 0.05;
 
-  function renderScene() {
-    if (!renderController || !rendererReady) return;
-    if (!mapState.grid || !mapState.grid.length) return;
-    if (!player || !player.pos) return;
+  const REQUEST_FRAME =
+    typeof requestAnimationFrame === "function"
+      ? (cb) => requestAnimationFrame(cb)
+      : (cb) => setTimeout(cb, 1000 / 30);
+  const CANCEL_FRAME =
+    typeof cancelAnimationFrame === "function"
+      ? (id) => cancelAnimationFrame(id)
+      : (id) => clearTimeout(id);
+  let lightAnimationFrameId = null;
+  let lightAnimationActive = false;
+
+  function stopLightAnimationLoop() {
+    if (lightAnimationFrameId != null) {
+      CANCEL_FRAME(lightAnimationFrameId);
+      lightAnimationFrameId = null;
+    }
+    lightAnimationActive = false;
+  }
+
+  function scheduleNextLightAnimationFrame() {
+    if (!lightAnimationActive || lightAnimationFrameId != null) return;
+    lightAnimationFrameId = REQUEST_FRAME(() => {
+      lightAnimationFrameId = null;
+      renderScene(true);
+    });
+  }
+
+  function updateLightAnimationState(flickerRate, fromAnimationFrame = false) {
+    const shouldAnimate =
+      Number.isFinite(flickerRate) &&
+      flickerRate > 0 &&
+      rendererReady &&
+      mapState.grid &&
+      mapState.grid.length > 0 &&
+      player &&
+      player.pos;
+    if (!shouldAnimate) {
+      if (lightAnimationActive) {
+        stopLightAnimationLoop();
+      }
+      return;
+    }
+    if (!lightAnimationActive) {
+      lightAnimationActive = true;
+      if (!fromAnimationFrame) {
+        scheduleNextLightAnimationFrame();
+      }
+      return;
+    }
+    if (fromAnimationFrame) {
+      scheduleNextLightAnimationFrame();
+    }
+  }
+
+  function renderScene(fromAnimationFrame = false) {
+    if (!renderController || !rendererReady) {
+      stopLightAnimationLoop();
+      return;
+    }
+    if (!mapState.grid || !mapState.grid.length) {
+      stopLightAnimationLoop();
+      return;
+    }
+    if (!player || !player.pos) {
+      stopLightAnimationLoop();
+      return;
+    }
 
     const playerPos = player.pos;
     const currentVisible =
@@ -3395,7 +3461,8 @@ const Game = (() => {
         : new Set();
     const view = buildViewTransform(playerPos);
 
-    refreshLightingVisuals();
+    const lightProps = getLightProperties();
+    refreshLightingVisuals(lightProps);
     const lightCtx = createLightOverlayContext(player, LIGHT_CONFIG, getNow);
     if (
       currentEndPos &&
@@ -3435,6 +3502,8 @@ const Game = (() => {
       },
       view,
     );
+
+    updateLightAnimationState(lightProps?.flickerRate ?? 0, fromAnimationFrame);
   }
   function buildFurnitureVisuals(map, visibleSet, colors) {
     if (!map || !Array.isArray(map.furniture)) return [];
