@@ -58,6 +58,33 @@ export class RenderController {
    */
   render(state, view) {
     this.renderer.setViewTransform(view);
+    const entities = Array.isArray(state.entities) ? state.entities : [];
+    const entityMap = new Map();
+    for (const ent of entities) {
+      if (!ent || typeof ent.x !== "number" || typeof ent.y !== "number") continue;
+      const key = `${ent.x},${ent.y}`;
+      if (!entityMap.has(key)) entityMap.set(key, []);
+      entityMap.get(key).push(ent);
+    }
+    if (state.player && typeof state.player.x === "number" && typeof state.player.y === "number") {
+      const key = `${state.player.x},${state.player.y}`;
+      if (!entityMap.has(key)) entityMap.set(key, []);
+      entityMap.get(key).push(state.player);
+    }
+
+    const overlayAlphaAt = typeof state.overlayAlphaAt === "function"
+      ? (x, y) => {
+          const entitiesOnTile = entityMap.get(`${x},${y}`) || [];
+          return state.overlayAlphaAt(x, y, entitiesOnTile);
+        }
+      : state.overlayAlphaAt;
+    const overlayColorAt = typeof state.overlayColorAt === "function"
+      ? (x, y) => {
+          const entitiesOnTile = entityMap.get(`${x},${y}`) || [];
+          return state.overlayColorAt(x, y, entitiesOnTile);
+        }
+      : state.overlayColorAt;
+
     const batch = buildMainViewBatch({
       grid: state.map.grid,
       explored: state.map.explored,
@@ -66,10 +93,10 @@ export class RenderController {
       startPos: state.start ?? null,
       endPos: state.end ?? null,
       colors: state.colors,
-      overlayAlphaAt: state.overlayAlphaAt,
-      overlayColorAt: state.overlayColorAt ?? null,
+      overlayAlphaAt,
+      overlayColorAt: overlayColorAt ?? null,
       overlayColor: state.overlayColor ?? null,
-      entities: state.entities ?? [],
+      entities,
     });
     this.renderer.clear();
     this.renderer.drawTiles(batch);

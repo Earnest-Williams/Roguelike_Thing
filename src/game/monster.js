@@ -1,7 +1,7 @@
 // src/game/monster.js
 // @ts-check
 
-import { SLOT } from "../../js/constants.js";
+import { SLOT, LIGHT_CHANNELS } from "../../js/constants.js";
 import { planTurn } from "../combat/ai-planner.js";
 import { updatePerception } from "../combat/perception.js";
 import { executeDecision } from "../combat/actions.js";
@@ -39,6 +39,8 @@ export class Monster {
     this.homePos = actor.homePos ?? null;
     this.guardRadius = actor.guardRadius ?? actor.__template?.guardRadius ?? null;
     this.wanderRadius = actor.wanderRadius ?? actor.__template?.wanderRadius ?? null;
+    this.lightMask = actor.lightMask ?? LIGHT_CHANNELS.ALL;
+    this.lightChannel = actor.lightChannel ?? LIGHT_CHANNELS.ALL;
   }
 
   get actor() {

@@ -15,6 +15,7 @@ import {
   STATUS_IDS,
   SLOT,
   ALL_SLOTS_ORDER,
+  LIGHT_CHANNELS,
 } from "./js/constants.js";
 import {
   shuffle,
@@ -3547,12 +3548,25 @@ const Game = (() => {
             return result;
           }
         : null;
-    const sample = (x, y) => {
-      const key = `${x},${y}`;
+    const sample = (x, y, entitiesOnTile = []) => {
+      const tileMask = Array.isArray(entitiesOnTile) && entitiesOnTile.length > 0
+        ? entitiesOnTile.reduce(
+            (mask, ent) => mask | (Number.isFinite(ent?.lightMask) ? ent.lightMask : LIGHT_CHANNELS.ALL),
+            0,
+          ) || 0
+        : LIGHT_CHANNELS.ALL;
+      const key = `${x},${y},${tileMask}`;
       if (overlaySampleCache.has(key)) {
         return overlaySampleCache.get(key);
       }
-      const value = compositeOverlayAt(x, y, compCtx, LIGHT_CONFIG, losFn);
+      const value = compositeOverlayAt(
+        x,
+        y,
+        compCtx,
+        LIGHT_CONFIG,
+        losFn,
+        entitiesOnTile,
+      );
       overlaySampleCache.set(key, value);
       return value;
     };
@@ -3569,12 +3583,12 @@ const Game = (() => {
         start: player.startPos ?? null,
         end: isEndRendered ? currentEndPos : null,
         colors: CONFIG.visual.colors,
-        overlayAlphaAt: (x, y) => {
-          const s = sample(x, y);
+        overlayAlphaAt: (x, y, entitiesOnTile = []) => {
+          const s = sample(x, y, entitiesOnTile);
           return s?.a ?? 0;
         },
-        overlayColorAt: (x, y) => {
-          const s = sample(x, y);
+        overlayColorAt: (x, y, entitiesOnTile = []) => {
+          const s = sample(x, y, entitiesOnTile);
           return s?.rgb ?? null;
         },
         overlayColor,
