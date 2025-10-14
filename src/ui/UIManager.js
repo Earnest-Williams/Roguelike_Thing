@@ -29,7 +29,7 @@ const enqueueMicrotask =
  * from replacing it. This prevents an important message such as "You died" from being
  * immediately overwritten by combat log spam.
  */
-const SYSTEM_MESSAGE_BLOCK_DURATION_MS = 2000;
+const SYSTEM_MESSAGE_BLOCK_DURATION_MS = 250;
 
 /**
  * Central coordinator for DOM updates based on simulation events.
@@ -359,7 +359,11 @@ export class UIManager {
     if (normalizedPriority === "system") {
       this.statusPriority = "system";
       this.lastSystemMessageTime = now;
-    } else if (this.statusPriority === "system" && (now - this.lastSystemMessageTime) < SYSTEM_MESSAGE_BLOCK_DURATION_MS) {
+    } else if (
+      normalizedPriority !== "combat" &&
+      this.statusPriority === "system" &&
+      now - this.lastSystemMessageTime < SYSTEM_MESSAGE_BLOCK_DURATION_MS
+    ) {
       return;
     }
     statusEl.textContent = message || "";

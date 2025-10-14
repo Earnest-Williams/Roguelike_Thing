@@ -216,7 +216,11 @@ function resolveAttackCore(attacker, defender, opts = {}) {
   }
 
   ctx.packetsAfterDefense = attachPacketAccess(defendedPackets);
-  ctx.totalDamage = defendedPackets.reduce((sum, pkt) => sum + Math.max(0, Math.floor(pkt.amount)), 0);
+  let totalDamage = defendedPackets.reduce((sum, pkt) => sum + Math.max(0, Math.floor(pkt.amount)), 0);
+  if (totalDamage <= 0 && ctx.packetsAfterOffense.length > 0) {
+    totalDamage = 1;
+  }
+  ctx.totalDamage = totalDamage;
 
   if (ctx.totalDamage > 0) {
     applyDamageToTarget(defender, ctx.totalDamage);
