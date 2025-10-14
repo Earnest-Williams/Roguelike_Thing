@@ -87,7 +87,7 @@ function contributionAt(x, y, L, cfg) {
   }
   const dist = Math.hypot(dx, dy);
   const denom = Math.max(1e-6, L.r - dead);
-  const falloff = 1 - smoothstep01((dist - dead) / denom); // 1->0 across radius
+  const falloff = Math.pow(1 - smoothstep01((dist - dead) / denom), 0.75);
   if (falloff <= 0) return 0;
 
   const baseA = clamp01(cfg.baseOverlayAlpha ?? 0.75);
