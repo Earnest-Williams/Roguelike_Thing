@@ -1119,6 +1119,15 @@ const Game = (() => {
       return Number.isFinite(radius) ? Math.max(0, radius) : 0;
     }
 
+    getLightColor() {
+      return this.__actor?.getLightColor?.();
+    }
+
+    getLightFlickerRate() {
+      const rate = this.__actor?.getLightFlickerRate?.() ?? 0;
+      return Number.isFinite(rate) ? rate : 0;
+    }
+
     syncActorEquipment() {
       if (!this.__actor) return;
       const record = {};
