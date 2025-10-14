@@ -14,6 +14,8 @@ import "./theme-generation.test.js";
 import "./loot-budget.test.js";
 import "./faction-service.test.js";
 import "./spawn.test.js";
+import "./senses.test.js";
+import "./monster-loadout.test.js";
 import "./number-clamp.test.js";
 
 import { strict as assert } from "node:assert";
