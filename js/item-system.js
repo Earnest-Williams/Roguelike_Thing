@@ -38,6 +38,38 @@ function normalizeDamageProfile(dmg) {
   return { diceCount, diceSides, bonus };
 }
 
+function normalizeLightDescriptor(light, defaults = {}) {
+  const source = light && typeof light === "object" ? light : {};
+  const radiusCandidate = source.radius ?? defaults.radius;
+  const radius = Number.isFinite(radiusCandidate) ? Number(radiusCandidate) : 0;
+  if (radius <= 0) return null;
+  const color =
+    typeof source.color === "string"
+      ? source.color
+      : typeof defaults.color === "string"
+        ? defaults.color
+        : null;
+  const intensitySource =
+    source.intensity ??
+    defaults.intensity ??
+    (Number.isFinite(defaults.baseIntensity) ? defaults.baseIntensity : undefined);
+  const intensity =
+    intensitySource === undefined ? 1 : clamp01Normalized(Number(intensitySource));
+  const flickerRateCandidate = source.flickerRate ?? defaults.flickerRate;
+  const flickerRate = Number.isFinite(flickerRateCandidate)
+    ? Number(flickerRateCandidate)
+    : 0;
+  const worksWhenDropped =
+    source.worksWhenDropped ?? defaults.worksWhenDropped ?? true;
+  return {
+    radius,
+    color,
+    intensity,
+    flickerRate,
+    worksWhenDropped,
+  };
+}
+
 function computeHeftScore(item) {
   if (!item) return 0.5;
   const dims = item.dims || { l: 1, w: 1, h: 1 };
@@ -362,6 +394,13 @@ export class Item {
     this.lightRadius = o.lightRadius ?? 0;
     this.lightColor = o.lightColor ?? null;
     this.flickerRate = typeof o.flickerRate === "number" ? o.flickerRate : 0;
+    this.light = normalizeLightDescriptor(o.light, {
+      radius: this.lightRadius,
+      color: this.lightColor,
+      intensity: o.light?.intensity,
+      flickerRate: this.flickerRate,
+      worksWhenDropped: o.light?.worksWhenDropped,
+    });
     this.container = o.container ? { ...o.container } : null;
     if (this.container) this.contents = [];
     this.brands = Array.isArray(o.brands)
@@ -414,6 +453,7 @@ export class Item {
       lightRadius: this.lightRadius,
       lightColor: this.lightColor,
       flickerRate: this.flickerRate,
+      light: this.light ? { ...this.light } : null,
       container: null,
       throwProfile: this.throwProfile ? cloneThrowProfile(this.throwProfile) : null,
       weaponProfile: cloneWeaponProfile(this.weaponProfile),
@@ -890,6 +930,13 @@ const ITEM_DEFINITIONS = Object.freeze({
       lightRadius: 2,
       lightColor: "#ffb347",
       flickerRate: 3.5,
+      light: {
+        radius: 2,
+        color: "#ffb347",
+        intensity: 1,
+        flickerRate: 3.5,
+        worksWhenDropped: true,
+      },
     },
     {
       id: "lantern",
@@ -908,6 +955,13 @@ const ITEM_DEFINITIONS = Object.freeze({
       lightRadius: 5,
       lightColor: "#fff4c1",
       flickerRate: 1.2,
+      light: {
+        radius: 5,
+        color: "#fff4c1",
+        intensity: 1,
+        flickerRate: 1.2,
+        worksWhenDropped: true,
+      },
     },
   ],
   containers: [

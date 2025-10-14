@@ -93,6 +93,27 @@ export function collectWorldLightSources({ player, entities = [], mobs = [], map
     }
   }
 
+  if (Array.isArray(mapState?.furniture)) {
+    for (const placement of mapState.furniture) {
+      if (!placement) continue;
+      const fixture = placement.furniture ?? placement;
+      const pos = placement.position ?? placement;
+      const fx = finiteNum(pos?.x) ? pos.x : finiteNum(fixture?.x) ? fixture.x : null;
+      const fy = finiteNum(pos?.y) ? pos.y : finiteNum(fixture?.y) ? fixture.y : null;
+      const L = fixture?.light ?? placement.light;
+      if (!L || !finitePos(fx, fy) || !finiteRadius(L.radius)) continue;
+      out.push({
+        id: `fixture:${fixture.id ?? fixture.kind ?? "light"}:${seq++}`,
+        x: fx | 0,
+        y: fy | 0,
+        radius: +L.radius,
+        color: toRgb(L.color ?? "#ffe9a6"),
+        intensity: clamp01(L.intensity ?? 1),
+        flickerRate: finiteNum(L.flickerRate) ? +L.flickerRate : 0,
+      });
+    }
+  }
+
   return out;
 }
 

@@ -198,6 +198,39 @@ export class Lamp extends Fixture {
       metadata: mergedMetadata,
       footprint,
     });
+    const declaredLight =
+      baseMetadata.light && typeof baseMetadata.light === "object"
+        ? baseMetadata.light
+        : null;
+    const radiusCandidate =
+      declaredLight?.radius ?? baseMetadata.lightRadius ?? lightRadius;
+    const radius = Number.isFinite(radiusCandidate) ? Number(radiusCandidate) : 0;
+    if (radius > 0) {
+      const color =
+        typeof declaredLight?.color === "string"
+          ? declaredLight.color
+          : typeof baseMetadata.lightColor === "string"
+            ? baseMetadata.lightColor
+            : "#ffe9a6";
+      const intensityCandidate =
+        declaredLight?.intensity ?? baseMetadata.lightIntensity;
+      const intensity = Number.isFinite(intensityCandidate)
+        ? Math.max(0, Math.min(1, Number(intensityCandidate)))
+        : 1;
+      const flickerCandidate = declaredLight?.flickerRate ?? baseMetadata.flickerRate;
+      const flickerRate = Number.isFinite(flickerCandidate)
+        ? Number(flickerCandidate)
+        : 0;
+      this.light = {
+        radius,
+        color,
+        intensity,
+        flickerRate,
+        worksWhenDropped: false,
+      };
+    } else {
+      this.light = null;
+    }
   }
 }
 
