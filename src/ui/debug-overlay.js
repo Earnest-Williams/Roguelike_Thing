@@ -172,6 +172,20 @@ export class DebugOverlay {
         ? a.perception.visibleLights.length
         : 0;
       lines.push(`Perception: actors=${visibleActors} lights=${visibleLights}`);
+      if (visibleLights > 0) {
+        const coords = a.perception.visibleLights
+          .slice(0, 6)
+          .map((entry) => {
+            const lx = Number.isFinite(entry?.x) ? entry.x : "?";
+            const ly = Number.isFinite(entry?.y) ? entry.y : "?";
+            const label = typeof entry?.id === "string" ? entry.id : null;
+            return label ? `${label}@(${lx},${ly})` : `(${lx},${ly})`;
+          });
+        if (visibleLights > coords.length) {
+          coords.push("…");
+        }
+        lines.push(`  Lights: ${coords.join(", ")}`);
+      }
     }
 
     if (this.lastCombat?.payload) {
