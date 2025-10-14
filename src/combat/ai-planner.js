@@ -75,17 +75,42 @@ function selectTarget(self, ctx = {}) {
 
   const candidates = normalized.filter(({ actor }) => actor !== selfActor);
 
+  const perceptionSource = ctx.selfMob ?? self;
+  const perceivedVisible = Array.isArray(perceptionSource?.perception?.visibleActors)
+    ? perceptionSource.perception.visibleActors
+    : [];
+
+  const perceivedHostiles = perceivedVisible
+    .map((entity) => ({ entity, actor: toActor(entity) }))
+    .filter(({ actor }) => actor && actor !== selfActor)
+    .map((entry) => ({
+      ...entry,
+      position: asPosition(entry.entity) ?? asPosition(entry.actor),
+    }))
+    .filter(({ actor }) => FactionService.relation(selfActor, actor) < 0);
+
+  if (perceivedHostiles.length > 0) {
+    sortHostiles(perceivedHostiles, ctx, selfActor, selfMob);
+    return perceivedHostiles[0];
+  }
+
   const hostiles = candidates
     .map((entry) => ({
       ...entry,
       position: asPosition(entry.entity) ?? asPosition(entry.actor),
     }))
-    .filter(({ actor }) => FactionService.isHostile(selfActor, actor));
+    .filter(({ actor }) => FactionService.relation(selfActor, actor) < 0);
 
   if (hostiles.length === 0) {
     return null;
   }
 
+  sortHostiles(hostiles, ctx, selfActor, selfMob);
+
+  return hostiles[0] ?? null;
+}
+
+function sortHostiles(list, ctx, selfActor, selfMob) {
   const maze = ctx.maze ?? ctx.grid ?? null;
   const selfPos = asPosition(selfMob) ?? asPosition(selfActor);
   const rngSource = ctx.rng;
@@ -114,7 +139,7 @@ function selectTarget(self, ctx = {}) {
     return Math.max(dx, dy);
   };
 
-  hostiles.sort((a, b) => {
+  list.sort((a, b) => {
     const losA = losScore(a);
     const losB = losScore(b);
     if (losA !== losB) return losA - losB;
@@ -128,8 +153,6 @@ function selectTarget(self, ctx = {}) {
     if (roll > 0) return 1;
     return 0;
   });
-
-  return hostiles[0] ?? null;
 }
 
 export const AIPlanner = {

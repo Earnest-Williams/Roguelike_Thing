@@ -55,6 +55,11 @@ function makeActor({ id, factions, affiliations }) {
     true,
     "unaligned actors should be hostile to others",
   );
+  assert.equal(
+    FactionService.relation(chaotic, other),
+    -1,
+    "unaligned faction should register hostile relation versus other factions",
+  );
 })();
 
 (function testAffiliationsBridgeFactions() {
@@ -103,6 +108,11 @@ function makeActor({ id, factions, affiliations }) {
     FactionService.isHostile(orc, skeleton),
     true,
     "monster wrappers should proxy allegiance data to the underlying actor",
+  );
+  assert.equal(
+    FactionService.relation(orc, skeleton),
+    -1,
+    "monster wrappers should compute hostile relations via FactionService",
   );
   assert.equal(
     orc.getLightRadius() >= 1,

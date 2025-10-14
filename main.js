@@ -34,6 +34,7 @@ import { ChapterState } from "./src/game/chapter-state.js";
 import { FactionService } from "./src/game/faction-service.js";
 import { mulberry32 } from "./src/sim/sim.js";
 import { AIPlanner } from "./src/combat/ai-planner.js";
+import { updatePerception } from "./src/sim/senses.js";
 import { Actor } from "./src/combat/actor.js";
 import { attachLogs } from "./src/combat/debug-log.js";
 import { foldModsFromEquipment } from "./src/combat/mod-folding.js";
@@ -4188,6 +4189,7 @@ const Game = (() => {
       player,
       mobManager,
       maze: mapState.grid,
+      mapState,
       state,
       AIPlanner,
     };
@@ -4463,6 +4465,7 @@ const Game = (() => {
         if (handleDeath(gameCtx, player)) {
           return;
         }
+        updatePerception(gameCtx);
         if (mobManager) {
           mobManager.tick(gameCtx, turn);
         }
@@ -4800,6 +4803,7 @@ const Game = (() => {
         player,
         mobManager,
         maze: mapState.grid,
+        mapState,
         state: gameState,
         AIPlanner,
       };
