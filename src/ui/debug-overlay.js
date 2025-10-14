@@ -8,24 +8,61 @@ import {
 } from "../config.js";
 import { subscribe, latest, EVENT } from "./event-log.js";
 
+/** Minimum absolute delta required to consider a resource as changed. */
 const RESOURCE_CHANGE_EPSILON = 1e-6;
+
+/**
+ * Labels to use when displaying tracked resources.
+ * @type {Record<string, string>}
+ */
 const RESOURCE_LABELS = {
   stamina: "Sta",
   mana: "Mana",
 };
 
+/**
+ * Event types that can be toggled in the overlay log.
+ * @type {ReadonlyArray<{ type: string, label: string }>}
+ */
+const FILTER_ENTRIES = Object.freeze([
+  { type: EVENT.COMBAT, label: "COMBAT" },
+  { type: EVENT.STATUS, label: "STATUS" },
+  { type: EVENT.TURN, label: "TURN" },
+  { type: EVENT.CONSOLE, label: "CONSOLE" },
+]);
+
+/**
+ * @typedef {ReturnType<typeof latest>[number]} DebugEventEntry
+ */
+
+/**
+ * @typedef {{
+ *   root?: HTMLElement | null,
+ *   actorProvider: () => any,
+ * }} DebugOverlayOptions
+ */
+
 export class DebugOverlay {
   /**
-   * @param {{ root?: HTMLElement | null, actorProvider: () => any }} opts
+   * Debug UI widget that renders a rolling log of debug events and an
+   * inspector for the currently focused actor.
+   *
+   * @param {DebugOverlayOptions} opts
    */
   constructor({ root = null, actorProvider }) {
     this.actorProvider = actorProvider;
     this.root = root || this.#createRoot();
+    /** @type {HTMLElement | null} */
     this.logEl = this.root.querySelector(".dbg-log");
+    /** @type {HTMLElement | null} */
     this.statsEl = this.root.querySelector(".dbg-stats");
+    /** @type {HTMLElement | null} */
     this.filterEl = this.root.querySelector(".dbg-filter");
     this.lastCombat = null;
-    this.filterSet = new Set([EVENT.COMBAT, EVENT.STATUS, EVENT.TURN, EVENT.CONSOLE]);
+    /** @type {Set<string>} */
+    this.filterSet = new Set(
+      FILTER_ENTRIES.map((entry) => entry.type),
+    );
     this.prevResources = null;
 
     subscribe("*", () => {
@@ -43,6 +80,10 @@ export class DebugOverlay {
     this.renderLog();
   }
 
+  /**
+   * Lazily create a floating debug panel if a root element was not provided.
+   * @returns {HTMLElement}
+   */
   #createRoot() {
     const el = document.createElement("div");
     el.className =
@@ -56,6 +97,11 @@ export class DebugOverlay {
     return el;
   }
 
+  /**
+   * Return the CSS class list for a filter chip based on its active state.
+   * @param {boolean} active
+   * @returns {string}
+   */
   #chipClass(active) {
     const base =
       "px-2 py-1 rounded border text-[10px] tracking-wide uppercase transition-colors";
@@ -64,17 +110,15 @@ export class DebugOverlay {
       : `${base} border-white/20 text-white/60 hover:border-white/40`;
   }
 
+  /**
+   * Render the log filter controls and wire them to the filter set.
+   */
   #initFilters() {
     if (!this.filterEl) return;
-    const entries = [
-      { type: EVENT.COMBAT, label: "COMBAT" },
-      { type: EVENT.STATUS, label: "STATUS" },
-      { type: EVENT.TURN, label: "TURN" },
-      { type: EVENT.CONSOLE, label: "CONSOLE" },
-    ];
+    /** @type {Map<string, HTMLButtonElement>} */
     this.filterButtons = new Map();
     this.filterEl.innerHTML = "";
-    for (const entry of entries) {
+    for (const entry of FILTER_ENTRIES) {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.dataset.type = entry.type;
@@ -98,6 +142,9 @@ export class DebugOverlay {
     this.#updateFilterButtons();
   }
 
+  /**
+   * Update the visual state of filter buttons based on the active filter set.
+   */
   #updateFilterButtons() {
     if (!this.filterButtons) return;
     for (const [type, btn] of this.filterButtons.entries()) {
@@ -106,10 +153,16 @@ export class DebugOverlay {
     }
   }
 
+  /**
+   * Render the actor stats inspector section.
+   */
   renderStats() {
     const a = this.actorProvider?.();
     if (!a) {
       this.prevResources = null;
+      if (this.statsEl) {
+        this.statsEl.textContent = "Actor: -";
+      }
       return;
     }
     const lines = [];
@@ -243,6 +296,9 @@ export class DebugOverlay {
     }
   }
 
+  /**
+   * Render the recent debug log entries.
+   */
   renderLog() {
     if (!this.logEl) return;
     const entries = latest(DEBUG_OVERLAY_LOG_LIMIT)
@@ -253,6 +309,11 @@ export class DebugOverlay {
   }
 }
 
+/**
+ * Convert a debug event entry into an HTML string for the log.
+ * @param {DebugEventEntry} e
+ * @returns {string}
+ */
 function renderEntry(e) {
   if (e.type === EVENT.COMBAT) {
     const p = e.payload;
@@ -286,6 +347,11 @@ function renderEntry(e) {
   return `<div>• ${e.type}</div>`;
 }
 
+/**
+ * Format a resistance or affinity map into a compact human readable string.
+ * @param {any} obj
+ * @returns {string}
+ */
 function fmtMap(obj) {
   if (!obj) return "-";
   if (obj instanceof Map) {
@@ -300,6 +366,11 @@ function fmtMap(obj) {
   return fmtPairs(keys.map((k) => [k, obj[k]]));
 }
 
+/**
+ * Turn an iterable of [key,value] pairs into a formatted percentage string.
+ * @param {Array<[string, any]>} entries
+ * @returns {string}
+ */
 function fmtPairs(entries) {
   const out = [];
   for (const [k, raw] of entries) {
@@ -311,16 +382,31 @@ function fmtPairs(entries) {
   return out.length ? out.join(" ") : "-";
 }
 
+/**
+ * Resolve defensive resistances for an actor.
+ * @param {any} actor
+ * @returns {Record<string, number> | Map<string, number> | null}
+ */
 function resolveResists(actor) {
   return actor?.modCache?.resists || actor?.modCache?.defense?.resists || null;
 }
 
+/**
+ * Resolve offensive affinities for an actor.
+ * @param {any} actor
+ * @returns {Record<string, number> | Map<string, number> | null}
+ */
 function resolveAffinities(actor) {
   return (
     actor?.modCache?.affinities || actor?.modCache?.offense?.affinities || null
   );
 }
 
+/**
+ * Format brand modifiers present on the actor.
+ * @param {any} actor
+ * @returns {string}
+ */
 function fmtBrands(actor) {
   const direct = Array.isArray(actor?.modCache?.brands)
     ? actor.modCache.brands
@@ -345,6 +431,11 @@ function fmtBrands(actor) {
     .join(", ");
 }
 
+/**
+ * Format a single damage breakdown step.
+ * @param {any} step
+ * @returns {string}
+ */
 function formatBreakdownStep(step) {
   if (!step) return "?";
   const value = Number.isFinite(step.value) ? step.value : null;
@@ -373,17 +464,35 @@ function formatBreakdownStep(step) {
   }
 }
 
+/**
+ * Format a number with a fixed precision.
+ * @param {number} value
+ * @param {number} [digits]
+ * @returns {string}
+ */
 function fmtNumber(value, digits = DEBUG_OVERLAY_NUMBER_DIGITS) {
   if (!Number.isFinite(value)) return "0";
   return Number(value).toFixed(digits);
 }
 
+/**
+ * Format a signed delta with a leading plus or minus.
+ * @param {number} value
+ * @param {number} [digits]
+ * @returns {string}
+ */
 function fmtDelta(value, digits = DEBUG_OVERLAY_NUMBER_DIGITS) {
   if (!Number.isFinite(value)) return "0";
   const prefix = value >= 0 ? "+" : "";
   return `${prefix}${fmtNumber(value, digits)}`;
 }
 
+/**
+ * Attempt to extract a resource value from a variety of legacy shapes.
+ * @param {any} actor
+ * @param {string} key
+ * @returns {number | null}
+ */
 function getResourceValue(actor, key) {
   if (Number.isFinite(actor?.res?.[key])) return actor.res[key];
   if (Number.isFinite(actor?.resources?.[key])) return actor.resources[key];
@@ -391,15 +500,31 @@ function getResourceValue(actor, key) {
   return null;
 }
 
+/**
+ * Format a resource value for display.
+ * @param {number} value
+ * @returns {string}
+ */
 function formatResourceValue(value) {
   return formatNumberWithTrim(value, 2);
 }
 
+/**
+ * Format a signed delta for resource changes.
+ * @param {number} value
+ * @returns {string}
+ */
 function formatSignedDelta(value) {
   const prefix = value >= 0 ? "+" : "";
   return `${prefix}${formatNumberWithTrim(value, 2)}`;
 }
 
+/**
+ * Format a number and trim trailing zeroes and decimal points.
+ * @param {number} value
+ * @param {number} digits
+ * @returns {string}
+ */
 function formatNumberWithTrim(value, digits) {
   if (!Number.isFinite(value)) return "0";
   const fixed = Number(value).toFixed(digits);
