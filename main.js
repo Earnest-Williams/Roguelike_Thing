@@ -3475,19 +3475,30 @@ const Game = (() => {
       CONFIG.visual.colors,
     );
     const mobEntities = buildMobVisuals(mobManager, currentVisible);
-    const entities =
+    const renderEntities =
       furnitureEntities.length > 0
         ? furnitureEntities.concat(mobEntities)
         : mobEntities;
 
+    const worldLightEntities = mapState?.groundItems ?? mapState?.entities ?? [];
+    const mobList = resolveMobListForLighting(mobManager);
     const worldLights = collectWorldLightSources({
       player,
-      entities,
-      mobs: mobManager?.all?.() ?? [],
+      entities: Array.isArray(worldLightEntities) ? worldLightEntities : [],
+      mobs: mobList,
       mapState,
     });
     const compCtx = createCompositeLightContext(worldLights, LIGHT_CONFIG, getNow);
-    const sample = (x, y) => compositeOverlayAt(x, y, compCtx, LIGHT_CONFIG);
+    const overlaySampleCache = new Map();
+    const sample = (x, y) => {
+      const key = `${x},${y}`;
+      if (overlaySampleCache.has(key)) {
+        return overlaySampleCache.get(key);
+      }
+      const value = compositeOverlayAt(x, y, compCtx, LIGHT_CONFIG);
+      overlaySampleCache.set(key, value);
+      return value;
+    };
 
     const overlayColor = fovState.overlayRgb
       ? { ...fovState.overlayRgb, a: 1 }
@@ -3501,16 +3512,39 @@ const Game = (() => {
         start: player.startPos ?? null,
         end: isEndRendered ? currentEndPos : null,
         colors: CONFIG.visual.colors,
-        overlayAlphaAt: (x, y) => sample(x, y).a,
-        overlayColorAt: (x, y) => sample(x, y).rgb,
+        overlayAlphaAt: (x, y) => {
+          const s = sample(x, y);
+          return s?.a ?? 0;
+        },
+        overlayColorAt: (x, y) => {
+          const s = sample(x, y);
+          return s?.rgb ?? null;
+        },
         overlayColor,
-        entities,
+        entities: renderEntities,
       },
       view,
     );
 
     const flicker = Math.max(lightProps?.flickerRate ?? 0, compCtx.maxFlickerRate ?? 0);
     updateLightAnimationState(flicker, fromAnimationFrame);
+  }
+  function resolveMobListForLighting(manager) {
+    if (!manager) return [];
+    if (typeof manager.list === "function") {
+      try {
+        const result = manager.list();
+        return Array.isArray(result) ? result : [];
+      } catch (err) {
+        if (typeof console !== "undefined" && console.warn) {
+          console.warn("mobManager.list() threw while gathering lights", err);
+        }
+        return [];
+      }
+    }
+    if (Array.isArray(manager.list)) return manager.list;
+    if (Array.isArray(manager)) return manager;
+    return [];
   }
   function buildFurnitureVisuals(map, visibleSet, colors) {
     if (!map || !Array.isArray(map.furniture)) return [];
