@@ -58,12 +58,12 @@ const ZERO_WEIGHTS: PathCostWeights = Object.freeze({
 export function normalizePolicy(def: ExplorePolicyDefinition): ExplorePolicy {
   return {
     ...def,
-    switches: { ...def.switches },
-    thresholds: { ...def.thresholds },
-    weights: { ...def.weights },
-    gates: { ...def.gates },
-    formulas: { ...def.formulas },
-    pathCost: { ...ZERO_WEIGHTS, ...def.pathCost },
+    switches: { ...(def.switches ?? {}) },
+    thresholds: { ...(def.thresholds ?? {}) },
+    weights: { ...(def.weights ?? {}) },
+    gates: { ...(def.gates ?? {}) },
+    formulas: { ...(def.formulas ?? {}) },
+    pathCost: { ...ZERO_WEIGHTS, ...(def.pathCost ?? {}) },
   };
 }
 
@@ -72,12 +72,12 @@ export function mergePolicies(base: ExplorePolicyDefinition, overrides?: Partial
   const merged: ExplorePolicyDefinition = {
     ...base,
     ...overrides,
-    switches: { ...base.switches, ...overrides.switches },
-    thresholds: { ...base.thresholds, ...overrides.thresholds },
-    weights: { ...base.weights, ...overrides.weights },
-    gates: { ...base.gates, ...overrides.gates },
-    formulas: { ...base.formulas, ...overrides.formulas },
-    pathCost: { ...base.pathCost, ...overrides.pathCost },
+    switches: { ...(base.switches ?? {}), ...(overrides.switches ?? {}) },
+    thresholds: { ...(base.thresholds ?? {}), ...(overrides.thresholds ?? {}) },
+    weights: { ...(base.weights ?? {}), ...(overrides.weights ?? {}) },
+    gates: { ...(base.gates ?? {}), ...(overrides.gates ?? {}) },
+    formulas: { ...(base.formulas ?? {}), ...(overrides.formulas ?? {}) },
+    pathCost: { ...(base.pathCost ?? {}), ...(overrides.pathCost ?? {}) },
   };
   return normalizePolicy(merged);
 }
@@ -91,12 +91,12 @@ export function loadPolicyPreset(json: ExplorePolicyDefinition): ExplorePolicy {
   }
   return normalizePolicy({
     ...json,
-    switches: { ...json.switches },
-    thresholds: { ...json.thresholds },
-    weights: { ...json.weights },
-    gates: { ...json.gates },
-    formulas: { ...json.formulas },
-    pathCost: { ...json.pathCost },
+    switches: { ...(json.switches ?? {}) },
+    thresholds: { ...(json.thresholds ?? {}) },
+    weights: { ...(json.weights ?? {}) },
+    gates: { ...(json.gates ?? {}) },
+    formulas: { ...(json.formulas ?? {}) },
+    pathCost: { ...(json.pathCost ?? {}) },
   });
 }
 
