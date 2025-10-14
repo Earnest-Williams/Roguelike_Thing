@@ -5,6 +5,8 @@ import { FactionService } from "../game/faction-service.js";
 // All entity targeting must normalize to Actor and exclude self before hostility checks.
 import { asActor } from "../combat/actor.js";
 import { hasLineOfSight } from "../../js/utils.js";
+import { evaluateCandidates, explainDecision, clamp01 as clamp01Utility } from "../ai/planner.js";
+import { computePathCost } from "../ai/path_cost.js";
 
 /**
  * @file
@@ -155,6 +157,175 @@ function sortHostiles(list, ctx, selfActor, selfMob) {
   });
 }
 
+function ratio(value, max) {
+  if (!Number.isFinite(value) || !Number.isFinite(max) || max <= 0) return 0;
+  return clamp01Utility(value / max);
+}
+
+function resolveHealthRatio(actor) {
+  if (!actor) return 0;
+  const hp = Number.isFinite(actor?.res?.hp)
+    ? actor.res.hp
+    : Number.isFinite(actor?.resources?.hp)
+      ? actor.resources.hp
+      : Number.isFinite(actor?.hp)
+        ? actor.hp
+        : 0;
+  const max = Number.isFinite(actor?.base?.maxHP)
+    ? actor.base.maxHP
+    : Number.isFinite(actor?.baseStats?.maxHP)
+      ? actor.baseStats.maxHP
+      : Number.isFinite(actor?.resources?.maxHp)
+        ? actor.resources.maxHp
+        : Number.isFinite(actor?.maxHp)
+          ? actor.maxHp
+          : 0;
+  return ratio(hp, max);
+}
+
+function resolveThreatRatio(actor) {
+  if (!actor) return 0;
+  const offense = Number.isFinite(actor?.power)
+    ? actor.power
+    : Number.isFinite(actor?.level)
+      ? actor.level
+      : null;
+  if (Number.isFinite(offense) && offense > 0) {
+    return clamp01Utility(offense / (10 + offense));
+  }
+  return resolveHealthRatio(actor);
+}
+
+function sampleLightLevel(selfMob, ctx) {
+  if (typeof ctx?.lightLevel === "number") {
+    return clamp01Utility(ctx.lightLevel);
+  }
+  if (typeof ctx?.sampleLightAt === "function" && Number.isFinite(selfMob?.x) && Number.isFinite(selfMob?.y)) {
+    return clamp01Utility(ctx.sampleLightAt(selfMob.x, selfMob.y));
+  }
+  if (typeof selfMob?.getLightLevel === "function") {
+    return clamp01Utility(selfMob.getLightLevel());
+  }
+  return clamp01Utility(1);
+}
+
+function buildUtilityDecision(selfMob, selection, context, distance) {
+  const policyInput = context?.policy ?? context?.aiPolicy ?? selfMob?.aiPolicy ?? null;
+  const overrides = context?.policyOverrides ?? selfMob?.aiPolicyOverrides ?? null;
+  const gates = {};
+  if (typeof context?.allowAggro === "boolean") gates.allowAggro = context.allowAggro;
+  if (typeof context?.pursueCombat === "boolean") gates.pursueCombat = context.pursueCombat;
+
+  const lightLevel = sampleLightLevel(selfMob, context);
+  const selfHealth = resolveHealthRatio(selfMob);
+  const targetActor = selection?.actor ?? null;
+  const targetThreat = clamp01Utility(resolveThreatRatio(targetActor));
+  const threatLevel = clamp01Utility(
+    typeof context?.threatLevel === "number" ? context.threatLevel : targetThreat,
+  );
+  const explorationFocus = clamp01Utility(context?.explorationFocus ?? 0);
+  const lootFocus = clamp01Utility(context?.lootFocus ?? 0);
+  const exitUrgency = clamp01Utility(context?.exitUrgency ?? 0);
+  const progress = clamp01Utility(context?.progress ?? 0);
+  const maxEngage = Math.max(1, Number.isFinite(context?.maxEngageDistance) ? Number(context.maxEngageDistance) : 6);
+  const distVal = Number.isFinite(distance) ? Number(distance) : Infinity;
+  const distanceBias = clamp01Utility(1 - Math.min(distVal, maxEngage) / maxEngage);
+
+  const candidates = [];
+
+  if (selection) {
+    candidates.push({
+      goal: "engage",
+      target: selection.entity,
+      metrics: {
+        light: lightLevel,
+        minimumLight: lightLevel,
+        safety: selfHealth,
+        lowHealth: selfHealth,
+        threat: threatLevel,
+        loot: lootFocus,
+        exit: exitUrgency,
+        exploration: explorationFocus,
+        combat: distanceBias,
+        targetThreat,
+        progress,
+      },
+      thresholds: { minimumLight: lightLevel },
+      gates: ["allowAggro"],
+      context: { distance: distVal, distanceBias, selfHealth, targetThreat },
+      baseScore: 0.35 + distanceBias,
+    });
+  }
+
+  candidates.push({
+    goal: selection ? "hold_position" : "idle",
+    target: selection?.entity ?? null,
+    metrics: {
+      light: lightLevel,
+      minimumLight: lightLevel,
+      safety: selfHealth,
+      lowHealth: selfHealth,
+      threat: threatLevel,
+      loot: lootFocus,
+      exit: exitUrgency,
+      exploration: explorationFocus,
+      combat: selection ? Math.max(0.1, distanceBias * 0.5) : 0,
+      targetThreat,
+      progress,
+    },
+    context: { distance: distVal, distanceBias, selfHealth, targetThreat },
+    baseScore: selection ? 0.1 : 0.2,
+  });
+
+  const retreatThreshold = clamp01Utility(
+    Number.isFinite(context?.retreatHealthThreshold) ? context.retreatHealthThreshold : 0.25,
+  );
+  const considerRetreat = context?.considerRetreat !== false;
+  if (considerRetreat && selfHealth < 0.999) {
+    const urgency = clamp01Utility(retreatThreshold > 0 ? 1 - selfHealth / Math.max(retreatThreshold, 1e-3) : 0);
+    const retreatBase = (Number(context?.retreatBias) || 0) - 0.25 + urgency;
+    candidates.push({
+      goal: "retreat",
+      target: selection?.entity ?? null,
+      metrics: {
+        light: lightLevel,
+        minimumLight: lightLevel,
+        safety: selfHealth,
+        lowHealth: selfHealth,
+        threat: threatLevel,
+        loot: 0,
+        exit: exitUrgency,
+        exploration: 0,
+        combat: 0,
+        targetThreat,
+        progress,
+      },
+      context: { distance: distVal, distanceBias, selfHealth, targetThreat },
+      baseScore: retreatBase,
+      formulaOverrides: { safety: "Math.max(0, 1 - threat)" },
+    });
+  }
+
+  if (candidates.length === 0) return null;
+
+  return evaluateCandidates(candidates, {
+    policy: policyInput,
+    overrides,
+    environment: {
+      threat: threatLevel,
+      light: lightLevel,
+      loot: lootFocus,
+      exit: exitUrgency,
+      progress,
+      distance: Number.isFinite(distVal) ? distVal : 0,
+      targetThreat,
+      selfHealth,
+    },
+    gateOverrides: gates,
+    metricAugment: context?.metricAugment,
+  });
+}
+
 export const AIPlanner = {
   /**
    * Evaluate and perform the best action available to the actor.
@@ -170,21 +341,58 @@ export const AIPlanner = {
       : AIPlanner.defaultActions(actor);
 
     const selection = selectTarget(actor, { ...context, selfMob });
+    const distance = selection
+      ? AIPlanner.distanceBetween(selfMob, selection.entity, context)
+      : AIPlanner.distanceBetween(selfMob, null, { ...context, distance: context?.distance ?? Infinity });
+
+    const decision = buildUtilityDecision(selfMob, selection, context, distance);
+    const explain = explainDecision(decision);
+    if (explain) {
+      selfMob.lastPlannerDecision = explain;
+      if (actor && actor !== selfMob) {
+        actor.lastPlannerDecision = explain;
+      }
+      context.lastPlannerDecision = explain;
+    }
+    context.utilityDecision = decision;
+    if (typeof context?.onDecision === "function") {
+      try {
+        context.onDecision({ actor: selfMob, decision, explain });
+      } catch (err) {
+        if (typeof console !== "undefined" && console.warn) {
+          console.warn("AIPlanner.onDecision handler threw", err);
+        }
+      }
+    }
+
     if (!selection) {
       return;
     }
+
     const targetEntity = selection.entity;
     const targetActor = selection.actor ?? asActor(targetEntity);
-    const distance = AIPlanner.distanceBetween(selfMob, targetEntity, context);
     const scope = {
       actor,
       target: targetEntity,
       targetActor,
       context,
       distance,
+      decision,
     };
 
     let best = null;
+
+    const goalBias = (() => {
+      if (!decision) return 0;
+      if (decision.goal === "engage") {
+        const raw = Number.isFinite(decision.score) ? decision.score : 0;
+        return Math.max(0, Math.min(0.4, 0.15 + raw * 0.05));
+      }
+      if (decision.goal === "retreat") {
+        return -0.35;
+      }
+      return 0;
+    })();
 
     for (const id of actionIds) {
       const action = ACTIONS[id];
@@ -194,12 +402,13 @@ export const AIPlanner = {
       if (typeof action.canPerform === "function" && !action.canPerform(scope, prepared)) {
         continue;
       }
-      const score = typeof action.evaluate === "function"
+      const baseScore = typeof action.evaluate === "function"
         ? action.evaluate(scope, prepared)
         : typeof action.priority === "number"
-        ? action.priority
-        : 0;
-      if (score == null || Number.isNaN(score)) continue;
+          ? action.priority
+          : 0;
+      if (baseScore == null || Number.isNaN(baseScore)) continue;
+      const score = baseScore + goalBias;
       if (!best || score > best.score) {
         best = { action, score, prepared };
       }
@@ -242,3 +451,9 @@ export const AIPlanner = {
     return typeof context?.defaultDistance === "number" ? context.defaultDistance : 1;
   },
 };
+
+AIPlanner.utility = Object.freeze({
+  evaluateCandidates,
+  explainDecision,
+  computePathCost,
+});

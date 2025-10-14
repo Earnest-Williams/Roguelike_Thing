@@ -188,6 +188,41 @@ export class DebugOverlay {
       }
     }
 
+    const plannerExplain = a?.lastPlannerDecision;
+    if (plannerExplain) {
+      const policyId = plannerExplain.policy?.id ?? plannerExplain.policyId ?? "";
+      const summary = plannerExplain.summary ?? "";
+      const score = Number.isFinite(plannerExplain.score)
+        ? plannerExplain.score.toFixed(DEBUG_OVERLAY_NUMBER_DIGITS)
+        : plannerExplain.score;
+      const labelParts = [`AI: ${plannerExplain.goal ?? "?"}`];
+      if (summary) labelParts.push(`(${summary})`);
+      if (score !== undefined) labelParts.push(`score=${score}`);
+      if (policyId) labelParts.push(`[${policyId}]`);
+      lines.push(labelParts.join(" "));
+
+      const breakdownEntries = Object.values(plannerExplain.breakdown ?? {})
+        .sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution))
+        .slice(0, 3)
+        .map((entry) => `${entry.id}:${entry.contribution.toFixed(DEBUG_OVERLAY_NUMBER_DIGITS)}`);
+      const targetLabel = (() => {
+        const t = plannerExplain.target;
+        if (!t) return null;
+        if (typeof t === "string") return t;
+        if (typeof t === "number") return `${t}`;
+        if (typeof t === "object") {
+          return t.name ?? t.id ?? null;
+        }
+        return null;
+      })();
+      if (targetLabel) {
+        lines.push(`  Target: ${targetLabel}`);
+      }
+      if (breakdownEntries.length) {
+        lines.push(`  ${breakdownEntries.join("  ")}`);
+      }
+    }
+
     if (this.lastCombat?.payload) {
       const p = this.lastCombat.payload;
       lines.push("Last Attack:");
