@@ -154,7 +154,8 @@ h1 {
   box-shadow: 0 18px 36px rgba(0, 0, 0, 0.55);
 }
 /* UI Panel Styling */
-#ui-panel {
+#ui-panel,
+#light-settings-panel {
   width: min(320px, 100%);
   background-color: #2b2b2b;
   padding: clamp(16px, 2.4vw, 26px);
@@ -164,6 +165,75 @@ h1 {
   max-height: min(80vh, 720px);
   overflow: auto;
   box-sizing: border-box;
+}
+.light-settings-description {
+  color: #ccc;
+  font-size: 0.9rem;
+  margin-top: 0;
+  margin-bottom: 12px;
+}
+.light-settings-grid {
+  display: grid;
+  gap: 14px;
+}
+.light-setting {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.light-setting-label {
+  font-weight: 600;
+  color: #eee;
+}
+.light-setting-input {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.light-setting-input input {
+  flex: 1;
+  background: #1f1f1f;
+  border: 1px solid #444;
+  border-radius: 6px;
+  padding: 6px 8px;
+  color: #f0f0f0;
+  font-family: inherit;
+  font-size: 0.95rem;
+}
+.light-setting-input input:disabled {
+  opacity: 0.6;
+}
+.light-setting-value {
+  min-width: 56px;
+  text-align: right;
+  color: #9ad9ff;
+  font-variant-numeric: tabular-nums;
+}
+.light-settings-reset {
+  margin-top: 14px;
+  padding: 8px 12px;
+  background: #37474f;
+  color: #e0f7fa;
+  border: 1px solid #455a64;
+  border-radius: 6px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+.light-settings-reset:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.light-settings-reset:not(:disabled):hover {
+  background: #455a64;
+}
+.light-settings-state {
+  margin-top: 10px;
+  font-size: 0.85rem;
+  color: #ccc;
+}
+#light-settings-panel[data-paused="false"] .light-setting-value {
+  color: #80b1c8;
 }
 .ui-section h2 {
   color: #00bcd4;
@@ -279,11 +349,13 @@ h1 {
     align-items: center;
   }
   #container,
-  #ui-panel {
+  #ui-panel,
+  #light-settings-panel {
     width: min(100%, 700px);
     max-width: 100%;
   }
-  #ui-panel {
+  #ui-panel,
+  #light-settings-panel {
     max-height: none;
     order: 3;
   }
@@ -294,7 +366,8 @@ h1 {
     padding: 16px;
   }
   #container,
-  #ui-panel {
+  #ui-panel,
+  #light-settings-panel {
     width: 100%;
   }
   #controls {

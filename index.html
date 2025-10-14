@@ -346,6 +346,74 @@
         <div id="pause-indicator"></div>
         <button id="restartBtn">Restart</button>
       </div>
+      <div id="light-settings-panel" data-paused="false">
+        <div class="ui-section">
+          <h2>Lighting Controls</h2>
+          <p class="light-settings-description">
+            Adjust the falloff curve used for dynamic lighting. Values update in real
+            time but are only editable while the simulation is paused.
+          </p>
+          <div class="light-settings-grid">
+            <label class="light-setting">
+              <span class="light-setting-label">Dead zone tiles</span>
+              <div class="light-setting-input">
+                <input
+                  type="number"
+                  inputmode="decimal"
+                  min="0"
+                  step="0.1"
+                  placeholder="auto"
+                  data-setting="deadZoneTiles"
+                  data-editable="true"
+                />
+                <span class="light-setting-value" data-display="deadZoneTiles">Auto</span>
+              </div>
+            </label>
+            <label class="light-setting">
+              <span class="light-setting-label">Range multiplier</span>
+              <div class="light-setting-input">
+                <input
+                  type="number"
+                  inputmode="decimal"
+                  min="0.01"
+                  step="0.01"
+                  data-setting="smoothstepRangeMultiplier"
+                  data-editable="true"
+                />
+                <span
+                  class="light-setting-value"
+                  data-display="smoothstepRangeMultiplier"
+                ></span>
+              </div>
+            </label>
+            <label class="light-setting">
+              <span class="light-setting-label">Falloff power</span>
+              <div class="light-setting-input">
+                <input
+                  type="number"
+                  inputmode="decimal"
+                  min="0.01"
+                  step="0.01"
+                  data-setting="falloffPower"
+                  data-editable="true"
+                />
+                <span class="light-setting-value" data-display="falloffPower"></span>
+              </div>
+            </label>
+          </div>
+          <button
+            type="button"
+            class="light-settings-reset"
+            data-action="reset-light-settings"
+            data-editable="true"
+          >
+            Reset to defaults
+          </button>
+          <p class="light-settings-state" data-state-message>
+            Pause the simulation to edit lighting controls.
+          </p>
+        </div>
+      </div>
       <div id="ui-panel">
         <div class="ui-section">
           <h2>Equipment</h2>

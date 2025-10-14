@@ -9,6 +9,9 @@
  */
 
 import { LIGHT_CHANNELS } from "../../js/constants.js";
+import { getLightFalloffSettingsRef } from "./light_settings.js";
+
+const lightFalloffSettings = getLightFalloffSettingsRef();
 
 export function createCompositeLightContext(lights = [], cfg = {}, nowFn = defaultNow) {
   const t = nowFn() / 1000;
@@ -69,7 +72,10 @@ export function compositeOverlayAt(x, y, ctx, cfg = {}, losFn = null, entitiesOn
 
 // ---------- internals ----------
 function contributionAt(x, y, L, cfg) {
-  const dead = Math.max(0, cfg.flickerNearDeadZoneTiles ?? 0);
+  const settings = lightFalloffSettings;
+  const deadOverride = settings.deadZoneTiles;
+  const deadBase = Math.max(0, cfg.flickerNearDeadZoneTiles ?? 0);
+  const dead = Math.max(0, deadOverride == null ? deadBase : deadOverride);
   const dx = x - L.x, dy = y - L.y;
   if (Number.isFinite(L.angle) && Number.isFinite(L.width) && L.width > 0) {
     if (dx !== 0 || dy !== 0) {
@@ -87,7 +93,10 @@ function contributionAt(x, y, L, cfg) {
   }
   const dist = Math.hypot(dx, dy);
   const denom = Math.max(1e-6, L.r - dead);
-  const falloff = Math.pow(1 - smoothstep01((dist - dead) / (denom * 1.35) ), 0.6);
+  const rangeMultiplier = Math.max(0.01, Number(settings.smoothstepRangeMultiplier) || 0);
+  const falloffPower = Math.max(0.01, Number(settings.falloffPower) || 0);
+  const normalized = (dist - dead) / (denom * rangeMultiplier);
+  const falloff = Math.pow(1 - smoothstep01(normalized), falloffPower);
   if (falloff <= 0) return 0;
 
   const baseA = clamp01(cfg.baseOverlayAlpha ?? 0.75);

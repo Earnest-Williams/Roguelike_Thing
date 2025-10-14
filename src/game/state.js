@@ -39,6 +39,8 @@ export function createInitialState() {
       speedSlider: null,
       speedValue: null,
       pauseIndicator: null,
+      lightSettingsPanel: null,
+      lightSettingsController: null,
       container: null,
       viewport: null,
       canvas: null,
