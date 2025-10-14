@@ -1,5 +1,5 @@
 import { strict as assert } from "node:assert";
-import fs from "node:fs";
+import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createLightOverlayContext } from "../src/world/fov.js";
@@ -8,29 +8,43 @@ import { Actor } from "../src/combat/actor.js";
 import { SLOT } from "../js/constants.js";
 
 // Meta-guard: prohibit resurrection of legacy Mob class in source.
-(function testNoLegacyMobClass() {
+(async function testNoLegacyMobClass() {
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = path.dirname(__filename);
   const root = path.resolve(__dirname, "..");
-  function* walk(dir) {
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+
+  async function* walk(dir) {
+    let entries;
+    try {
+      entries = await readdir(dir, { withFileTypes: true });
+    } catch (err) {
+      err.message = `Failed to read directory ${dir}: ${err.message}`;
+      throw err;
+    }
+    for (const entry of entries) {
       const p = path.join(dir, entry.name);
       if (entry.isDirectory()) {
-        yield* walk(p);
+        for await (const sub of walk(p)) {
+          yield sub;
+        }
       } else if (entry.isFile() && p.endsWith(".js")) {
         yield p;
       }
     }
   }
-  for (const f of walk(root)) {
-    const txt = fs.readFileSync(f, "utf8");
+
+  for await (const f of walk(root)) {
+    const txt = await readFile(f, "utf8");
     if (/class\s+Mob\b/.test(txt)) {
       throw new Error(
         `Legacy Mob class found in ${path.relative(root, f)}`,
       );
     }
   }
-})();
+})().catch((err) => {
+  console.error(err);
+  process.exitCode = 1;
+});
 
 function testLightOverlayRespectsGetter() {
   const player = {
