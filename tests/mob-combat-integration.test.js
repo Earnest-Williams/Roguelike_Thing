@@ -7,6 +7,7 @@ import { createMobFromTemplate } from "../src/factories/index.js";
 import { Actor } from "../src/combat/actor.js";
 import { tryAttack } from "../src/combat/actions.js";
 import { FactionService } from "../src/game/faction-service.js";
+import { findEntityAtPosition, hasValidPosition } from "./helpers/entity-utils.js";
 
 function makeGrid(width, height, value = TILE_FLOOR) {
   const grid = [];
@@ -27,13 +28,10 @@ function makeWorld(mobs, player = null, width = 15, height = 15) {
   const mobManager = {
     list: () => mobList.filter(Boolean),
     getMobAt(x, y) {
-      for (const m of mobList) {
-        if (Number.isFinite(m?.x) && Number.isFinite(m?.y)) {
-          if (m.x === x && m.y === y) return m;
-        }
-      }
-      if (player && Number.isFinite(player.x) && Number.isFinite(player.y)) {
-        if (player.x === x && player.y === y) return player;
+      const mob = findEntityAtPosition(mobList, x, y, { includeDead: true });
+      if (mob) return mob;
+      if (player && hasValidPosition(player) && player.x === x && player.y === y) {
+        return player;
       }
       return null;
     },
