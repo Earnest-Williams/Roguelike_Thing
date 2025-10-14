@@ -1,52 +1,53 @@
 import { strict as assert } from "node:assert";
 
 import { TILE_FLOOR } from "../js/constants.js";
-import {
-  collectWorldLightSources,
-  updatePerception,
-} from "../src/sim/senses.js";
+import { collectWorldLightSources, updatePerception } from "../src/sim/senses.js";
 
 function makeMap(width, height) {
   const grid = Array.from({ length: height }, () => Array(width).fill(TILE_FLOOR));
-  return { width, height, grid, furniture: [], groundItems: [] };
+  return { width, height, grid, furniture: [], groundItems: [], features: [] };
 }
 
 (function testCollectWorldLights() {
   const mapState = makeMap(10, 10);
-  mapState.furniture.push({
-    id: "sconce",
-    x: 2,
-    y: 1,
-    metadata: { emitsLight: true, radius: 4 },
-  });
-  mapState.groundItems.push({
+  mapState.features = [
+    { id: "sconce", x: 2, y: 1, light: { radius: 4, color: "#ffaa66" } },
+  ];
+
+  const droppedTorch = {
     id: "drop-torch",
     x: 6,
     y: 5,
-    item: { emitsLight: true, lit: true, radius: 3 },
-  });
+    item: { light: { radius: 3, color: "#ffcc88", intensity: 0.9, flickerRate: 5 } },
+  };
 
   const player = {
     id: "player",
     x: 5,
     y: 5,
-    equipment: {
-      slots: new Map([
-        ["main", { id: "lantern", emitsLight: true, lit: true, radius: 5 }],
-      ]),
+    getLightEmitters() {
+      return [{ radius: 5, color: "#ffe9a6", intensity: 1, flickerRate: 2 }];
     },
   };
 
-  const lights = collectWorldLightSources({ player, mapState, mobManager: null });
-  assert.equal(lights.length, 3, "expected equipment, furniture, and ground lights to be collected");
-  const carried = lights.find((entry) => entry.ownerId === "player");
+  const lights = collectWorldLightSources({
+    player,
+    entities: [droppedTorch],
+    mobs: [],
+    mapState,
+  });
+  assert.equal(lights.length, 3, "expected actor, feature, and dropped item lights to be collected");
+  const carried = lights.find((entry) => entry.id.startsWith("actor:player"));
   assert(carried, "should track carried light source");
   assert.equal(carried.radius, 5, "should preserve carried light radius");
-  assert(lights.some((entry) => entry.id === "sconce"), "should include furniture light sources");
-  assert(
-    lights.some((entry) => entry.id === "drop-torch"),
-    "should include ground light sources",
-  );
+  assert.deepEqual(carried.color, { r: 255, g: 233, b: 166 }, "should normalize actor light color");
+  const sconce = lights.find((entry) => entry.id.includes("sconce"));
+  assert(sconce, "should include feature light sources");
+  assert(sconce?.color, "feature light should provide rgb color data");
+  const torch = lights.find((entry) => entry.id.includes("drop-torch"));
+  assert(torch, "should include dropped item light sources");
+  assert.equal(torch.intensity, 0.9, "should preserve dropped item intensity");
+  assert.equal(torch.flickerRate, 5, "should expose dropped item flicker rate");
   console.log("✓ collectWorldLightSources aggregates world lights");
 })();
 
@@ -73,12 +74,14 @@ function makeMap(width, height) {
       return 0;
     },
   };
-  mapState.groundItems.push({
-    id: "beacon",
-    x: 5,
-    y: 3,
-    item: { emitsLight: true, lit: true, radius: 2 },
-  });
+  mapState.features = [
+    {
+      id: "beacon",
+      x: 5,
+      y: 3,
+      light: { radius: 2, intensity: 0.8 },
+    },
+  ];
 
   const mobManager = {
     list() {
@@ -95,8 +98,8 @@ function makeMap(width, height) {
     "goblin should be visible to the player",
   );
   assert(
-    player.perception.visibleLights.some((entry) => entry.id === "beacon"),
-    "ground light should be visible to the player",
+    player.perception.visibleLights.some((entry) => entry.id.includes("beacon")),
+    "feature light should be visible to the player",
   );
 
   assert(goblin.perception, "goblin should receive perception struct even with zero vision");
