@@ -499,6 +499,7 @@ const Game = (() => {
       typeof rawLightConfig.flickerFalloffPower === "number"
         ? rawLightConfig.flickerFalloffPower
         : 1.75,
+    requireLineOfSight: Boolean(rawLightConfig.requireLineOfSight),
   };
 
   const VIEW_W = CONFIG.visual.view.width;
@@ -3490,12 +3491,30 @@ const Game = (() => {
     });
     const compCtx = createCompositeLightContext(worldLights, LIGHT_CONFIG, getNow);
     const overlaySampleCache = new Map();
+    const losCache = new Map();
+    const gridForLighting = Array.isArray(mapState?.grid) ? mapState.grid : null;
+    const losFn =
+      LIGHT_CONFIG.requireLineOfSight && gridForLighting
+        ? (L, tx, ty) => {
+            const key = `${L.x},${L.y}->${tx},${ty}`;
+            if (losCache.has(key)) {
+              return losCache.get(key);
+            }
+            const result = hasLineOfSight(
+              gridForLighting,
+              { x: L.x, y: L.y },
+              { x: tx, y: ty },
+            );
+            losCache.set(key, result);
+            return result;
+          }
+        : null;
     const sample = (x, y) => {
       const key = `${x},${y}`;
       if (overlaySampleCache.has(key)) {
         return overlaySampleCache.get(key);
       }
-      const value = compositeOverlayAt(x, y, compCtx, LIGHT_CONFIG);
+      const value = compositeOverlayAt(x, y, compCtx, LIGHT_CONFIG, losFn);
       overlaySampleCache.set(key, value);
       return value;
     };

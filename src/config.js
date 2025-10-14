@@ -102,6 +102,9 @@ export const CONFIG = {
       fallbackFlickerRate: 0,
       baseOverlayAlpha: 0.2,
       flickerVariance: 0.12,
+      flickerNearDeadZoneTiles: 1,
+      flickerFalloffPower: 1.75,
+      requireLineOfSight: true,
     },
   },
   ai: {
