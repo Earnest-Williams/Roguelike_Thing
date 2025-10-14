@@ -14,10 +14,14 @@ function clampUnitInterval(value) {
  */
 export function createLightOverlayContext(player, lightConfig = {}, getNow = defaultGetNow) {
   const radius = Math.max(0, Number(player?.getLightRadius?.() ?? 0));
-  const rawRate =
-    typeof player?.equipment?.getLightFlickerRate === "function"
-      ? player.equipment.getLightFlickerRate()
-      : lightConfig?.fallbackFlickerRate ?? 0;
+  let rawRate;
+  if (typeof player?.getLightFlickerRate === "function") {
+    rawRate = player.getLightFlickerRate();
+  } else if (typeof player?.equipment?.getLightFlickerRate === "function") {
+    rawRate = player.equipment.getLightFlickerRate();
+  } else {
+    rawRate = lightConfig?.fallbackFlickerRate ?? 0;
+  }
   const flickerRate =
     typeof rawRate === "number" && Number.isFinite(rawRate) ? Math.max(0, rawRate) : 0;
   const tSec = getNow() / 1000;

@@ -427,29 +427,56 @@ export class Actor {
     return Math.max(MIN_TOTAL_COOLDOWN_MULTIPLIER, temporal * derived);
   }
 
-  _sumEquipmentLightRadius() {
+  _forEachEquipmentItem(cb) {
+    if (typeof cb !== "function") return;
     const slots = this.equipment?.slots || this.equipment || {};
-    let sum = 0;
-    const addRadius = (entry) => {
+    const seen = new Set();
+    const visit = (entry) => {
       if (!entry || typeof entry !== "object") return;
       const item = "item" in entry && entry.item ? entry.item : entry;
-      const radius = Number.isFinite(item?.lightRadius) ? item.lightRadius : 0;
-      if (radius > 0) {
-        sum += radius;
-      }
+      if (!item || typeof item !== "object") return;
+      if (seen.has(item)) return;
+      seen.add(item);
+      cb(item);
     };
 
     if (slots instanceof Map) {
       for (const entry of slots.values()) {
-        addRadius(entry);
+        visit(entry);
       }
-      return sum;
+      return;
     }
 
     for (const key of Object.keys(slots)) {
-      addRadius(slots[key]);
+      visit(slots[key]);
     }
-    return sum;
+  }
+
+  _getEquipmentLightSourceProperties(defaults = null) {
+    const fallback = {
+      radius: Number.isFinite(defaults?.radius) ? Math.max(0, defaults.radius) : 0,
+      color: defaults?.color ?? null,
+      flickerRate: Number.isFinite(defaults?.flickerRate) ? defaults.flickerRate : 0,
+    };
+    let best = { ...fallback };
+    let usingFallback = true;
+
+    this._forEachEquipmentItem((item) => {
+      const radius = Number.isFinite(item?.lightRadius) ? Math.max(0, item.lightRadius) : 0;
+      if (radius <= 0) return;
+      const color =
+        typeof item.lightColor === "string" && item.lightColor
+          ? item.lightColor
+          : fallback.color;
+      const flickerRate = Number.isFinite(item?.flickerRate) ? item.flickerRate : fallback.flickerRate;
+      const candidate = { radius, color, flickerRate };
+      if (radius > best.radius || (usingFallback && radius === best.radius)) {
+        best = candidate;
+        usingFallback = false;
+      }
+    });
+
+    return best;
   }
 
   /**
@@ -461,9 +488,37 @@ export class Actor {
     const gearRadius =
       typeof this.equipment?.getLightRadius === "function"
         ? this.equipment.getLightRadius()
-        : this._sumEquipmentLightRadius();
+        : this._getEquipmentLightSourceProperties().radius;
     const innateBonus = this.modCache?.vision?.lightBonus || 0;
     return Math.max(0, (gearRadius || 0) + innateBonus);
+  }
+
+  getLightSourceProperties(defaults = null) {
+    const fallback = {
+      radius: Number.isFinite(defaults?.radius) ? Math.max(0, defaults.radius) : 0,
+      color: defaults?.color ?? null,
+      flickerRate: Number.isFinite(defaults?.flickerRate) ? defaults.flickerRate : 0,
+    };
+    const gearProps =
+      typeof this.equipment?.getLightSourceProperties === "function"
+        ? this.equipment.getLightSourceProperties(fallback) ?? { ...fallback }
+        : this._getEquipmentLightSourceProperties(fallback);
+    const innateBonus = this.modCache?.vision?.lightBonus || 0;
+    return {
+      radius: Math.max(0, (gearProps.radius || 0) + innateBonus),
+      color: gearProps.color ?? fallback.color,
+      flickerRate: Number.isFinite(gearProps.flickerRate)
+        ? gearProps.flickerRate
+        : fallback.flickerRate,
+    };
+  }
+
+  getLightColor(defaults = null) {
+    return this.getLightSourceProperties(defaults).color;
+  }
+
+  getLightFlickerRate(defaults = null) {
+    return this.getLightSourceProperties(defaults).flickerRate;
   }
 
   /**
