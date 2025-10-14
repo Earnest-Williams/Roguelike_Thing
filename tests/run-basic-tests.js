@@ -20,6 +20,7 @@ import "./monster-loadout.test.js";
 import "./mod-folding-innates.test.js";
 import "./number-clamp.test.js";
 import "./ai-wireup.test.js";
+import "./mob-combat-integration.test.js";
 import "./event-log-async.test.js";
 import "./combat-run-turn-async.test.js";
 import "./ui-combat-feedback.test.js";
