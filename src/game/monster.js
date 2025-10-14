@@ -2,6 +2,7 @@
 // @ts-check
 
 import { SLOT, LIGHT_CHANNELS } from "../../js/constants.js";
+import { MOB_TEMPLATES } from "../content/mobs.js";
 import { planTurn } from "../combat/ai-planner.js";
 import { updatePerception } from "../combat/perception.js";
 import { executeDecision } from "../combat/actions.js";
@@ -324,8 +325,8 @@ export function applyLoadout(entity, templateId, rng = Math.random, createItemFn
   if (!actor) return;
   const maker = typeof createItemFn === "function" ? createItemFn : null;
   if (!maker) return;
+  const template = MOB_TEMPLATES?.[templateId];
   const fn = MONSTER_LOADOUTS[templateId];
-  if (typeof fn !== "function") return;
   const wrappedCreate = (id) => {
     const item = maker(id);
     if (templateId === "skeleton") {
@@ -333,7 +334,10 @@ export function applyLoadout(entity, templateId, rng = Math.random, createItemFn
     }
     return item;
   };
-  fn(actor, rng, wrappedCreate);
+  if (typeof fn === "function") {
+    fn(actor, rng, wrappedCreate);
+  }
+  ensureIntelligentMobLight(actor, template, rng, wrappedCreate);
 }
 
 function extinguishLight(item) {
@@ -342,5 +346,84 @@ function extinguishLight(item) {
   if ("emitsLight" in item) item.emitsLight = false;
   if (Number.isFinite(item.radius)) item.radius = 0;
   if (Number.isFinite(item.lightRadius)) item.lightRadius = 0;
+}
+
+const INTELLIGENT_TAGS = new Set(["humanoid", "intelligent", "caster", "bandit", "orc"]);
+
+function ensureIntelligentMobLight(actor, template, rng, createItem) {
+  if (!actor || typeof createItem !== "function") return;
+  if (!template || !Array.isArray(template.tags)) return;
+  const isIntelligent = template.tags.some((tag) => INTELLIGENT_TAGS.has(tag));
+  if (!isIntelligent) return;
+
+  const random = typeof rng === "function" ? rng : Math.random;
+
+  const hasExistingLight = Object.values(actor.equipment || {}).some((entry) =>
+    itemEmitsLight(resolveEquippedItem(entry)),
+  );
+
+  if (!hasExistingLight) {
+    const useLantern = random() < 0.35;
+    const preferredSlots = [
+      SLOT.Belt1,
+      SLOT.Belt2,
+      SLOT.Belt3,
+      SLOT.Belt4,
+      SLOT.LeftHand,
+      SLOT.RightHand,
+    ];
+    let placed = tryEquip(actor, createItem(useLantern ? "lantern" : "torch"), preferredSlots);
+    if (!placed && useLantern) {
+      placed = tryEquip(actor, createItem("torch"), preferredSlots);
+    }
+    if (!placed) {
+      tryEquip(actor, createItem("lantern"), preferredSlots);
+    }
+  }
+
+  const desiredOilFlasks = 2;
+  const oilSlots = [SLOT.Belt1, SLOT.Belt2, SLOT.Belt3, SLOT.Belt4, SLOT.Backpack];
+  let equippedOil = countEquipped(actor, (item) => item?.id === "oil_flask");
+
+  while (equippedOil < desiredOilFlasks) {
+    const placed = tryEquip(actor, createItem("oil_flask"), oilSlots);
+    if (!placed) break;
+    equippedOil += 1;
+  }
+}
+
+function resolveEquippedItem(entry) {
+  let current = entry;
+  let guard = 0;
+  while (
+    current &&
+    typeof current === "object" &&
+    "item" in current &&
+    current.item &&
+    current.item !== current &&
+    guard < 4
+  ) {
+    current = current.item;
+    guard += 1;
+  }
+  return current && typeof current === "object" ? current : null;
+}
+
+function itemEmitsLight(item) {
+  if (!item || typeof item !== "object") return false;
+  if (item.lit === false) return false;
+  if (item.emitsLight === false) return false;
+  const radii = [item.radius, item.lightRadius, item.light?.radius];
+  return radii.some((value) => Number.isFinite(value) && value > 0);
+}
+
+function countEquipped(actor, predicate) {
+  if (typeof predicate !== "function") return 0;
+  let count = 0;
+  for (const entry of Object.values(actor.equipment || {})) {
+    const item = resolveEquippedItem(entry);
+    if (predicate(item)) count += 1;
+  }
+  return count;
 }
 

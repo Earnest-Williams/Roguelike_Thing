@@ -54,13 +54,13 @@ function makeStubActor() {
   console.log("✓ skeleton loadout extinguishes light sources");
 })();
 
-(function testOrcLoadoutUsesRng() {
+(function testHumanoidLoadoutGuaranteesLightAndOil() {
   const actor = makeStubActor();
-  const rng = sequenceRng([0.0, 1.0, 1.0, 1.0, 0.5]);
+  const rng = sequenceRng([0.0, 1.0, 1.0, 1.0, 0.5, 0.2, 0.8]);
   const created = [];
   const stubCreateItem = (id) => {
     created.push(id);
-    if (id === "torch") {
+    if (id === "torch" || id === "lantern") {
       return {
         id,
         equipSlots: [
@@ -70,6 +70,19 @@ function makeStubActor() {
           SLOT.Belt2,
           SLOT.Belt3,
           SLOT.Belt4,
+        ],
+        lightRadius: id === "lantern" ? 5 : 2,
+      };
+    }
+    if (id === "oil_flask") {
+      return {
+        id,
+        equipSlots: [
+          SLOT.Belt1,
+          SLOT.Belt2,
+          SLOT.Belt3,
+          SLOT.Belt4,
+          SLOT.Backpack,
         ],
       };
     }
@@ -91,7 +104,19 @@ function makeStubActor() {
     created.some((id) => id === "mace" || id === "long_sword" || id === "club"),
     "orc loadout should create a main-hand weapon",
   );
-  const torchEquipped = Object.values(actor.equipment).some((item) => item?.id === "torch");
-  assert.equal(torchEquipped, false, "torch should not equip when RNG roll exceeds threshold");
-  console.log("✓ orc loadout respects RNG when equipping items");
+
+  const equipment = Object.values(actor.equipment);
+  const lightEquipped = equipment.some((item) => item?.id === "torch" || item?.id === "lantern");
+  assert.equal(lightEquipped, true, "humanoids should always carry a light source");
+
+  const oilFlaskCount = equipment.reduce(
+    (count, item) => (item?.id === "oil_flask" ? count + 1 : count),
+    0,
+  );
+  assert(
+    oilFlaskCount >= 2,
+    "humanoids should carry spare oil flasks",
+  );
+
+  console.log("✓ humanoid loadouts always include light sources and spare oil");
 })();

@@ -391,6 +391,12 @@ const TOOLS = [
     },
     lightMask: LIGHT_CHANNELS.MAGIC,
   }),
+  tool({
+    id: "oil_flask",
+    name: "Oil Flask",
+    description: "A small bottle of lamp oil for refilling torches or lanterns.",
+    equipSlot: "belt",
+  }),
 ];
 
 const ARMOR = [
