@@ -235,10 +235,20 @@ function resolveTurnRng(source) {
   return Math.random;
 }
 
+function currentHp(thing) {
+  return Number.isFinite(thing?.res?.hp)
+    ? thing.res.hp
+    : Number.isFinite(thing?.resources?.hp)
+    ? thing.resources.hp
+    : Number.isFinite(thing?.hp)
+    ? thing.hp
+    : 0;
+}
+
 function handleDeath(gameCtx, actor) {
   // Centralized death handling ensures UI, mob management, and state bookkeeping
   // stay consistent regardless of what triggered the fatal blow.
-  if (!actor || actor.hp > 0) return false;
+  if (!actor || currentHp(actor) > 0) return false;
   if (actor.__dead) return true;
   actor.__dead = true;
 

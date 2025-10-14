@@ -45,11 +45,11 @@ async function sleep(ms) {
     uiManager.destroy();
   }
   
-  // Test 2: Combat messages blocked by recent system messages
+  // Test 2: Combat messages bypass recent system message block
   {
     const statusEl = createMockStatusElement();
     const uiManager = new UIManager({ status: statusEl });
-    
+
     // Show a system message
     emit(EVENT.STATUS, {
       who: "system",
@@ -59,21 +59,21 @@ async function sleep(ms) {
     await sleep(50);
     const systemMsg = statusEl.textContent;
     
-    // Immediately try to show combat message (should be blocked)
+    // Immediately try to show combat message (should bypass block)
     emit(EVENT.COMBAT, {
       attacker: { name: "Player", id: "player" },
       defender: { name: "Goblin", id: "goblin1" },
       totalDamage: 3,
     });
-    
+
     await sleep(50);
-    
-    assert.equal(statusEl.textContent, systemMsg, "Combat message should be blocked by recent system message");
-    assert.ok(!statusEl.textContent.includes("Goblin"), "Combat message should not appear");
-    
+
+    assert.notEqual(statusEl.textContent, systemMsg, "Combat message should replace recent system message");
+    assert.ok(statusEl.textContent.includes("Goblin"), "Combat message should appear even if a system message just fired");
+
     uiManager.destroy();
   }
-  
+
   // Test 3: Combat messages show after system message timeout
   {
     const statusEl = createMockStatusElement();
@@ -87,8 +87,8 @@ async function sleep(ms) {
     
     await sleep(50);
     
-    // Wait for the 2-second timeout to expire
-    await sleep(2100);
+    // Wait for the block window to expire
+    await sleep(300);
     
     // Now show combat message (should work)
     emit(EVENT.COMBAT, {
@@ -135,7 +135,7 @@ async function sleep(ms) {
   }
   
   console.log("✓ Combat messages show initially");
-  console.log("✓ Combat messages blocked by recent system messages");
+  console.log("✓ Combat messages bypass recent system messages");
   console.log("✓ Combat messages show after system message timeout");
   console.log("✓ System messages override combat messages");
 })().catch((err) => {
