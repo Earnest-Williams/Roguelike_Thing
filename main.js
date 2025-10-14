@@ -4914,14 +4914,16 @@ const Game = (() => {
     const saved = loadMenuSettings();
     prefillForm(saved);
 
-    quickBtn?.addEventListener("click", () => {
+    quickBtn?.addEventListener("click", (event) => {
+      event?.preventDefault?.();
       setLastRunMode("quick");
       applyQuickSettings({ resetSpeed: true });
       hideStartMenu();
       startNewSimulation();
     });
 
-    openCustomBtn?.addEventListener("click", () => {
+    openCustomBtn?.addEventListener("click", (event) => {
+      event?.preventDefault?.();
       if (startMenuForm) {
         startMenuForm.style.display = "block";
       }
