@@ -168,6 +168,15 @@ export class Monster {
     }
   }
 
+  /**
+   * Execute a full AI turn for the monster.
+   *
+   * 1. Refresh perception so `planTurn` sees the latest world state.
+   * 2. Ask the combat planner for a decision (`planTurn`).
+   * 3. Hand that decision to the action executor (`executeDecision`).
+   * 4. Refresh perception again so downstream actors see updated positions/hp.
+   * 5. Return the resolved delay so the scheduler knows when we can act again.
+   */
   async takeTurn(ctx = {}) {
     const world = (ctx && typeof ctx === "object" && ctx.world)
       ? ctx.world
