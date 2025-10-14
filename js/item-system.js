@@ -1002,6 +1002,22 @@ const ITEM_DEFINITIONS = Object.freeze({
         worksWhenDropped: true,
       },
     },
+    {
+      id: "oil_flask",
+      name: "Oil Flask",
+      kind: "tool",
+      equipSlots: [
+        SLOT.Belt1,
+        SLOT.Belt2,
+        SLOT.Belt3,
+        SLOT.Belt4,
+        SLOT.Backpack,
+      ],
+      dims: { l: 12, w: 6, h: 6 },
+      mass: 0.4,
+      stackable: true,
+      maxStack: 6,
+    },
   ],
   containers: [
     {
