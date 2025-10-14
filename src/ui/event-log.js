@@ -2,6 +2,18 @@
 // @ts-check
 import { EVENT_LOG_RING_MAX, EVENT_LOG_LATEST_DEFAULT } from "../config.js";
 
+/**
+ * Lightweight in-memory event log used throughout the UI layer. The module
+ * acts as a tiny event bus that is safe to call from anywhere, including the
+ * browser console, while also keeping a short history for debugging widgets.
+ *
+ * The implementation intentionally avoids depending on framework-specific
+ * constructs so it can be reused across different parts of the codebase.
+ */
+
+/** @typedef {{ t: number, type: string, payload: any }} EventLogEntry */
+/** @typedef {(entry: EventLogEntry) => unknown} EventListener */
+
 export const EVENT = Object.freeze({
   TURN: "turn",
   COMBAT: "combat",
@@ -9,16 +21,27 @@ export const EVENT = Object.freeze({
   CONSOLE: "console",
 });
 
-/** @type {Map<string, Set<Function>>} */
+/** @type {Map<string, Set<EventListener>>} */
 const subs = new Map();
-/** @type {Array<{ t: number, type: string, payload: any }>} */
+/** @type {EventLogEntry[]} */
 const ring = [];
 
-/** @param {any} value */
+/**
+ * Return whether a value quacks like a promise. The heuristic is intentionally
+ * loose so that callers can return any thenable implementation.
+ * @param {unknown} value
+ * @returns {value is Promise<unknown>}
+ */
 function isPromiseLike(value) {
   return !!(value && typeof value === "object" && typeof value.then === "function");
 }
 
+/**
+ * Record the provided payload in the ring buffer and return the entry.
+ * @param {string} type
+ * @param {any} payload
+ * @returns {EventLogEntry}
+ */
 function pushEntry(type, payload) {
   const entry = { t: Date.now(), type, payload };
   ring.push(entry);
@@ -27,16 +50,21 @@ function pushEntry(type, payload) {
 }
 
 /**
- * @param {Set<Function> | undefined} listeners
- * @param {{ t: number, type: string, payload: any }} entry
+ * Notify listeners for a specific event type and collect any returned
+ * promises.
  * @param {string} type
- * @param {Promise<any>[]} promises
+ * @param {EventLogEntry} entry
+ * @returns {Promise<unknown>[]}
  */
-function notifyListeners(listeners, entry, type, promises) {
-  if (!listeners) return;
-  for (const fn of listeners) {
+function dispatchToListeners(type, entry) {
+  const listeners = subs.get(type);
+  if (!listeners || listeners.size === 0) return [];
+
+  /** @type {Promise<unknown>[]} */
+  const promises = [];
+  for (const listener of listeners) {
     try {
-      const result = fn(entry);
+      const result = listener(entry);
       if (isPromiseLike(result)) {
         promises.push(result);
       }
@@ -46,11 +74,15 @@ function notifyListeners(listeners, entry, type, promises) {
       }
     }
   }
+  return promises;
 }
 
 /**
+ * Log a rejection from an asynchronous handler in a defensive manner. Console
+ * access is guarded so the function remains safe to use in headless test
+ * environments.
  * @param {string} type
- * @param {any} reason
+ * @param {unknown} reason
  */
 function logRejection(type, reason) {
   if (typeof console !== "undefined" && console.error) {
@@ -60,18 +92,21 @@ function logRejection(type, reason) {
 
 /**
  * Emit an event to synchronous listeners.
+ *
+ * Events are stored in a small ring buffer for debugging/UX widgets. We keep
+ * this implementation minimal so it can be used from both game logic and the
+ * browser console without worrying about reentrancy.
+ *
  * @param {string} type
  * @param {any} payload
- * @returns {{ t: number, type: string, payload: any }} Recorded entry.
+ * @returns {EventLogEntry} Recorded entry.
  */
 export function emit(type, payload) {
-  // Events are stored in a small ring buffer for debugging/UX widgets. We keep
-  // this implementation minimal so it can be used from both game logic and the
-  // browser console without worrying about reentrancy.
   const entry = pushEntry(type, payload);
-  const promises = [];
-  notifyListeners(subs.get(type), entry, type, promises);
-  notifyListeners(subs.get("*"), entry, "*", promises);
+  const promises = [
+    ...dispatchToListeners(type, entry),
+    ...dispatchToListeners("*", entry),
+  ];
   for (const promise of promises) {
     promise.catch((err) => logRejection(type, err));
   }
@@ -82,13 +117,14 @@ export function emit(type, payload) {
  * Emit an event and await asynchronous listeners.
  * @param {string} type
  * @param {any} payload
- * @returns {Promise<{ t: number, type: string, payload: any }>}
+ * @returns {Promise<EventLogEntry>}
  */
 export async function emitAsync(type, payload) {
   const entry = pushEntry(type, payload);
-  const promises = [];
-  notifyListeners(subs.get(type), entry, type, promises);
-  notifyListeners(subs.get("*"), entry, "*", promises);
+  const promises = [
+    ...dispatchToListeners(type, entry),
+    ...dispatchToListeners("*", entry),
+  ];
   if (promises.length === 0) {
     return entry;
   }
@@ -102,19 +138,34 @@ export async function emitAsync(type, payload) {
 }
 
 /**
+ * Register a listener for the given event type. Listeners receive the raw
+ * event entry object. The returned function can be used to unsubscribe.
+ *
  * @param {string} type
- * @param {(entry: { t: number, type: string, payload: any }) => void} fn
+ * @param {EventListener} fn
+ * @returns {() => void}
  */
 export function subscribe(type, fn) {
-  // Subscribers receive the raw entry object. Returning an unsubscribe function
-  // keeps cleanup ergonomic for UI components.
+  if (typeof fn !== "function") {
+    throw new TypeError("event-log.subscribe expects a function listener");
+  }
   if (!subs.has(type)) subs.set(type, new Set());
-  subs.get(type).add(fn);
-  return () => subs.get(type)?.delete(fn);
+  const listeners = subs.get(type);
+  listeners.add(fn);
+  return () => {
+    const set = subs.get(type);
+    if (!set) return;
+    set.delete(fn);
+    if (set.size === 0) {
+      subs.delete(type);
+    }
+  };
 }
 
 /**
- * @param {number} [n]
+ * Return the newest {@code n} entries in chronological order.
+ * @param {number} [n=EVENT_LOG_LATEST_DEFAULT]
+ * @returns {EventLogEntry[]}
  */
 export function latest(n = EVENT_LOG_LATEST_DEFAULT) {
   // Copy the newest N entries so callers can safely mutate the returned array
