@@ -58,6 +58,7 @@ import { Sound } from "./src/ui/sound.js";
 import { DebugOverlay } from "./src/ui/debug-overlay.js";
 import { emit, EVENT } from "./src/ui/event-log.js";
 import { UIManager } from "./src/ui/UIManager.js";
+import { mountLightSettingsPanel } from "./src/ui/light-settings-panel.js";
 import {
   FurnitureKind,
   FurnitureOrientation,
@@ -366,6 +367,9 @@ const Game = (() => {
   const pauseIndicator =
     (gameState.ui.pauseIndicator =
       document.getElementById("pause-indicator"));
+  const lightSettingsPanelEl =
+    (gameState.ui.lightSettingsPanel =
+      document.getElementById("light-settings-panel"));
   const containerEl =
     (gameState.ui.container = document.getElementById("container"));
   let startMenuDom = null;
@@ -413,6 +417,12 @@ const Game = (() => {
   simState.speed = CONFIG.ai.ticksPerSecond;
   simState.isReady = false;
   simState.turnCounter = 0;
+
+  const lightSettingsController = mountLightSettingsPanel({
+    panel: lightSettingsPanelEl,
+    initialPaused: simState.isPaused,
+  });
+  gameState.ui.lightSettingsController = lightSettingsController;
 
   const debugState = gameState.debug;
   let devPanelMounted = debugState.devPanelMounted;
