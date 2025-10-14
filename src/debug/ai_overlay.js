@@ -25,14 +25,22 @@ export function updateAIOverlay(decision) {
   if (!enabled) return;
   const root = ensureRoot();
   if (!root) return;
+
+  const explain = isObject(decision?.explain) ? decision.explain : null;
   const d = decision || {};
-  const goal = d.goal ?? "(none)";
-  const score = Number.isFinite(d.score) ? Number(d.score).toFixed(2) : "–";
-  const target = summarizeTarget(d.target);
-  const breakdown = toPairs(d.breakdown)
+  const goal = d.goal ?? explain?.goal ?? "(none)";
+  const scoreSource = Number.isFinite(d.score)
+    ? d.score
+    : Number.isFinite(explain?.score)
+      ? explain.score
+      : null;
+  const score = scoreSource === null ? "–" : Number(scoreSource).toFixed(2);
+  const target = summarizeTarget(d.target ?? explain?.target);
+  const breakdown = toPairs(d.breakdown || explain?.breakdown)
     .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
     .slice(0, 8);
-  const policyId = d?.policy?.id ?? d?.policy?.name ?? "(policy)";
+  const policyId =
+    d?.policy?.id ?? d?.policy?.name ?? explain?.policy?.id ?? explain?.policy?.label ?? "(policy)";
 
   root.innerHTML = `
     <div style="font-weight:600;margin-bottom:4px">AI Decision Overlay</div>
@@ -40,12 +48,7 @@ export function updateAIOverlay(decision) {
     <div><b>Goal:</b> ${escapeHtml(goal)} &nbsp;&nbsp; <b>Score:</b> ${escapeHtml(String(score))}</div>
     <div><b>Target:</b> ${escapeHtml(target)}</div>
     <div style="margin-top:6px;margin-bottom:2px;font-weight:600">Top terms</div>
-    <table style="width:100%;border-collapse:collapse;font-size:12px">
-      <thead><tr><th style="text-align:left">Term</th><th style="text-align:right">Δ Utility</th></tr></thead>
-      <tbody>
-        ${breakdown.map(([k, v]) => row(k, v)).join("")}
-      </tbody>
-    </table>
+    ${renderBreakdownTable(breakdown)}
   `;
 }
 
@@ -71,6 +74,10 @@ function toPairs(obj) {
   return Object.entries(obj);
 }
 
+function isObject(value) {
+  return !!value && typeof value === "object";
+}
+
 function summarizeTarget(t) {
   if (!t) return "(none)";
   if (typeof t === "string") return t;
@@ -81,6 +88,20 @@ function summarizeTarget(t) {
   } catch {
     return String(t);
   }
+}
+
+function renderBreakdownTable(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return '<div style="font-size:12px;color:#aaa">No weighted terms</div>';
+  }
+  return `
+    <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr><th style="text-align:left">Term</th><th style="text-align:right">Δ Utility</th></tr></thead>
+      <tbody>
+        ${rows.map(([k, v]) => row(k, v)).join("")}
+      </tbody>
+    </table>
+  `;
 }
 
 function ensureRoot() {
