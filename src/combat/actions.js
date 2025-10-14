@@ -4,6 +4,7 @@ import { finalAPForAction, spendAP, startCooldown, isReady } from "./time.js";
 import { resolveAttack } from "./resolve.js";
 import { performEquippedAttack, pickAttackMode } from "../game/combat-glue.js";
 import { FactionService } from "../game/faction-service.js";
+import { EVENT, emit } from "../ui/event-log.js";
 import {
   BASE_MOVE_AP_COST,
   COOLDOWN_MIN_TURNS,
@@ -131,13 +132,33 @@ export function tryAttack(attacker, defender, opts = {}) {
     baseCosts,
     tags: action.tags,
   };
-  resolveAttack(ctx);
+  
+  const hpBefore = defender?.res && typeof defender.res.hp === "number" ? defender.res.hp : 0;
+  const out = resolveAttack(ctx);
+  const hpAfter = defender?.res && typeof defender.res.hp === "number" ? defender.res.hp : 0;
+  
   attacker._turnDidAttack = true;
   noteAttacked(attacker);
 
   if (defender?.res && typeof defender.res.hp === "number") {
     defender.res.hp = Math.max(HEALTH_FLOOR, defender.res.hp);
   }
+
+  // Emit combat event for UI feedback
+  const payload = {
+    who: attacker.name ?? attacker.id,
+    vs: defender.name ?? defender.id,
+    attacker,
+    defender,
+    damage: hpBefore - hpAfter,
+    totalDamage: hpBefore - hpAfter,
+    hpBefore,
+    hpAfter,
+    packets: out.packetsAfterDefense,
+    statuses: out.appliedStatuses,
+    ctx,
+  };
+  emit(EVENT.COMBAT, payload);
 
   startCooldown(attacker, key, action.baseCooldown);
 
