@@ -47,6 +47,21 @@ export const ITEMS = [
     },
   },
   {
+    id: "spotlight",
+    name: "Arc-Lite Projector",
+    kind: "tool",
+    equipSlot: "tool",
+    light: {
+      radius: 8,
+      color: "#ffffbe",
+      intensity: 1.2,
+      angle: 0,
+      width: Math.PI / 3,
+      channel: LIGHT_CHANNELS.NORMAL,
+    },
+    description: "A focused beam lamp that bathes a narrow arc in brilliant light.",
+  },
+  {
     id: "polarity_cloak",
     name: "Veil of Stillwater",
     kind: "armor",
