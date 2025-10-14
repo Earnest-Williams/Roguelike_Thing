@@ -1,12 +1,14 @@
 /**
  * Composite lighting math:
  *  - createCompositeLightContext(lights, cfg, nowFn)
- *  - compositeOverlayAt(x,y, ctx, cfg, losFn?) -> { a, rgb }
+ *  - compositeOverlayAt(x,y, ctx, cfg, losFn?, entities?) -> { a, rgb }
  *
  * Attenuation: smoothstep-like rolloff with optional dead-zone near source.
  * Flicker: per-light sine oscillator scaled by cfg.flickerVariance & falloff pow.
  * Blending: bounded “screen-like” accumulation: A = 1-Π(1-ai), C = 1-Π(1-ci*ai)
  */
+
+import { LIGHT_CHANNELS } from "../../js/constants.js";
 
 export function createCompositeLightContext(lights = [], cfg = {}, nowFn = defaultNow) {
   const t = nowFn() / 1000;
@@ -22,19 +24,32 @@ export function createCompositeLightContext(lights = [], cfg = {}, nowFn = defau
       color,
       baseIntensity: clamp01(L.intensity ?? 1),
       osc: rate > 0 ? Math.sin(t * 2 * Math.PI * rate) : 0,
+      angle: Number.isFinite(L.angle) ? +L.angle : undefined,
+      width: Number.isFinite(L.width) ? +L.width : undefined,
+      channel: Number.isFinite(L.channel) ? +L.channel : LIGHT_CHANNELS.ALL,
     });
     if (rate > maxFlickerRate) maxFlickerRate = rate;
   }
   return { lights: ls, maxFlickerRate };
 }
 
-export function compositeOverlayAt(x, y, ctx, cfg = {}, losFn = null) {
+export function compositeOverlayAt(x, y, ctx, cfg = {}, losFn = null, entitiesOnTile = []) {
   const arr = ctx?.lights || [];
   if (arr.length === 0) return { a: clamp01(cfg.baseOverlayAlpha ?? 0), rgb: null };
 
   let oneMinusA = 1, omr = 1, omg = 1, omb = 1;
 
+  const tileMask = Array.isArray(entitiesOnTile) && entitiesOnTile.length > 0
+    ? entitiesOnTile.reduce(
+        (mask, ent) => mask | (Number.isFinite(ent?.lightMask) ? ent.lightMask : LIGHT_CHANNELS.ALL),
+        0,
+      ) || 0
+    : LIGHT_CHANNELS.ALL;
+
   for (const L of arr) {
+    if ((L.channel & tileMask) === 0) {
+      continue;
+    }
     if (losFn && !losFn(L, x, y)) continue;
     const ai = contributionAt(x, y, L, cfg);
     if (ai <= 0) continue;
@@ -56,6 +71,20 @@ export function compositeOverlayAt(x, y, ctx, cfg = {}, losFn = null) {
 function contributionAt(x, y, L, cfg) {
   const dead = Math.max(0, cfg.flickerNearDeadZoneTiles ?? 0);
   const dx = x - L.x, dy = y - L.y;
+  if (Number.isFinite(L.angle) && Number.isFinite(L.width) && L.width > 0) {
+    if (dx !== 0 || dy !== 0) {
+      const angleToTile = Math.atan2(dy, dx);
+      let delta = angleToTile - L.angle;
+      if (!Number.isFinite(delta)) {
+        delta = 0;
+      }
+      while (delta <= -Math.PI) delta += 2 * Math.PI;
+      while (delta > Math.PI) delta -= 2 * Math.PI;
+      if (Math.abs(delta) > L.width / 2) {
+        return 0;
+      }
+    }
+  }
   const dist = Math.hypot(dx, dy);
   const denom = Math.max(1e-6, L.r - dead);
   const falloff = 1 - smoothstep01((dist - dead) / denom); // 1->0 across radius

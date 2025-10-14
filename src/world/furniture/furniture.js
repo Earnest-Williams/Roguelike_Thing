@@ -1,6 +1,7 @@
 // src/world/furniture/furniture.js
 // @ts-check
 
+import { LIGHT_CHANNELS } from "../../../js/constants.js";
 import { FurnitureEffect } from "./effects.js";
 import { resolveStuff } from "../stuff.js";
 
@@ -57,6 +58,9 @@ export class Furniture {
     this.material = resolvedMaterial ?? null;
     this.tags = new Set(Array.isArray(tags) ? tags : []);
     this.metadata = metadata && typeof metadata === "object" ? { ...metadata } : {};
+    this.lightMask = Number.isFinite(this.metadata.lightMask)
+      ? this.metadata.lightMask
+      : LIGHT_CHANNELS.ALL;
     /** @type {Map<string, FurnitureEffect>} */
     this.effects = new Map();
   }

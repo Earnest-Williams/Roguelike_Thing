@@ -1,7 +1,7 @@
 // src/content/items.js
 // @ts-check
 
-import { DAMAGE_TYPE } from "../../js/constants.js";
+import { DAMAGE_TYPE, LIGHT_CHANNELS } from "../../js/constants.js";
 
 export const ITEMS = [
   {
@@ -286,6 +286,21 @@ export const ITEMS = [
     resource: {
       gainFlat: { mana: 2 },
     },
+  },
+  {
+    id: "arc_lantern",
+    name: "Arc Lantern",
+    kind: "tool",
+    equipSlot: "RightHand",
+    light: {
+      radius: 8,
+      color: "#ffffbe",
+      intensity: 1.2,
+      angle: 0,
+      width: Math.PI / 3,
+      channel: LIGHT_CHANNELS.MAGIC,
+    },
+    lightMask: LIGHT_CHANNELS.MAGIC,
   },
 ];
 

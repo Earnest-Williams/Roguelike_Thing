@@ -9,6 +9,7 @@ import {
   MIN_TOTAL_ACTION_COST_MULTIPLIER,
   MIN_TOTAL_COOLDOWN_MULTIPLIER,
   SLOT,
+  LIGHT_CHANNELS,
 } from "../../js/constants.js";
 import { planTurn } from "./ai-planner.js";
 import { updatePerception } from "./perception.js";
@@ -154,6 +155,8 @@ export class Actor {
   constructor(init) {
     this.id = init.id;
     this.name = init.name ?? init.id;
+    this.lightMask = init.lightMask ?? LIGHT_CHANNELS.ALL;
+    this.lightChannel = init.lightChannel ?? LIGHT_CHANNELS.ALL;
 
     /** @type {string[]} */
     this.factions = Array.isArray(init.factions) && init.factions.length

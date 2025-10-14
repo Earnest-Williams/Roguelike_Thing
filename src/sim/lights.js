@@ -1,3 +1,5 @@
+import { LIGHT_CHANNELS } from "../../js/constants.js";
+
 /**
  * World light collection (actors, dropped items, fixtures).
  * Produces a normalized array of LightSource records for this frame.
@@ -9,6 +11,9 @@
  *   color: string|{r,g,b},         // "#RRGGBB" or {r,g,b} 0..255
  *   intensity?: number,            // 0..1, default 1
  *   flickerRate?: number,          // Hz
+ *   angle?: number,                // radians, facing direction for cones
+ *   width?: number,                // radians, cone width
+ *   channel?: number,              // bitmask, LIGHT_CHANNELS
  * }
  */
 
@@ -32,6 +37,9 @@ export function collectWorldLightSources({ player, entities = [], mobs = [], map
           color: rgb,
           intensity: clamp01(e.intensity ?? 1),
           flickerRate: finiteNum(e.flickerRate) ? +e.flickerRate : 0,
+          angle: finiteNum(e.angle) ? +e.angle : undefined,
+          width: finiteNum(e.width) ? +e.width : undefined,
+          channel: finiteNum(e.channel) ? +e.channel : LIGHT_CHANNELS.ALL,
         });
       }
     } else {
@@ -46,6 +54,11 @@ export function collectWorldLightSources({ player, entities = [], mobs = [], map
           color: toRgb(a?.getLightColor?.() ?? "#ffe9a6"),
           intensity: 1,
           flickerRate: finiteNum(a?.getLightFlickerRate?.()) ? +a.getLightFlickerRate() : 0,
+          angle: finiteNum(a?.getLightAngle?.()) ? +a.getLightAngle() : undefined,
+          width: finiteNum(a?.getLightWidth?.()) ? +a.getLightWidth() : undefined,
+          channel: finiteNum(a?.lightChannel ?? a?.light?.channel)
+            ? +(a.lightChannel ?? a.light?.channel)
+            : LIGHT_CHANNELS.ALL,
         });
       }
     }
@@ -72,6 +85,9 @@ export function collectWorldLightSources({ player, entities = [], mobs = [], map
       color: toRgb(L.color ?? "#ffe9a6"),
       intensity: clamp01(L.intensity ?? 1),
       flickerRate: finiteNum(L.flickerRate) ? +L.flickerRate : 0,
+      angle: finiteNum(L.angle) ? +L.angle : undefined,
+      width: finiteNum(L.width) ? +L.width : undefined,
+      channel: finiteNum(L.channel) ? +L.channel : LIGHT_CHANNELS.ALL,
     });
   }
 
@@ -88,6 +104,9 @@ export function collectWorldLightSources({ player, entities = [], mobs = [], map
           color: toRgb(L.color ?? "#ffe9a6"),
           intensity: clamp01(L.intensity ?? 1),
           flickerRate: finiteNum(L.flickerRate) ? +L.flickerRate : 0,
+          angle: finiteNum(L.angle) ? +L.angle : undefined,
+          width: finiteNum(L.width) ? +L.width : undefined,
+          channel: finiteNum(L.channel) ? +L.channel : LIGHT_CHANNELS.ALL,
         });
       }
     }
@@ -110,6 +129,9 @@ export function collectWorldLightSources({ player, entities = [], mobs = [], map
         color: toRgb(L.color ?? "#ffe9a6"),
         intensity: clamp01(L.intensity ?? 1),
         flickerRate: finiteNum(L.flickerRate) ? +L.flickerRate : 0,
+        angle: finiteNum(L.angle) ? +L.angle : undefined,
+        width: finiteNum(L.width) ? +L.width : undefined,
+        channel: finiteNum(L.channel) ? +L.channel : LIGHT_CHANNELS.ALL,
       });
     }
   }

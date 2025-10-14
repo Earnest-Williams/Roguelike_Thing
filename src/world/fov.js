@@ -129,8 +129,13 @@ export function computeFieldOfView(pos, radius, mapState, options = {}) {
   if (!pos || !mapState) {
     return visible;
   }
-  const transforms = options.transforms ?? FOV_TRANSFORMS;
-  const useKnownGrid = Boolean(options.useKnownGrid);
+  const {
+    useKnownGrid = false,
+    transforms = FOV_TRANSFORMS,
+    startAngle,
+    endAngle,
+  } = options;
+  const hasAngleConstraints = Number.isFinite(startAngle) && Number.isFinite(endAngle);
   const safeRadius = Number.isFinite(radius) ? Math.max(0, radius) : 0;
   const radiusSq = safeRadius * safeRadius;
   visible.add(posKey(pos));
@@ -183,6 +188,10 @@ export function computeFieldOfView(pos, radius, mapState, options = {}) {
   for (let oct = 0; oct < transforms.length; oct++) {
     const transform = transforms[oct];
     if (!Array.isArray(transform) || transform.length !== 4) continue;
+    if (hasAngleConstraints) {
+      // Angular constraints are currently enforced during light contribution
+      // sampling. The full shadow-casting optimization is deferred.
+    }
     const [xx, xy, yx, yy] = transform;
     castLight(1, 1.0, 0.0, xx, xy, yx, yy);
   }

@@ -4,6 +4,7 @@ import {
   THROW_CLASS,
   ATTACK_KIND,
   SLOT,
+  LIGHT_CHANNELS,
 } from "./constants.js";
 import { clamp, clamp01Normalized } from "./utils.js";
 
@@ -61,12 +62,21 @@ function normalizeLightDescriptor(light, defaults = {}) {
     : 0;
   const worksWhenDropped =
     source.worksWhenDropped ?? defaults.worksWhenDropped ?? true;
+  const angleCandidate = source.angle ?? defaults.angle;
+  const angle = Number.isFinite(angleCandidate) ? Number(angleCandidate) : undefined;
+  const widthCandidate = source.width ?? defaults.width;
+  const width = Number.isFinite(widthCandidate) ? Math.max(0, Number(widthCandidate)) : undefined;
+  const channelCandidate = source.channel ?? defaults.channel;
+  const channel = Number.isFinite(channelCandidate) ? Number(channelCandidate) : undefined;
   return {
     radius,
     color,
     intensity,
     flickerRate,
     worksWhenDropped,
+    angle,
+    width,
+    channel,
   };
 }
 
@@ -400,7 +410,11 @@ export class Item {
       intensity: o.light?.intensity,
       flickerRate: this.flickerRate,
       worksWhenDropped: o.light?.worksWhenDropped,
+      angle: o.light?.angle,
+      width: o.light?.width,
+      channel: o.light?.channel,
     });
+    this.lightMask = o.lightMask ?? LIGHT_CHANNELS.ALL;
     this.container = o.container ? { ...o.container } : null;
     if (this.container) this.contents = [];
     this.brands = Array.isArray(o.brands)
@@ -454,6 +468,7 @@ export class Item {
       lightColor: this.lightColor,
       flickerRate: this.flickerRate,
       light: this.light ? { ...this.light } : null,
+      lightMask: this.lightMask,
       container: null,
       throwProfile: this.throwProfile ? cloneThrowProfile(this.throwProfile) : null,
       weaponProfile: cloneWeaponProfile(this.weaponProfile),

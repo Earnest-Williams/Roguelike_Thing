@@ -55,6 +55,14 @@ export const FOV_TRANSFORMS = Object.freeze([
   [1, 0, 0, -1],
 ]);
 
+export const LIGHT_CHANNELS = Object.freeze({
+  NONE: 0,
+  NORMAL: 1 << 0,
+  SPECTRAL: 1 << 1,
+  MAGIC: 1 << 2,
+  ALL: 0xffffffff,
+});
+
 export const DAMAGE_TYPE = Object.freeze({
   SLASH: "slash",
   PIERCE: "pierce",
