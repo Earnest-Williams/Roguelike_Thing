@@ -59,6 +59,7 @@ import { DebugOverlay } from "./src/ui/debug-overlay.js";
 import { emit, EVENT } from "./src/ui/event-log.js";
 import { UIManager } from "./src/ui/UIManager.js";
 import { mountLightSettingsPanel } from "./src/ui/light-settings-panel.js";
+import { tryAttack, tryAttackEquipped } from "./src/combat/actions.js";
 import {
   FurnitureKind,
   FurnitureOrientation,
@@ -463,6 +464,110 @@ const Game = (() => {
         };
       })
       .filter(Boolean);
+  }
+
+  function getFurniturePlacementAt(x, y) {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    const key = posKeyFromCoords(x, y);
+    if (mapState?.furnitureIndex instanceof Map) {
+      const placement = mapState.furnitureIndex.get(key);
+      if (placement) return placement;
+    }
+    if (!Array.isArray(mapState?.furniture)) return null;
+    for (const placement of mapState.furniture) {
+      if (!placement || !placement.position) continue;
+      const px = Math.round(placement.position.x ?? NaN);
+      const py = Math.round(placement.position.y ?? NaN);
+      if (px === x && py === y) return placement;
+    }
+    return null;
+  }
+
+  function resolveDoorAtPosition(x, y) {
+    const placement = getFurniturePlacementAt(x, y);
+    if (!placement) return null;
+    const candidate = placement.furniture || placement;
+    if (!candidate) return null;
+    if (candidate instanceof Door) return candidate;
+    const kind = candidate.kind || candidate.metadata?.kind || null;
+    if (kind === FurnitureKind.DOOR || kind === "door") {
+      return candidate;
+    }
+    return null;
+  }
+
+  function isDoorCurrentlyOpen(door) {
+    if (!door) return false;
+    if (typeof door.isOpen === "function") {
+      try {
+        return door.isOpen();
+      } catch {
+        /* ignore */
+      }
+    }
+    const state = typeof door.state === "string" ? door.state : door.metadata?.state;
+    return state === DOOR_STATE.OPEN;
+  }
+
+  function doorHasEffect(door, effectId) {
+    if (!door || !effectId) return false;
+    if (typeof door.hasEffect === "function") {
+      try {
+        return door.hasEffect(effectId);
+      } catch {
+        return false;
+      }
+    }
+    const effects = door.effects;
+    if (effects instanceof Map) {
+      return effects.has(effectId);
+    }
+    if (Array.isArray(effects)) {
+      return effects.some((eff) => eff && eff.id === effectId);
+    }
+    if (effects && typeof effects === "object") {
+      return Boolean(effects[effectId]);
+    }
+    return false;
+  }
+
+  function canDoorBeOpened(door) {
+    if (!door) return false;
+    if (isDoorCurrentlyOpen(door)) return false;
+    const state = typeof door.state === "string" ? door.state : door.metadata?.state;
+    if (state === DOOR_STATE.BLOCKED) return false;
+    if (doorHasEffect(door, FURNITURE_EFFECT_IDS.LOCKED)) return false;
+    if (doorHasEffect(door, FURNITURE_EFFECT_IDS.JAMMED)) return false;
+    return true;
+  }
+
+  function openDoorEntity(door) {
+    if (!door) return false;
+    if (isDoorCurrentlyOpen(door)) return false;
+    const before = isDoorCurrentlyOpen(door);
+    if (typeof door.open === "function") {
+      door.open();
+    } else {
+      door.state = DOOR_STATE.OPEN;
+      if (door.metadata && typeof door.metadata === "object") {
+        door.metadata.state = DOOR_STATE.OPEN;
+      }
+    }
+    return before !== isDoorCurrentlyOpen(door);
+  }
+
+  function getMobAtPosition(x, y) {
+    if (!mobManager) return null;
+    if (typeof mobManager.getMobAt === "function") {
+      const occupant = mobManager.getMobAt(x, y);
+      if (occupant) return occupant;
+    }
+    if (!Array.isArray(mobManager.list)) return null;
+    for (const mob of mobManager.list) {
+      if (!mob) continue;
+      if (mob.x === x && mob.y === y) return mob;
+    }
+    return null;
   }
 
   function buildCulminationVaultPlacement(theme, endPos) {
@@ -4521,6 +4626,53 @@ const Game = (() => {
           restartVisible: true,
         });
         return { ended: true };
+      }
+
+      if (nextMove) {
+        const targetX = nextMove.x;
+        const targetY = nextMove.y;
+
+        const door = resolveDoorAtPosition(targetX, targetY);
+        if (door && !isDoorCurrentlyOpen(door)) {
+          if (canDoorBeOpened(door)) {
+            if (openDoorEntity(door)) {
+              Sound.playDoor();
+              updateVisionAndExploration(currentPos);
+              fovState.currentVisible = computeVisibleCells(currentPos);
+              renderScene();
+              fovState.prevVisible = new Set(fovState.currentVisible);
+              minimapMaybeRefreshOnTick();
+              return { acted: true };
+            }
+          }
+          return { acted: false };
+        }
+
+        const occupant = getMobAtPosition(targetX, targetY);
+        if (occupant && occupant !== player) {
+          if (FactionService.isHostile(player, occupant)) {
+            const attacker = player.actor ?? player;
+            const defender = occupant.actor ?? occupant;
+            const attacked =
+              (attacker && defender &&
+                (tryAttackEquipped(attacker, defender, 1) ||
+                  tryAttack(attacker, defender))) ||
+              false;
+            if (attacked) {
+              handleDeath(gameCtx, occupant);
+              if (mobManager) {
+                mobManager.reindex();
+              }
+              updateVisionAndExploration(currentPos);
+              fovState.currentVisible = computeVisibleCells(currentPos);
+              renderScene();
+              fovState.prevVisible = new Set(fovState.currentVisible);
+              minimapMaybeRefreshOnTick();
+              return { acted: true };
+            }
+          }
+          return { acted: false };
+        }
       }
 
       prevPlayerPos.x = currentPlayerX;

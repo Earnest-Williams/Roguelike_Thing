@@ -3,6 +3,7 @@
 import { finalAPForAction, spendAP, startCooldown, isReady } from "./time.js";
 import { resolveAttack } from "./resolve.js";
 import { performEquippedAttack, pickAttackMode } from "../game/combat-glue.js";
+import { FactionService } from "../game/faction-service.js";
 import {
   BASE_MOVE_AP_COST,
   COOLDOWN_MIN_TURNS,
@@ -20,6 +21,13 @@ import {
 } from "../../js/constants.js";
 import { canPay, eventGain } from "./resources.js";
 import { noteAttacked, noteMoved } from "./actor.js";
+import {
+  Door,
+  DOOR_STATE,
+  FURNITURE_EFFECT_IDS,
+  FurnitureKind,
+} from "../world/furniture/index.js";
+import { Sound } from "../ui/sound.js";
 
 /**
  * @typedef {import("./actor.js").Actor} Actor
@@ -391,7 +399,37 @@ function resolveLeash(raw, actor) {
 function applyStep(entity, step, world) {
   if (!step) return false;
   const { x, y } = step;
-  if (!isPassable(world, x, y, entity)) return false;
+
+  const door = resolveDoorAt(world, x, y);
+  if (door && !isDoorOpen(door)) {
+    if (canDoorBeOpenedNow(door) && openDoorThroughBump(door)) {
+      Sound.playDoor();
+      if (typeof world?.onDoorOpened === "function") {
+        try {
+          world.onDoorOpened({ door, entity, x, y });
+        } catch {
+          /* ignore listener errors */
+        }
+      }
+    }
+    return false;
+  }
+
+  if (!isPassable(world, x, y, entity)) {
+    const occupant = getOccupant(world, x, y, entity);
+    if (occupant && occupant !== entity) {
+      if (FactionService.isHostile(entity, occupant)) {
+        const attacker = resolveCombatant(entity, entity?.__actor);
+        const defender = resolveCombatant(occupant, occupant?.__actor);
+        if (attacker && defender) {
+          tryAttackEquipped(attacker, defender, 1) ||
+            tryAttack(attacker, defender);
+        }
+      }
+    }
+    return false;
+  }
+
   entity.x = x;
   entity.y = y;
   if (entity?.__actor) {
@@ -408,6 +446,10 @@ function isPassable(world, x, y, self) {
     if (tile == null) return false;
     if (tile !== TILE_FLOOR) return false;
   }
+  const door = resolveDoorAt(world, x, y);
+  if (door && !isDoorOpen(door) && !canDoorBeOpenedNow(door)) {
+    return false;
+  }
   return !isOccupied(world, x, y, self);
 }
 
@@ -420,17 +462,117 @@ function resolveGrid(world) {
 }
 
 function isOccupied(world, x, y, self) {
-  if (!world) return false;
+  return Boolean(getOccupant(world, x, y, self));
+}
+
+function getFurniturePlacement(world, x, y) {
+  if (!world) return null;
+  const mapState = world.mapState;
+  if (!mapState) return null;
+  const key = `${x},${y}`;
+  if (mapState.furnitureIndex instanceof Map) {
+    const placement = mapState.furnitureIndex.get(key);
+    if (placement) return placement;
+  }
+  if (!Array.isArray(mapState.furniture)) return null;
+  for (const placement of mapState.furniture) {
+    if (!placement || !placement.position) continue;
+    const px = Math.round(placement.position.x ?? NaN);
+    const py = Math.round(placement.position.y ?? NaN);
+    if (!Number.isFinite(px) || !Number.isFinite(py)) continue;
+    if (px === x && py === y) return placement;
+  }
+  return null;
+}
+
+function resolveDoorAt(world, x, y) {
+  const placement = getFurniturePlacement(world, x, y);
+  if (!placement) return null;
+  const candidate = placement.furniture || placement;
+  if (!candidate) return null;
+  if (candidate instanceof Door) return candidate;
+  const kind = candidate.kind || candidate.metadata?.kind || null;
+  if (kind === FurnitureKind.DOOR || kind === "door") {
+    return candidate;
+  }
+  return null;
+}
+
+function isDoorOpen(door) {
+  if (!door) return false;
+  if (typeof door.isOpen === "function") {
+    try {
+      return door.isOpen();
+    } catch {
+      return false;
+    }
+  }
+  const state = typeof door.state === "string" ? door.state : door.metadata?.state;
+  return state === DOOR_STATE.OPEN;
+}
+
+function doorHasEffect(door, effectId) {
+  if (!door || !effectId) return false;
+  if (typeof door.hasEffect === "function") {
+    try {
+      return door.hasEffect(effectId);
+    } catch {
+      return false;
+    }
+  }
+  const effects = door.effects;
+  if (effects instanceof Map) {
+    return effects.has(effectId);
+  }
+  if (Array.isArray(effects)) {
+    return effects.some((eff) => eff && eff.id === effectId);
+  }
+  if (effects && typeof effects === "object") {
+    return Boolean(effects[effectId]);
+  }
+  return false;
+}
+
+function canDoorBeOpenedNow(door) {
+  if (!door) return false;
+  if (isDoorOpen(door)) return false;
+  const state = typeof door.state === "string" ? door.state : door.metadata?.state;
+  if (state === DOOR_STATE.BLOCKED) return false;
+  if (doorHasEffect(door, FURNITURE_EFFECT_IDS.LOCKED)) return false;
+  if (doorHasEffect(door, FURNITURE_EFFECT_IDS.JAMMED)) return false;
+  return true;
+}
+
+function openDoorThroughBump(door) {
+  if (!door) return false;
+  if (isDoorOpen(door)) return false;
+  if (typeof door.open === "function") {
+    door.open();
+    return true;
+  }
+  door.state = DOOR_STATE.OPEN;
+  if (door.metadata && typeof door.metadata === "object") {
+    door.metadata.state = DOOR_STATE.OPEN;
+  }
+  return true;
+}
+
+function getOccupant(world, x, y, self = null) {
+  if (!world) return null;
   const mgr = world.mobManager;
   if (mgr?.getMobAt) {
-    const occupant = mgr.getMobAt(x, y);
-    if (occupant && occupant !== self) return true;
+    const mob = mgr.getMobAt(x, y);
+    if (mob && mob !== self) return mob;
   }
   for (const mob of resolveMobList(mgr)) {
     if (!mob || mob === self) continue;
-    if (mob.x === x && mob.y === y) return true;
+    if (mob.x === x && mob.y === y) return mob;
   }
-  return false;
+  if (world.player && world.player !== self) {
+    const player = world.player;
+    if (player.x === x && player.y === y) return player;
+  }
+  return null;
 }
 
 function resolveMobList(mobManager) {
