@@ -1,84 +1,46 @@
-# Roguelike_Thing
+# README.md
 
-Roguelike_Thing is a deterministic combat sandbox that separates simulation code, authored content, and presentation logic. Attack resolution is expressed as a pipeline of conversions, brands, polarity modifiers, and layered defenses so the entire damage breakdown is explicit and debuggable.
+## Project Overview
+This is a roguelike prototype with **faction-aware thematic spawning**, a **unified combat pipeline**, and a clean separation between an Actor’s “brain” (combat stats, factions, statuses) and a Monster’s “body” (position, turn scheduling). The design also lays out a **balanced item/brand system** with a power-budget, deterministic **attack resolution order**, and a developer-facing **combat debug panel**.
 
----
+### Core Concepts
+- **Tags vs Factions vs Affiliations.** Tags classify content (“undead”, “tier1”), while **factions** drive hostility logic (“player”, “npc_hostile”, “unaligned”). **Affiliations** are optional social groupings (e.g., `orc:bloodaxe_clan`) used for future diplomacy/quest systems; the allegiance check first compares factions, then (optionally) affiliations.
+- **Actor vs Monster.** `Actor` holds combat state, factions, statuses, derived modifiers, and light radius logic. `Monster` wraps an `Actor` and handles position/turn timing; on its turn it delegates to the AI planner.
+- **FactionService.** Single source-of-truth for alliance/hostility, including the special “unaligned” rule (never allies anyone).
+- **Vision & Light.** Vision bonuses fold into the mod cache; game code calls `actor.getLightRadius()` instead of a global helper.
+- **Thematic Spawning.** Chapter themes supply `monsterTags`; the spawner filters templates by tags, picks by weighted probability, and places mobs on open tiles at safe distances from the player.
+- **AI Planner.** Planner builds a candidate set (player + mobs), filters by hostility via `FactionService`, chooses a target, then either attacks or moves toward the target. Future behavior (wander/guard) is a planned extension.
+- **Combat Pipeline.** Deterministic `resolveAttack()` order: conversions → brands → pre-packets → attacker affinities → polarity offense → status-derived out/in multipliers → immunities/resists/polarity defense → armor/DR → sum & apply → statuses → resource/temporal triggers → attunements. Backed by a power-budgeted item system and planned debug inspection UI.
 
-## ✅ Current capabilities
+## Current Implementation Status
+- **Data model upgraded.** `Actor` now includes `factions`, `affiliations`, base stats, and vision; invalid mixed use of "unaligned" is sanitized.
+- **Faction service added.** `isAllied()` and `isHostile()` centralize allegiance logic.
+- **Mod folding updated.** Innate vision/resists fold into `actor.modCache`; equipment folding remains the first stage.
+- **Vision plumbed.** All visibility logic uses `actor.getLightRadius()`; remove any legacy `getLightRadius()` helpers.
+- **Spawner utilities.** `buildSpawnWeights()`, `pickWeighted()`, `randomOpenTile()`, and `spawnMonsters()` integrated at initialization via chapter theme tags.
+- **Monster wrapper + factory path.** `Monster` lives in `src/game/monster.js`; `createActorFromTemplate()` + `createMobFromTemplate()` in factories run the full folding pipeline before world spawn.
+- **AI integration point.** `Monster.takeTurn(ctx)` delegates to `AIPlanner.takeTurn(selfActor, ctx)`; planner filters hostiles and decides attack/move.
+- **Tests & examples present.** Unit tests cover temporal echo + on-kill haste, async event logging, and faction service.
 
-- **Deterministic combat resolver.** Attacks flow through conversion, brand, attunement, polarity, and defense stages before statuses apply, keeping the full context available for inspection tools such as the debug overlay.
-- **Attunement and temporal systems.** Actors gain and decay elemental stacks that scale outgoing packets, interact with polarity, and influence per-turn resource regeneration and cooldown math; regression tests cover stacking, decay, and channeling behaviour.
-- **Modular actor construction.** Factories register content definitions, fold equipment modifiers, and hydrate actors with innate packages so simulation runs match content authored for the browser build.
-- **Status registry.** Canonical status definitions live under `src/combat/status-registry.js`, keeping damage-over-time and derived modifier logic centralized for both Node-based tests and the browser build.
-- **Simulation harness.** `src/sim/sim.js` exposes a seeded matchup runner with simple planners and balance metrics that back automated tests.
-- **Rendering and UI helpers.** The browser demo wires a canvas renderer, minimap, inventory slots, and lighting/field-of-view overlays around the shared simulation code.
+## File Map (selected)
+- `src/combat/actor.js` — Actor core, factions/affiliations, vision, statuses.
+- `src/game/faction-service.js` — Allegiance/hostility rules.
+- `src/combat/mod-folding.js` — Equipment + innate folding; vision/resists buckets.
+- `src/game/monster.js` — Monster wrapper, `takeTurn()`.
+- `src/factories/index.js` — Template → Actor/Monster build, folding order.
+- `src/game/spawn.js` — Thematic spawn utilities + integration.
+- `src/combat/ai-planner.js` — Targeting via `FactionService`; attack/move actions.
+- `src/content/mobs.js` — Mob templates with tags/weights (used by spawner).
+- `tests/*` — Temporal echo & haste, event-log async, faction service tests.
 
----
+## Items, Brands, Status & Power Budget (Design)
+The item/brand/status layer defines atomic modifiers with **per-mod power costs**, plus global caps to prevent runaway stacking. It introduces `AttackContext` and a strict, testable resolution order for combat. Planned dev tools: per-actor event ring buffers and a debug panel exposing stepwise packet transforms and status rolls.
 
-## 📂 Repository layout
+## Dungeon Themes & Content (Design)
+`DungeonTheme` drives spawns via `monsterTags`, template weights, item tag/affix weights, and a power-budget curve; it can also define level-based culmination events. This mirrors the thematic spawning flow already implemented in the spawner.
 
-- `src/combat/` – core simulation: actors, attack context, turn loop, statuses, resources, and randomness controls.
-- `src/content/` – authored game data (items, affixes, loot tables, mobs, status metadata) consumed by factories.
-- `src/factories/` – helpers that register content, create items, and build actors with folded modifiers.
-- `src/sim/` – batch simulation utilities and balance configuration used by regression tests.
-- `src/ui/` – developer-facing overlays, sound hooks, and debugging helpers that plug into the renderer.
-- `src/world/` – dungeon generation, furniture systems, and field-of-view calculations shared with the browser client.
-- `js/render/` – renderer abstractions and controllers implemented for canvas and headless scenarios.
-- `tests/` – Node-based regression, balance, and sandbox scripts invoked via the test runner.
-
----
-
-## 🚀 Getting started
-
-1. **Install dependencies.** The project currently relies on Node's built-in tooling; `npm install` is only required if optional packages are added later.
-2. **Run the regression suite.**
-   ```bash
-   npm run test-basic
-   ```
-   The script executes `tests/run-basic-tests.js`, which imports targeted spec files and performs additional assertions for the combat, temporal, status, and save pipelines.
-3. **Audit key scenarios quickly.** Developers who prefer a zero-config invocation can run the underlying Node entry point directly:
-   ```bash
-   node tests/run-basic-tests.js
-   ```
-   Running the script without the npm wrapper makes it easy to integrate into ad hoc Node REPL sessions or custom harnesses while still executing the bundled spec files.
-4. **Explore the browser demo.** Serve the repository root (for example with `npx serve .`) and open `index.html` to watch the self-playing dungeon crawl that uses the same combat modules, renderer, and content definitions as the tests.
-
----
-
-## Start Menu (Generation Controls)
-
-On load, a modal appears with:
-* **Quick Start** — runs current defaults.
-* **Custom Run** — optionally set seed, depth, initial spawn count, sim speed, and select generator tweaks (door spawn chance, extra edges, small room params). Any blank field uses defaults.
-
-Settings persist in `localStorage` (`rl_menu_settings`). “Restart” repeats your last run mode (quick or custom), and the overlay hides automatically once a run begins.
-
----
-
-## 🔧 Development workflow tips
-
-- **Prefer deterministic seeds while iterating.** Use `setSeed` from `src/combat/rng.js` before running scripted scenarios so repeated runs highlight behavioural deltas.
-- **Trace combat packets in Node.** `tests/combat-sandbox.js` demonstrates how to call `resolveAttack` with logging enabled; copying that pattern into custom scripts is an effective way to debug mitigation math.
-- **Isolate tricky regressions.** When a single mechanic misbehaves, copy the relevant assertion from `tests/run-basic-tests.js` into a dedicated spec under `tests/` and run it with `node tests/<file>.js` for rapid feedback.
-
----
-
-## 🧪 Test suites
-
-- **Regression harness** (`npm run test-basic`) covers folding logic, attack resolution, attunement decay, channeling, cooldown math, save/load hydration, RNG determinism, and core status ticking.
-- **Focused specs** in `tests/*.test.js` can be executed individually with `node tests/<file>.js` for debugging specialised systems such as field-of-view, polarity math, and temporal echoes.
-- **Manual and performance harnesses** (`tests/combat-sandbox.js`, `tests/phase3.manual.js`, `tests/phase4.perf.manual.js`) provide ad hoc simulations and should be migrated into automated coverage over time.
-
----
-
-## 🛠 Development notes
-
-- Items, brands, and affixes are registered once via `ensureItemsRegistered`, ensuring Node tests and the browser inventory agree on definitions before equipment folding occurs.
-- The browser build reuses shared utilities (`src/config`, `src/world/fov`, `src/ui/sound`) through native ES module imports, so any simulation changes should be export-safe for both Node and browsers.
-- Lighting overlays and field-of-view calculations in `src/world/fov.js` expose composable helpers for future renderer integrations or shader-based implementations.
-
----
-
-## 📌 Roadmap snapshot
-
-See `TASKS.md` for prioritised follow-up work items discovered during the latest evaluation.
+## Known Gaps / Open Work
+- **Wandering/guarding** when no hostile target is present.
+- **Full combat UI + debug panel** (event buffers + AttackContext viewer).
+- **Role templates** (e.g., “Orc Shaman” overlays) for fast content scaling.
+- **Complete integration of brand/affinity/resist/polarity** into `resolveAttack()` across all action types (melee/ranged/spell).
