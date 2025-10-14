@@ -166,7 +166,7 @@ export class Monster {
     }
   }
 
-  takeTurn(ctx = {}) {
+  async takeTurn(ctx = {}) {
     const world = (ctx && typeof ctx === "object" && ctx.world)
       ? ctx.world
       : ctx || {};
@@ -188,7 +188,7 @@ export class Monster {
       this.__actor.lastPlannerDecision = decision;
     }
 
-    const delay = executeDecision({
+    const delay = await executeDecision({
       actor: this,
       combatant: this.__actor,
       world,

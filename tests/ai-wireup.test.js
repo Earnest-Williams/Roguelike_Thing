@@ -1,0 +1,111 @@
+import { strict as assert } from "node:assert";
+
+import { TILE_FLOOR } from "../js/constants.js";
+import { createMobFromTemplate } from "../src/factories/index.js";
+
+function makeGrid(width, height, value = TILE_FLOOR) {
+  const grid = [];
+  for (let y = 0; y < height; y += 1) {
+    const row = [];
+    for (let x = 0; x < width; x += 1) {
+      row.push(value);
+    }
+    grid.push(row);
+  }
+  return grid;
+}
+
+function makeWorld(monster, player = null, width = 9, height = 9) {
+  const grid = makeGrid(width, height);
+  const mobManager = {
+    list: () => [monster],
+    getMobAt(x, y) {
+      if (Number.isFinite(monster?.x) && Number.isFinite(monster?.y)) {
+        if (monster.x === x && monster.y === y) return monster;
+      }
+      if (player && Number.isFinite(player.x) && Number.isFinite(player.y)) {
+        if (player.x === x && player.y === y) return player;
+      }
+      return null;
+    },
+  };
+
+  return {
+    mapState: { width, height, grid },
+    maze: grid,
+    mobManager,
+    player,
+    entities: player ? [player] : [],
+  };
+}
+
+function manhattan(a, b) {
+  return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+}
+
+(async function testMonsterWandersWithinLeash() {
+  const monster = createMobFromTemplate("orc");
+  monster.pos = { x: 4, y: 4 };
+  monster.wanderRadius = 3;
+  monster.getLightRadius = () => 6;
+  if (monster.actor) {
+    monster.actor.getLightRadius = () => 6;
+  }
+
+  const world = makeWorld(monster);
+  const rng = () => 0.1;
+  const origin = { ...monster.pos };
+
+  let moved = false;
+  for (let i = 0; i < 6; i += 1) {
+    await monster.takeTurn({ world, rng, now: i });
+    if (monster.x !== origin.x || monster.y !== origin.y) {
+      moved = true;
+      break;
+    }
+  }
+
+  assert.equal(moved, true, "idle monster should eventually wander");
+  const leashDist = manhattan(monster, monster.spawnPos ?? origin);
+  assert.ok(leashDist <= (monster.wanderRadius ?? 6), "wander should respect leash radius");
+  console.log("✓ monster wanders within leash when idle");
+})().catch((err) => {
+  console.error(err);
+  process.exitCode = 1;
+});
+
+(async function testMonsterApproachesVisibleHostile() {
+  const monster = createMobFromTemplate("orc");
+  monster.pos = { x: 2, y: 2 };
+  monster.wanderRadius = 4;
+  monster.getLightRadius = () => 8;
+  if (monster.actor) {
+    monster.actor.getLightRadius = () => 8;
+  }
+
+  const player = {
+    id: "player-test",
+    name: "Player",
+    factions: ["player"],
+    affiliations: [],
+    x: 6,
+    y: 2,
+    res: { hp: 20 },
+    base: { maxHP: 20 },
+    getLightRadius: () => 8,
+  };
+
+  const world = makeWorld(monster, player, 10, 5);
+  const rng = () => 0.25;
+  const startDistance = manhattan(monster, player);
+
+  await monster.takeTurn({ world, rng, now: 0 });
+
+  const afterDistance = manhattan(monster, player);
+  assert.ok(afterDistance < startDistance, "monster should close distance to visible hostile");
+  assert.ok(monster.lastPlannerDecision, "planner decision should be recorded for debug overlay");
+  console.log("✓ monster approaches visible hostile");
+})().catch((err) => {
+  console.error(err);
+  process.exitCode = 1;
+});

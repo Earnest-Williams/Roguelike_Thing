@@ -10,6 +10,9 @@ import {
   MIN_TOTAL_COOLDOWN_MULTIPLIER,
   SLOT,
 } from "../../js/constants.js";
+import { planTurn } from "./ai-planner.js";
+import { updatePerception } from "./perception.js";
+import { executeDecision } from "./actions.js";
 import { normalizePolaritySigned } from "./polarity.js";
 import { rebuildModCache } from "./mod-folding.js";
 import { rebuildDerived } from "./status.js";
@@ -137,7 +140,8 @@ import { rebuildDerived } from "./status.js";
  * @property {string[]} [factions]
  * @property {string[]} [affiliations]
  * @property {Partial<Record<keyof typeof SLOT, Item|ItemStack>>} [equipment]
- * @property {string[]} [actions]
+  * @property {string[]} [actions]
+ * @property {number} [baseDelay]
  */
 
 /**
@@ -199,6 +203,11 @@ export class Actor {
 
     /** @type {import("./status.js").StatusDerived} */
     this.statusDerived = rebuildDerived(this);
+
+    this.baseDelay = Number.isFinite(init.baseDelay) && init.baseDelay > 0
+      ? Number(init.baseDelay)
+      : 1;
+    this.nextActAt = 0;
 
     /**
      * Baseline signed polarity vector (-1..+1 per axis).
@@ -522,6 +531,45 @@ export class Actor {
   }
 
   /**
+   * Execute an AI turn for this actor using the shared planner and executor.
+   * @param {{ world?: any, rng?: (() => number) | { next?: () => number, random?: () => number }, now?: number }} [ctx]
+   */
+  async takeTurn(ctx = {}) {
+    const world = (ctx && typeof ctx === "object" && "world" in ctx)
+      ? ctx.world
+      : ctx || {};
+    const rng = resolveRng(ctx?.rng ?? world?.rng);
+
+    this.perception = updatePerception(this, world);
+
+    const decision = planTurn({
+      actor: this,
+      combatant: this,
+      world,
+      perception: this.perception,
+      rng,
+      now: ctx?.now,
+    });
+
+    this.lastPlannerDecision = decision;
+
+    const delay = await executeDecision({
+      actor: this,
+      combatant: this,
+      world,
+      decision,
+      rng,
+      now: ctx?.now,
+    });
+
+    this.perception = updatePerception(this, world);
+
+    const base = Number.isFinite(this.baseDelay) && this.baseDelay > 0 ? this.baseDelay : 1;
+    const resolved = Number.isFinite(delay) ? delay : base;
+    return resolved > 0 ? resolved : base;
+  }
+
+  /**
    * Equipment accessors
    */
   equip(slot, itemOrStack) {
@@ -674,6 +722,17 @@ export function noteMoved(actor) {
     actor._didActionThisTurn = true;
   }
   ensureFreeActionState(actor);
+}
+
+function resolveRng(source) {
+  if (typeof source === "function") return source;
+  if (typeof source?.next === "function") {
+    return () => source.next();
+  }
+  if (typeof source?.random === "function") {
+    return () => source.random();
+  }
+  return Math.random;
 }
 
 export function noteAttacked(actor) {
