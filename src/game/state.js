@@ -66,6 +66,7 @@ export function createInitialState() {
       frontiers: new Set(),
       newlyExplored: [],
     },
+    runeStore: null,
     status: {
       defaultModCache: createDefaultModCache(),
       emptyDerivedMods: createEmptyStatusDerivedMods(),

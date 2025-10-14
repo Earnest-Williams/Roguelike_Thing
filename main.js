@@ -329,6 +329,45 @@ const Game = (() => {
   const gameState = createInitialState();
   gameState.config = gameState.config || {};
 
+  const runeSystem = {
+    promise: null,
+    engine: null,
+    hooks: null,
+    store: gameState.runeStore || null,
+  };
+  let sharedGameCtx = null;
+  let loggedRuneLoadError = false;
+
+  function ensureRuneSystemLoaded() {
+    if (runeSystem.promise) {
+      return runeSystem.promise;
+    }
+    runeSystem.promise = Promise.all([
+      import("./src/runes/engine.ts").catch((err) => {
+        if (!loggedRuneLoadError && typeof console !== "undefined" && console.warn) {
+          console.warn("[runes] Failed to load rune engine", err);
+          loggedRuneLoadError = true;
+        }
+        return null;
+      }),
+      import("./src/runes/trigger-hooks.ts").catch((err) => {
+        if (!loggedRuneLoadError && typeof console !== "undefined" && console.warn) {
+          console.warn("[runes] Failed to load rune hooks", err);
+          loggedRuneLoadError = true;
+        }
+        return null;
+      }),
+    ]).then(([engineMod, hooksMod]) => {
+      runeSystem.engine = engineMod || null;
+      runeSystem.hooks = hooksMod || null;
+      if (!engineMod || !hooksMod) {
+        return null;
+      }
+      return runeSystem;
+    });
+    return runeSystem.promise;
+  }
+
   if (typeof window !== "undefined") {
     window.addEventListener("keydown", (event) => {
       if (event.code === "F9") {
@@ -628,6 +667,166 @@ const Game = (() => {
   let hasPrevPlayerPos = gameState.hasPrevPlayerPos;
   let currentEndPos = gameState.currentEndPos;
   let initRetries = gameState.initRetries;
+
+  function asActorLike(entity) {
+    if (!entity) return entity;
+    if (entity.__actor) return entity.__actor;
+    if (entity.actor) return entity.actor;
+    return entity;
+  }
+
+  function gatherActors(ctx) {
+    const actors = [];
+    const seen = new Set();
+    const add = (candidate) => {
+      if (!candidate) return;
+      const actor = asActorLike(candidate);
+      if (!actor || typeof actor !== "object") return;
+      const key = typeof actor.id === "string" ? actor.id : actor;
+      if (seen.has(key)) return;
+      seen.add(key);
+      actors.push(actor);
+    };
+    if (ctx?.player) add(ctx.player);
+    const list = ctx?.mobManager?.list;
+    if (Array.isArray(list)) {
+      for (const entry of list) add(entry);
+    }
+    return actors;
+  }
+
+  function getActorByIdFromCtx(ctx, id) {
+    if (!id) return null;
+    const actors = gatherActors(ctx);
+    for (const actor of actors) {
+      if (actor?.id === id) return actor;
+    }
+    return null;
+  }
+
+  function computeRuneVictims(ctx, { rune, actor }) {
+    const victims = [];
+    if (!rune) return victims;
+    const sourceActor = asActorLike(actor);
+    const center = rune.pos || null;
+    const radius = Number.isFinite(rune?.def?.radius) ? rune.def.radius : 0;
+    const seen = new Set();
+    const push = (target) => {
+      if (!target) return;
+      const key = typeof target.id === "string" ? target.id : target;
+      if (seen.has(key)) return;
+      seen.add(key);
+      victims.push(target);
+    };
+    if (center && radius > 0) {
+      for (const target of gatherActors(ctx)) {
+        if (!target) continue;
+        const tx = Number(target.x ?? target.pos?.x);
+        const ty = Number(target.y ?? target.pos?.y);
+        if (!Number.isFinite(tx) || !Number.isFinite(ty)) continue;
+        const dist = Math.abs(tx - center.x) + Math.abs(ty - center.y);
+        if (dist > radius) continue;
+        if (!sourceActor || target === sourceActor || FactionService.isHostile(sourceActor, target)) {
+          push(target);
+        }
+      }
+    }
+    if (!victims.length && sourceActor) {
+      push(sourceActor);
+    }
+    return victims;
+  }
+
+  function findNearestHostileForRunes(ctx, pos, range) {
+    if (!pos || !Number.isFinite(range)) return null;
+    const baseActor = asActorLike(ctx?.player);
+    let nearest = null;
+    let bestDist = Infinity;
+    for (const candidate of gatherActors(ctx)) {
+      if (!candidate || candidate === baseActor) continue;
+      if (baseActor && !FactionService.isHostile(baseActor, candidate)) continue;
+      const cx = Number(candidate.x ?? candidate.pos?.x);
+      const cy = Number(candidate.y ?? candidate.pos?.y);
+      if (!Number.isFinite(cx) || !Number.isFinite(cy)) continue;
+      const dist = Math.abs(cx - pos.x) + Math.abs(cy - pos.y);
+      if (dist <= range && dist < bestDist) {
+        nearest = candidate;
+        bestDist = dist;
+      }
+    }
+    return nearest;
+  }
+
+  function canOccupyTile(pos, ctx = sharedGameCtx || null) {
+    if (!pos) return false;
+    const x = Number(pos.x);
+    const y = Number(pos.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
+    const row = mapState?.grid?.[y];
+    if (!row) return false;
+    const tile = row[x];
+    if (tile == null) return false;
+    if (tile === TILE_WALL) return false;
+    const door = resolveDoorAtPosition(x, y);
+    if (door && !isDoorCurrentlyOpen(door)) return false;
+    let occupant = null;
+    if (ctx?.mobManager && typeof ctx.mobManager.getMobAt === "function") {
+      occupant = ctx.mobManager.getMobAt(x, y);
+    }
+    if (!occupant) {
+      occupant = getMobAtPosition(x, y);
+    }
+    if (occupant) return false;
+    return true;
+  }
+
+  function attachRuneHooks(ctx) {
+    if (!ctx) return;
+    if (runeSystem.store && runeSystem.hooks) {
+      ctx.runeStore = runeSystem.store;
+      ctx.removeRune = (rune) => {
+        if (runeSystem.store) {
+          runeSystem.store.remove(rune);
+        }
+      };
+      ctx.canOccupy = (pos) => canOccupyTile(pos, ctx);
+      ctx.getActorById = (id) => getActorByIdFromCtx(ctx, id);
+      ctx.getVictimsForRune = (args) => computeRuneVictims(ctx, args);
+      ctx.findNearestHostile = (pos, range) => findNearestHostileForRunes(ctx, pos, range);
+      ctx.FactionService = FactionService;
+      ctx.onStepIntoTile = (entity, x, y, layer = 0) => {
+        if (!runeSystem.hooks?.onStepIntoTile) return;
+        runeSystem.hooks.onStepIntoTile(ctx, asActorLike(entity), x, y, layer);
+      };
+      ctx.onAttemptOpenDoor = (entity, door) => {
+        if (!runeSystem.hooks?.onAttemptOpenDoor) return true;
+        return runeSystem.hooks.onAttemptOpenDoor(ctx, asActorLike(entity), door);
+      };
+      ctx.tickRunes = () => {
+        if (!runeSystem.hooks?.tickRunes) return;
+        runeSystem.hooks.tickRunes(ctx);
+      };
+    } else {
+      delete ctx.runeStore;
+      delete ctx.removeRune;
+      delete ctx.canOccupy;
+      delete ctx.getActorById;
+      delete ctx.getVictimsForRune;
+      delete ctx.findNearestHostile;
+      delete ctx.onStepIntoTile;
+      delete ctx.onAttemptOpenDoor;
+      delete ctx.tickRunes;
+    }
+    ctx.attachRuneHooks = attachRuneHooks;
+  }
+
+  function updateRuneStore(store) {
+    runeSystem.store = store || null;
+    gameState.runeStore = runeSystem.store;
+    if (sharedGameCtx) {
+      attachRuneHooks(sharedGameCtx);
+    }
+  }
 
   const rawLightConfig = CONFIG.visual.light || {};
   const LIGHT_CONFIG = {
@@ -1398,6 +1597,10 @@ const Game = (() => {
 
         const from = { x: m.x, y: m.y };
         const worldCtx = { ...gameCtx, mobManager: occupancyView };
+        worldCtx.turn = turn;
+        if (typeof gameCtx.attachRuneHooks === "function") {
+          gameCtx.attachRuneHooks(worldCtx);
+        }
         let delayResult;
         try {
           delayResult = await m.takeTurn({ world: worldCtx, rng: rngFn, now: turn });
@@ -4444,7 +4647,10 @@ const Game = (() => {
       mapState,
       state,
       AIPlanner,
+      turn: simState.turnCounter,
     };
+    sharedGameCtx = gameCtx;
+    attachRuneHooks(gameCtx);
 
     function processPlayerTurn() {
       const currentPlayerX = player.x;
@@ -4644,6 +4850,12 @@ const Game = (() => {
 
         const door = resolveDoorAtPosition(targetX, targetY);
         if (door && !isDoorCurrentlyOpen(door)) {
+          if (typeof gameCtx.onAttemptOpenDoor === "function") {
+            const allow = gameCtx.onAttemptOpenDoor(player, door);
+            if (!allow) {
+              return { acted: false };
+            }
+          }
           if (canDoorBeOpened(door)) {
             if (openDoorEntity(door)) {
               Sound.playDoor();
@@ -4699,6 +4911,13 @@ const Game = (() => {
       }
       const nextX = player.x;
       const nextY = player.y;
+      if (typeof gameCtx.onStepIntoTile === "function") {
+        try {
+          gameCtx.onStepIntoTile(player, nextX, nextY, 0);
+        } catch (err) {
+          console.error("[runes] step handler failed", err);
+        }
+      }
       nextPos = { x: nextX, y: nextY };
       const stepKey = posKeyFromCoords(nextX, nextY);
       if (!aiState.visitedForPathfinding.has(stepKey)) {
@@ -4749,6 +4968,10 @@ const Game = (() => {
         }
 
         const turn = ++simState.turnCounter;
+        gameCtx.turn = turn;
+        if (typeof gameCtx.attachRuneHooks === "function") {
+          gameCtx.attachRuneHooks(gameCtx);
+        }
         const playerHpBefore =
           player?.res && typeof player.res.hp === "number"
             ? player.res.hp
@@ -4770,6 +4993,13 @@ const Game = (() => {
             await mobManager.tick(gameCtx, turn);
           } catch (err) {
             console.error("mobManager.tick failed", err);
+          }
+        }
+        if (typeof gameCtx.tickRunes === "function") {
+          try {
+            gameCtx.tickRunes();
+          } catch (err) {
+            console.error("[runes] tick failed", err);
           }
         }
         if (handleDeath(gameCtx, player)) {
@@ -4854,6 +5084,7 @@ const Game = (() => {
     simState.turnCounter = 0;
     mapState.furniture = [];
     rebuildFurnitureIndex();
+    updateRuneStore(null);
   }
 
   function setupPlayer() {
@@ -5036,6 +5267,13 @@ const Game = (() => {
     const endPos = dungeonData.end;
     currentEndPos = endPos;
     gameState.currentEndPos = currentEndPos;
+
+    await ensureRuneSystemLoaded();
+    if (runeSystem.engine?.RuneStore) {
+      updateRuneStore(new runeSystem.engine.RuneStore());
+    } else {
+      updateRuneStore(null);
+    }
 
     const chapter = gameState.chapter;
     let furniturePlacements = Array.isArray(dungeonData.furniture)
