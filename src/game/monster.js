@@ -167,8 +167,10 @@ export class Monster {
   }
 
   takeTurn(ctx = {}) {
-    const world = ctx || {};
-    const rng = resolveRng(world.rng);
+    const world = (ctx && typeof ctx === "object" && ctx.world)
+      ? ctx.world
+      : ctx || {};
+    const rng = resolveRng(ctx?.rng ?? world?.rng);
 
     this.perception = updatePerception(this, world);
 
@@ -178,6 +180,7 @@ export class Monster {
       world,
       perception: this.perception,
       rng,
+      now: ctx?.now,
     });
 
     this.lastPlannerDecision = decision;
@@ -191,6 +194,7 @@ export class Monster {
       world,
       decision,
       rng,
+      now: ctx?.now,
     });
 
     this.perception = updatePerception(this, world);
