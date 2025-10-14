@@ -109,3 +109,30 @@ function manhattan(a, b) {
   console.error(err);
   process.exitCode = 1;
 });
+
+(async function testMonsterGuardsHomePosition() {
+  const monster = createMobFromTemplate("orc");
+  monster.homePos = { x: 4, y: 4 };
+  monster.spawnPos = { ...monster.homePos };
+  monster.pos = { x: 6, y: 4 };
+  monster.guardRadius = 1;
+  monster.wanderRadius = 4;
+  monster.getLightRadius = () => 6;
+  if (monster.actor) {
+    monster.actor.getLightRadius = () => 6;
+  }
+
+  const world = makeWorld(monster);
+  const rng = () => 0.3;
+
+  const startDistance = manhattan(monster, monster.homePos);
+  await monster.takeTurn({ world, rng, now: 0 });
+  const afterDistance = manhattan(monster, monster.homePos);
+
+  assert.ok(afterDistance < startDistance, "guard should pull monster toward home");
+  assert.ok(afterDistance <= (monster.guardRadius ?? 1), "guard should respect radius");
+  console.log("✓ guard decision pulls monster toward home");
+})().catch((err) => {
+  console.error(err);
+  process.exitCode = 1;
+});
