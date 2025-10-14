@@ -34,6 +34,30 @@ import { Sound } from "../ui/sound.js";
  */
 
 /**
+ * @typedef {Object} EquippedAttackPlan
+ * @property {any} item The weapon or item used to perform the attack.
+ * @property {any} mode The resolved attack mode supplied by the equipment.
+ * @property {string} key Unique cooldown/action identifier for the plan.
+ * @property {{ id: string, baseAP: number, baseCooldown: number, resourceCost?: any, tags: string[] }} action
+ *   The synthetic action used to evaluate costs for the attack.
+ * @property {Record<string, number>} baseCosts Resource costs that must be paid prior to the attack.
+ * @property {number} costAP Total action points required to execute the attack after modifiers.
+ */
+
+/**
+ * @typedef {Object} DecisionExecutionParams
+ * @property {any} actor Entity requesting the action.
+ * @property {Actor} [combatant] Optional combatant wrapper for the actor.
+ * @property {any} [world] The world or map state where the action is being executed.
+ * @property {any} [decision] Planner decision describing the action to perform.
+ * @property {(() => number) | { next?: () => number, random?: () => number }} [rng] Optional RNG source.
+ */
+
+/**
+ * @typedef {{ x: number, y: number }} Point
+ */
+
+/**
  * Attempt to move an actor by the provided delta, spending the appropriate AP
  * for the "move" action archetype. Returns `true` on success.
  *
@@ -42,13 +66,18 @@ import { Sound } from "../ui/sound.js";
  * @returns {boolean}
  */
 export function tryMove(actor, dir) {
+  if (!actor || typeof dir !== "object") return false;
+  const dx = Number.isFinite(dir?.dx) ? dir.dx : 0;
+  const dy = Number.isFinite(dir?.dy) ? dir.dy : 0;
+  if (!dx && !dy) return false;
+
   const base = Math.max(MIN_AP_COST, BASE_MOVE_AP_COST);
   const moveAction = { id: "move", baseAP: base, tags: ["move"] };
   const { costAP } = finalAPForAction(actor, moveAction.baseAP, moveAction.tags);
   if (!spendAP(actor, costAP)) return false;
 
-  actor.x = (actor.x || 0) + dir.dx;
-  actor.y = (actor.y || 0) + dir.dy;
+  actor.x = (actor.x || 0) + dx;
+  actor.y = (actor.y || 0) + dy;
   eventGain(actor, { kind: "move" });
   actor._turnDidMove = true;
   noteMoved(actor);
@@ -163,7 +192,9 @@ export function planEquippedAttack(
       COOLDOWN_MIN_TURNS,
       mode.profile?.reloadTime ?? DEFAULT_RELOAD_TIME_TURNS,
     ),
-    resourceCost: mode.profile?.resourceCost,
+    resourceCost: mode.profile?.resourceCost
+      ? { ...mode.profile.resourceCost }
+      : undefined,
     tags: Array.isArray(mode.profile?.tags)
       ? mode.profile.tags.slice()
       : [mode.kind || "attack"],
@@ -213,12 +244,12 @@ export function tryAttackEquipped(
   return true;
 }
 
-const CARDINAL_DIRS = [
+const CARDINAL_DIRS = Object.freeze([
   { dx: 1, dy: 0 },
   { dx: -1, dy: 0 },
   { dx: 0, dy: 1 },
   { dx: 0, dy: -1 },
-];
+]);
 
 const DEFAULT_WANDER_RADIUS = 6;
 
@@ -226,7 +257,7 @@ const DEFAULT_WANDER_RADIUS = 6;
  * Execute a planner decision and return the delay before the actor may act again.
  * Falls back to the actor's base delay when the decision does not supply one.
  *
- * @param {{ actor: any, combatant?: Actor, world?: any, decision?: any, rng?: (() => number) | null }} params
+ * @param {DecisionExecutionParams} params
  */
 export function executeDecision({ actor, combatant, world, decision, rng }) {
   const baseDelay = resolveDelayBase(actor, combatant);
@@ -306,6 +337,14 @@ export function executeDecision({ actor, combatant, world, decision, rng }) {
   }
 }
 
+/**
+ * Resolve the base delay value for the actor taking into account combatant
+ * metadata and speed modifiers.
+ *
+ * @param {any} actor
+ * @param {Actor} [combatant]
+ * @returns {number}
+ */
 function resolveDelayBase(actor, combatant) {
   const entity = actor ?? combatant;
   const base = Number.isFinite(entity?.baseDelay)
@@ -322,12 +361,24 @@ function resolveDelayBase(actor, combatant) {
   return delay > 0 ? delay : base;
 }
 
+/**
+ * Resolve the combatant data object for an actor, falling back to the actor
+ * itself when no explicit combatant wrapper is present.
+ *
+ * @param {any} actor
+ * @param {Actor} [combatant]
+ */
 function resolveCombatant(actor, combatant) {
   if (combatant) return combatant;
   if (actor?.__actor) return actor.__actor;
   return actor;
 }
 
+/**
+ * Extract a target actor from a planner decision payload.
+ *
+ * @param {any} candidate
+ */
 function resolveTarget(candidate) {
   if (!candidate) return null;
   if (candidate.__actor) return resolveTarget(candidate.__actor);
@@ -335,6 +386,14 @@ function resolveTarget(candidate) {
   return candidate;
 }
 
+/**
+ * Attempt to read a coordinate from the supplied entity. Supports raw
+ * `{x, y}` properties, lazily computed `pos()` functions, and nested `pos`
+ * objects.
+ *
+ * @param {any} entity
+ * @returns {Point | null}
+ */
 function resolvePosition(entity) {
   if (!entity) return null;
   if (typeof entity.x === "number" && typeof entity.y === "number") {
@@ -347,16 +406,37 @@ function resolvePosition(entity) {
   return null;
 }
 
+/**
+ * Compute Chebyshev distance (king moves) between two points.
+ *
+ * @param {Point | null} a
+ * @param {Point | null} b
+ */
 function chebyshevDistance(a, b) {
   if (!a || !b) return Infinity;
   return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
 }
 
+/**
+ * Compute Manhattan distance (taxicab metric) between two points.
+ *
+ * @param {Point | null} a
+ * @param {Point | null} b
+ */
 function manhattanDistance(a, b) {
   if (!a || !b) return Infinity;
   return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
 }
 
+/**
+ * Identify the next cardinal tile when moving from `from` toward `to`.
+ * Filters out impassable positions before choosing the closest candidate.
+ *
+ * @param {Point | null} from
+ * @param {Point | null} to
+ * @param {any} world
+ * @param {any} self
+ */
 function stepToward(from, to, world, self) {
   if (!from || !to) return null;
   const candidates = [];
@@ -370,6 +450,15 @@ function stepToward(from, to, world, self) {
   return candidates[0] ?? null;
 }
 
+/**
+ * Select a random step within the leash radius while remaining on passable
+ * terrain.
+ *
+ * @param {any} actor
+ * @param {number} leash
+ * @param {any} world
+ * @param {() => number} rng
+ */
 function randomLeashedStep(actor, leash, world, rng) {
   const origin = actor?.spawnPos ?? actor?.homePos ?? resolvePosition(actor);
   if (!origin) return null;
@@ -390,12 +479,26 @@ function randomLeashedStep(actor, leash, world, rng) {
   return options[pick] ?? null;
 }
 
+/**
+ * Determine the leash distance for the actor when wandering.
+ *
+ * @param {number | null | undefined} raw
+ * @param {any} actor
+ */
 function resolveLeash(raw, actor) {
   if (Number.isFinite(raw) && raw >= 0) return raw;
   if (Number.isFinite(actor?.wanderRadius)) return actor.wanderRadius;
   return DEFAULT_WANDER_RADIUS;
 }
 
+/**
+ * Move the entity into the provided step, interacting with doors and hostile
+ * occupants as necessary.
+ *
+ * @param {any} entity
+ * @param {Point | null} step
+ * @param {any} world
+ */
 function applyStep(entity, step, world) {
   if (!step) return false;
   const { x, y } = step;
@@ -438,6 +541,17 @@ function applyStep(entity, step, world) {
   return true;
 }
 
+/**
+ * Determine whether a tile can be traversed by the provided entity. Checks the
+ * grid for walls, validates door state, and ensures no other actors occupy the
+ * target tile.
+ *
+ * @param {any} world
+ * @param {number} x
+ * @param {number} y
+ * @param {any} self
+ * @returns {boolean}
+ */
 function isPassable(world, x, y, self) {
   if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
   const grid = resolveGrid(world);
@@ -453,6 +567,12 @@ function isPassable(world, x, y, self) {
   return !isOccupied(world, x, y, self);
 }
 
+/**
+ * Extract a 2D grid reference from the world when available.
+ *
+ * @param {any} world
+ * @returns {any[] | null}
+ */
 function resolveGrid(world) {
   if (!world) return null;
   if (Array.isArray(world?.mapState?.grid)) return world.mapState.grid;
@@ -461,10 +581,26 @@ function resolveGrid(world) {
   return null;
 }
 
+/**
+ * Boolean helper for tile occupancy checks.
+ *
+ * @param {any} world
+ * @param {number} x
+ * @param {number} y
+ * @param {any} self
+ */
 function isOccupied(world, x, y, self) {
   return Boolean(getOccupant(world, x, y, self));
 }
 
+/**
+ * Resolve furniture placements at the supplied coordinate if available.
+ *
+ * @param {any} world
+ * @param {number} x
+ * @param {number} y
+ * @returns {any}
+ */
 function getFurniturePlacement(world, x, y) {
   if (!world) return null;
   const mapState = world.mapState;
@@ -485,6 +621,15 @@ function getFurniturePlacement(world, x, y) {
   return null;
 }
 
+/**
+ * Retrieve a door instance at a given tile, accounting for placement metadata
+ * and lightweight door descriptors.
+ *
+ * @param {any} world
+ * @param {number} x
+ * @param {number} y
+ * @returns {any}
+ */
 function resolveDoorAt(world, x, y) {
   const placement = getFurniturePlacement(world, x, y);
   if (!placement) return null;
@@ -498,6 +643,12 @@ function resolveDoorAt(world, x, y) {
   return null;
 }
 
+/**
+ * Check whether a door is currently open.
+ *
+ * @param {any} door
+ * @returns {boolean}
+ */
 function isDoorOpen(door) {
   if (!door) return false;
   if (typeof door.isOpen === "function") {
@@ -511,6 +662,13 @@ function isDoorOpen(door) {
   return state === DOOR_STATE.OPEN;
 }
 
+/**
+ * Determine if the given door has an effect (locked, jammed, etc.).
+ *
+ * @param {any} door
+ * @param {string} effectId
+ * @returns {boolean}
+ */
 function doorHasEffect(door, effectId) {
   if (!door || !effectId) return false;
   if (typeof door.hasEffect === "function") {
@@ -533,6 +691,12 @@ function doorHasEffect(door, effectId) {
   return false;
 }
 
+/**
+ * Validate whether a door can be opened via bump interaction.
+ *
+ * @param {any} door
+ * @returns {boolean}
+ */
 function canDoorBeOpenedNow(door) {
   if (!door) return false;
   if (isDoorOpen(door)) return false;
@@ -543,6 +707,12 @@ function canDoorBeOpenedNow(door) {
   return true;
 }
 
+/**
+ * Attempt to open a door in response to a movement bump.
+ *
+ * @param {any} door
+ * @returns {boolean}
+ */
 function openDoorThroughBump(door) {
   if (!door) return false;
   if (isDoorOpen(door)) return false;
@@ -557,6 +727,14 @@ function openDoorThroughBump(door) {
   return true;
 }
 
+/**
+ * Check for an entity already occupying the specified tile.
+ *
+ * @param {any} world
+ * @param {number} x
+ * @param {number} y
+ * @param {any} [self]
+ */
 function getOccupant(world, x, y, self = null) {
   if (!world) return null;
   const mgr = world.mobManager;
@@ -575,6 +753,12 @@ function getOccupant(world, x, y, self = null) {
   return null;
 }
 
+/**
+ * Normalize mob manager collections into iterable arrays.
+ *
+ * @param {any} mobManager
+ * @returns {any[]}
+ */
 function resolveMobList(mobManager) {
   if (!mobManager) return [];
   if (typeof mobManager.list === "function") {
@@ -591,6 +775,12 @@ function resolveMobList(mobManager) {
   return [];
 }
 
+/**
+ * Normalize the RNG interface expected by wandering logic.
+ *
+ * @param {any} source
+ * @returns {() => number}
+ */
 function resolveRng(source) {
   if (typeof source === "function") return source;
   if (typeof source?.next === "function") {
