@@ -19,6 +19,7 @@ import "./senses.test.js";
 import "./monster-loadout.test.js";
 import "./mod-folding-innates.test.js";
 import "./number-clamp.test.js";
+import "./ai-wireup.test.js";
 
 import { strict as assert } from "node:assert";
 import { foldModsFromEquipment, foldMods } from "../src/combat/mod-folding.js";

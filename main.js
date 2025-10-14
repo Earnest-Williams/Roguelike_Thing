@@ -1199,7 +1199,7 @@ const Game = (() => {
       this.index.clear();
       for (const m of this.list) this.index.set(`${m.x},${m.y}`, m);
     }
-    tick(gameCtx, turn) {
+    async tick(gameCtx, turn) {
       // Ensure our spatial index reflects any changes that happened between
       // ticks (for example actors being added or removed externally).
       this.reindex();
@@ -1263,7 +1263,13 @@ const Game = (() => {
 
         const from = { x: m.x, y: m.y };
         const worldCtx = { ...gameCtx, mobManager: occupancyView };
-        const delayResult = m.takeTurn({ world: worldCtx, rng: rngFn, now: turn });
+        let delayResult;
+        try {
+          delayResult = await m.takeTurn({ world: worldCtx, rng: rngFn, now: turn });
+        } catch (err) {
+          console.error("mob takeTurn threw", err);
+          delayResult = null;
+        }
         const to = { x: m.x, y: m.y };
 
         if (to.x !== from.x || to.y !== from.y) {
@@ -4535,7 +4541,7 @@ const Game = (() => {
 
       return { acted: true };
     }
-    function gameLoop() {
+    async function gameLoop() {
       clearTimeout(simState.timeout);
       if (!simState.isPaused) {
         if (handleDeath(gameCtx, player)) {
@@ -4560,7 +4566,11 @@ const Game = (() => {
         }
         updatePerception(gameCtx);
         if (mobManager) {
-          mobManager.tick(gameCtx, turn);
+          try {
+            await mobManager.tick(gameCtx, turn);
+          } catch (err) {
+            console.error("mobManager.tick failed", err);
+          }
         }
         if (handleDeath(gameCtx, player)) {
           return;
