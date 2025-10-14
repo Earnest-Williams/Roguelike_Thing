@@ -2,196 +2,80 @@
 
 ## Overview
 
-The roguelike implements a comprehensive mob combat system where mobs actively seek out and engage hostile targets based on faction allegiance. This system creates dynamic, engaging combat encounters where:
+The roguelike's combat loop is split across small, composable modules so that AI planning, world integration, and UI feedback can evolve independently. Hostility is driven by the faction service, perception keeps the world in sync with each combatant, the planner produces high-level intents, and the action layer turns those intents into concrete movement or attacks.
 
-- Mobs pursue and attack the player
-- Mobs engage in combat with other mobs from different factions
-- Faction logic prevents friendly fire between allied mobs
-- Combat decisions are made using an AI planner with line-of-sight and distance considerations
+- Monsters continuously refresh perception before and after every turn so their field-of-view is always current.
+- `planTurn()` encapsulates target selection and intent generation in a single place that callers (AI, manual control, tests) can reuse.
+- `executeDecision()` consumes planner decisions and performs the actual movement/attack work against the world state.
+- `performEquippedAttack()` and `resolveAttack()` handle the detailed combat math and emit UI/debug events.
 
-## System Architecture
+The pieces are wired together through the `Monster.takeTurn()` method—this is the canonical path for AI-driven combat in the simulation.
 
-### Key Components
+## Turn Pipeline
 
-1. **AI Planner** (`src/combat/ai-planner.js`)
-   - `selectTarget()`: Identifies hostile targets using faction checks
-   - `planTurn()`: Decides between ATTACK, MOVE, GUARD, or WANDER actions
-   - Prioritizes targets by line-of-sight and distance
+### 1. Perception (`src/combat/perception.js`)
 
-2. **Faction Service** (`src/game/faction-service.js`)
-   - `isHostile()`: Determines if two actors are hostile
-   - `isAllied()`: Determines if two actors share factions
-   - `relation()`: Returns -1 (hostile), 0 (neutral), or 1 (friendly)
+`updatePerception(monster, world)` calls the shared FOV helpers from `src/sim/senses.js` to generate a `{ fov, visibleActors, visibleLights }` payload, then stores it on both the world entity wrapper (`Monster`) and the underlying combat `Actor`. This perception snapshot is what the planner reads when looking for hostiles.
 
-3. **Combat Actions** (`src/combat/actions.js`)
-   - `executeDecision()`: Executes planned actions
-   - `tryAttackEquipped()`: Performs attacks with equipped weapons
-   - `tryMove()`: Moves actors toward targets
+### 2. Planning (`src/combat/ai-planner.js`)
 
-4. **Perception System** (`src/combat/perception.js`)
-   - `updatePerception()`: Builds FOV and visible actor lists
-   - Provides mobs with awareness of nearby threats
+- `selectTarget(self, ctx)` normalizes arbitrary entities to `Actor` instances via `asActor()`, filters out the performer, then uses `FactionService.relation()` to reject allies. Line-of-sight is preferred when a map is available, falling back to Chebyshev distance with a deterministic tie-breaker.
+- `planTurn({ actor, combatant, world, perception, rng })` wraps the target result into a decision object:
+  - `{ type: "ATTACK", target }` when adjacent.
+  - `{ type: "MOVE", target, targetPos }` when a hostile is seen but not adjacent.
+  - `{ type: "GUARD", at, radius }` when the actor has a guard leash.
+  - `{ type: "WANDER", leash }` as the default idle behaviour.
 
-5. **Monster** (`src/game/monster.js`)
-   - `takeTurn()`: Orchestrates perception, planning, and action execution
-   - Wraps combat actors with world position and timing
+For utility-debugging workflows there is also `AIPlanner.takeTurn()` and the exported `AIPlanner.utility` helpers, but `planTurn()` is the single entry point used by the runtime (`Monster.takeTurn`).
 
-## How It Works
+### 3. Decision Execution (`src/combat/actions.js`)
 
-### Turn Execution Flow
+`executeDecision({ actor, combatant, world, decision, rng })` takes the high-level planner output and turns it into concrete actions:
 
-```
-Monster.takeTurn()
-  ↓
-1. updatePerception() - Scan environment for visible actors
-  ↓
-2. planTurn() - Select hostile target and decide action
-  ↓
-3. executeDecision() - Attack or move toward target
-  ↓
-4. Return delay until next action
-```
+- `ATTACK` decisions call `tryAttackEquipped()` (equipment-aware attack) and fall back to `tryAttack()` (scalar/basic attack) if no weapon can be used. When neither attack lands, the actor automatically takes a step toward the target.
+- `MOVE` decisions resolve a path step toward the requested coordinate and call `applyStep()` to move the monster, marking it as having moved this turn.
+- `GUARD` walks the monster back toward its guard anchor if it has strayed past the radius.
+- `WANDER` samples a random leashed step so idle monsters still patrol within their leash.
 
-### Target Selection Algorithm
+All branches resolve a base delay through `resolveDelayBase()`, respecting combat speed modifiers from the actor's statuses.
 
-```javascript
-selectTarget(self, context) {
-  // 1. Gather all potential targets (player + all mobs)
-  const allEntities = [context.player, ...mobs];
-  
-  // 2. Filter out self
-  const candidates = allEntities.filter(entity => entity !== self);
-  
-  // 3. Check perception for visible hostiles (prioritized)
-  const visibleHostiles = perception.visibleActors
-    .filter(actor => FactionService.relation(self, actor) < 0);
-  
-  // 4. Fall back to all hostiles if none visible
-  const allHostiles = candidates
-    .filter(actor => FactionService.relation(self, actor) < 0);
-  
-  // 5. Sort by line-of-sight, then distance
-  // 6. Return closest hostile target
-}
-```
+### 4. Combat Resolution (`src/combat/actions.js` & `src/game/combat-glue.js`)
 
-### Combat Decision Logic
+- `planEquippedAttack()` folds equipment, AP cost, cooldowns, and resource requirements together so the attack layer can quickly reject invalid actions.
+- `tryAttackEquipped()` spends the resolved AP, delegates to `performEquippedAttack()`, flags the actor as having attacked, and starts the appropriate cooldown timer.
+- `performEquippedAttack()` constructs a damage packet list, runs `resolveAttack()` for mitigation/status application, updates defender HP, and emits an `EVENT.COMBAT` payload for the UI and debug log buffer.
+- `tryAttack()` mirrors this flow with deterministic scalar values and is primarily used for tests or when no equipment profile exists.
 
-```javascript
-planTurn() {
-  const target = selectTarget(self);
-  
-  if (!target) {
-    return { type: "WANDER" }; // No hostiles found
-  }
-  
-  const distance = chebyshevDistance(self, target);
-  
-  if (distance <= 1) {
-    return { type: "ATTACK", target }; // Adjacent: attack!
-  } else {
-    return { type: "MOVE", target }; // Far: move closer
-  }
-}
-```
+### 5. World Wrapper (`src/game/monster.js`)
 
-## Faction System
+`Monster.takeTurn(ctx)` orchestrates the entire process:
 
-### Faction IDs
+1. Refresh perception (`updatePerception`).
+2. Produce a planner decision (`planTurn`).
+3. Execute the decision (`executeDecision`).
+4. Refresh perception again so subsequent actors see the latest state.
+5. Return the resolved delay so the scheduler knows when the monster can act next.
 
-- `player` - The player character
-- `npc_hostile` - Hostile NPCs (orcs, bandits, etc.)
-- `unaligned` - Hostile to everyone (undead, monsters)
-- `neutral` - Non-hostile NPCs (unused in current content)
+`Monster` is also responsible for exposing combat stats (HP, equipment, statuses) on the world entity and for storing planner diagnostics such as `lastPlannerDecision`.
 
-### Hostility Rules
+## Faction System (`src/game/faction-service.js`)
 
-1. **Allied** (same faction or shared affiliation)
-   - Do NOT attack each other
-   - Ignore in target selection
+- `relation(a, b)` is the canonical helper—`< 0` means hostile, `> 0` means friendly, `0` is neutral.
+- `isHostile()` and `isAllied()` are convenience wrappers that call into `relation()`.
+- The service accepts either raw `Actor` instances or `Monster` wrappers; it will unwrap automatically.
 
-2. **Hostile** (different factions)
-   - Attack on sight
-   - Pursue when detected
-   - Prioritize by distance and line-of-sight
-
-3. **Unaligned** (special case)
-   - Never allies with anyone
-   - Hostile to all other factions
-
-### Example Faction Configurations
-
-```javascript
-// Orc - Hostile to player and unaligned, allied to other npc_hostile
-{
-  id: "orc",
-  factions: ["npc_hostile"],
-  affiliations: []
-}
-
-// Skeleton - Hostile to everyone, even other skeletons
-{
-  id: "skeleton",
-  factions: ["unaligned"],
-  affiliations: []
-}
-
-// Player - Hostile to npc_hostile and unaligned
-{
-  id: "player",
-  factions: ["player"],
-  affiliations: []
-}
-```
+Because `selectTarget()` and `planTurn()` always pass through the service, there is a single source of truth for hostility checks and allied mobs never appear in candidate lists.
 
 ## Testing
 
-### Integration Tests
+Integration coverage lives in `tests/mob-combat-integration.test.js` and exercises the full wiring:
 
-The system includes comprehensive integration tests (`tests/mob-combat-integration.test.js`):
+1. Mobs detect and pursue hostile mobs from different factions.
+2. Allied mobs are ignored (no friendly fire).
+3. Mobs acquire and pursue the player.
+4. Melee attacks trigger when adjacent to the player.
+5. Hostile mobs fight each other when adjacent.
+6. Closer hostiles are prioritised over distant ones.
+7. Complex faction graphs (multiple affiliations/overrides) resolve correctly.
 
-1. ✓ Mobs detect and pursue hostile mobs from different factions
-2. ✓ Mobs ignore allies in their own faction (no friendly fire)
-3. ✓ Mobs detect and pursue player character
-4. ✓ Mobs attack player when adjacent (in range)
-5. ✓ Mobs attack hostile mobs when adjacent (mob-to-mob combat)
-6. ✓ Mobs prioritize closer hostile targets
-7. ✓ Complex faction scenario with multiple relationships
-
-### Running Tests
-
-```bash
-npm test  # Runs all tests including mob combat integration
-node tests/demo-mob-combat.js  # Visual demonstration of mob combat
-```
-
-## Acceptance Criteria Status
-
-✅ **All requirements from the issue are met:**
-
-- ✅ Mobs can detect and seek out other mobs that are not in their faction
-- ✅ Mobs can detect and seek out the player character
-- ✅ When encountering a valid target, mobs engage in combat
-- ✅ Mobs ignore other mobs in their own faction (no friendly fire)
-- ✅ AI logic supports this behavior through perception and planning systems
-
-The system was already fully implemented and is working as specified. Tests have been added to document and verify this functionality.
-
-## Future Enhancements
-
-Potential improvements to consider:
-
-1. **Diplomatic States**: Add temporary truces or faction reputation
-2. **Aggro Range**: Configurable detection radius per mob type
-3. **Threat Assessment**: Consider target health/equipment in prioritization
-4. **Group Tactics**: Coordinate attacks between allied mobs
-5. **Morale System**: Mobs flee when outmatched
-6. **Pursuit Limits**: Max distance before giving up chase
-
-## References
-
-- AI Planner Implementation: `src/combat/ai-planner.js`
-- Faction Logic: `src/game/faction-service.js`
-- Combat Actions: `src/combat/actions.js`
-- Mob Templates: `src/content/mobs.js`
-- Integration Tests: `tests/mob-combat-integration.test.js`
+There are also focused unit tests covering attack resolution, cooldown handling, status application, and the UI feedback loop (`tests/ui-combat-feedback.test.js`), ensuring each layer of the combat system stays in sync.
