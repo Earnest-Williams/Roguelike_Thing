@@ -2,6 +2,9 @@
 // @ts-check
 
 import { SLOT } from "../../js/constants.js";
+import { planTurn } from "../combat/ai-planner.js";
+import { updatePerception } from "../combat/perception.js";
+import { executeDecision } from "../combat/actions.js";
 
 /**
  * @file Monster
@@ -24,7 +27,7 @@ export class Monster {
     this.__actor = actor;
     this.glyph = glyph;
     this.color = color;
-    this.baseDelay = baseDelay;
+    this.baseDelay = Number.isFinite(baseDelay) && baseDelay > 0 ? baseDelay : 1;
     this.nextActAt = 0;
     this.x = 0;
     this.y = 0;
@@ -32,6 +35,10 @@ export class Monster {
     this.id = `${actor.id}#${Math.random().toString(36).slice(2, 7)}`;
     this.name = actor.name ?? actor.id ?? "monster";
     this.__template = actor.__template || null;
+    this.spawnPos = null;
+    this.homePos = actor.homePos ?? null;
+    this.guardRadius = actor.guardRadius ?? actor.__template?.guardRadius ?? null;
+    this.wanderRadius = actor.wanderRadius ?? actor.__template?.wanderRadius ?? null;
   }
 
   get actor() {
@@ -138,6 +145,12 @@ export class Monster {
     if (!p) return;
     this.x = p.x | 0;
     this.y = p.y | 0;
+    if (!this.spawnPos && Number.isFinite(this.x) && Number.isFinite(this.y)) {
+      this.spawnPos = { x: this.x, y: this.y };
+    }
+    if (!this.homePos && Number.isFinite(this.x) && Number.isFinite(this.y)) {
+      this.homePos = { x: this.x, y: this.y };
+    }
   }
 
   /** Visible-light radius is defined by the Actor. */
@@ -153,10 +166,49 @@ export class Monster {
     }
   }
 
-  takeTurn(ctx) {
-    if (!ctx?.AIPlanner?.takeTurn) return;
-    return ctx.AIPlanner.takeTurn(this.__actor, { ...ctx, selfMob: this });
+  takeTurn(ctx = {}) {
+    const world = ctx || {};
+    const rng = resolveRng(world.rng);
+
+    this.perception = updatePerception(this, world);
+
+    const decision = planTurn({
+      actor: this,
+      combatant: this.__actor,
+      world,
+      perception: this.perception,
+      rng,
+    });
+
+    this.lastPlannerDecision = decision;
+    if (this.__actor && this.__actor !== this) {
+      this.__actor.lastPlannerDecision = decision;
+    }
+
+    const delay = executeDecision({
+      actor: this,
+      combatant: this.__actor,
+      world,
+      decision,
+      rng,
+    });
+
+    this.perception = updatePerception(this, world);
+
+    const resolved = Number.isFinite(delay) ? delay : this.baseDelay;
+    return resolved > 0 ? resolved : this.baseDelay;
   }
+}
+
+function resolveRng(source) {
+  if (typeof source === "function") return source;
+  if (typeof source?.next === "function") {
+    return () => source.next();
+  }
+  if (typeof source?.random === "function") {
+    return () => source.random();
+  }
+  return Math.random;
 }
 
 const HAND_SLOTS = [SLOT.LeftHand, SLOT.RightHand];

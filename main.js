@@ -1250,15 +1250,18 @@ const Game = (() => {
 
         const from = { x: m.x, y: m.y };
         const turnCtx = { ...gameCtx, mobManager: occupancyView };
-        m.takeTurn(turnCtx);
+        const delayResult = m.takeTurn(turnCtx);
         const to = { x: m.x, y: m.y };
 
         if (to.x !== from.x || to.y !== from.y) {
           plannedMoves.push({ mob: m, from, to });
         }
 
-        const delay = computeActorDelay(m);
-        m.nextActAt = turn + delay;
+        let delay = Number.isFinite(delayResult) ? delayResult : null;
+        if (!Number.isFinite(delay) || delay <= 0) {
+          delay = computeActorDelay(m);
+        }
+        m.nextActAt = turn + (Number.isFinite(delay) && delay > 0 ? delay : computeActorDelay(m));
       }
 
       const occupancy = new Map(startIndex);

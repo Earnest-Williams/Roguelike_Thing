@@ -59,6 +59,8 @@ const listMobs = (mobManager) => {
   return [];
 };
 
+const DEFAULT_WANDER_RADIUS = 6;
+
 function selectTarget(self, ctx = {}) {
   /** @type {(e: any) => import("./actor.js").Actor | null} */
   const toActor = ctx.toActor ?? asActor;
@@ -160,6 +162,77 @@ function sortHostiles(list, ctx, selfActor, selfMob) {
 function ratio(value, max) {
   if (!Number.isFinite(value) || !Number.isFinite(max) || max <= 0) return 0;
   return clamp01Utility(value / max);
+}
+
+function resolvePlanRng(source) {
+  if (typeof source === "function") return source;
+  if (typeof source?.next === "function") {
+    return () => source.next();
+  }
+  if (typeof source?.random === "function") {
+    return () => source.random();
+  }
+  return Math.random;
+}
+
+function resolveHomePosition(actor, combatant) {
+  const home = actor?.homePos ?? actor?.spawnPos ?? combatant?.homePos ?? combatant?.spawnPos ?? null;
+  if (home && Number.isFinite(home.x) && Number.isFinite(home.y)) {
+    return { x: home.x | 0, y: home.y | 0 };
+  }
+  return null;
+}
+
+function resolveGuardRadius(actor, combatant) {
+  if (Number.isFinite(actor?.guardRadius)) return actor.guardRadius;
+  if (Number.isFinite(combatant?.guardRadius)) return combatant.guardRadius;
+  return null;
+}
+
+function resolveWanderRadius(actor, combatant) {
+  if (Number.isFinite(actor?.wanderRadius)) return actor.wanderRadius;
+  if (Number.isFinite(combatant?.wanderRadius)) return combatant.wanderRadius;
+  return DEFAULT_WANDER_RADIUS;
+}
+
+function chebyshevDistance(a, b) {
+  if (!a || !b) return Infinity;
+  return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
+}
+
+export function planTurn({ actor, combatant, world = {}, perception, rng }) {
+  const performer = combatant ?? asActor(actor) ?? actor;
+  const selfMob = actor ?? performer;
+  const rngFn = resolvePlanRng(rng);
+  const ctx = { ...world, selfMob, rng: rngFn };
+  if (perception) ctx.perception = perception;
+
+  const selection = selectTarget(performer, ctx);
+  if (selection) {
+    const targetActor = selection.actor ?? asActor(selection.entity);
+    const targetEntity = selection.entity ?? targetActor;
+    const targetPos = selection.position ?? asPosition(targetEntity) ?? asPosition(targetActor);
+    const selfPos = asPosition(selfMob) ?? asPosition(performer);
+    const dist = chebyshevDistance(selfPos, targetPos);
+    if (Number.isFinite(dist) && dist <= 1) {
+      return { type: "ATTACK", target: targetActor ?? targetEntity };
+    }
+    return {
+      type: "MOVE",
+      target: targetEntity ?? targetActor,
+      targetActor,
+      targetPos,
+    };
+  }
+
+  const home = resolveHomePosition(actor, combatant ?? performer);
+  const guardRadius = resolveGuardRadius(actor, combatant ?? performer);
+  if (home && Number.isFinite(guardRadius) && guardRadius >= 0) {
+    return { type: "GUARD", at: home, radius: guardRadius };
+  }
+
+  const leash = resolveWanderRadius(actor, combatant ?? performer);
+  return { type: "WANDER", leash };
 }
 
 function resolveHealthRatio(actor) {
