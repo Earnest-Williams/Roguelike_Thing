@@ -10,6 +10,8 @@ import { colorStringToRgba as toRgba } from "../utils.js";
 
 /**
  * Convert state into renderable tile visuals for the main map.
+ * Supports per-tile overlay alpha and color via overlayAlphaAt/overlayColorAt,
+ * gracefully falling back to a flat overlayColor tint when needed.
  * @param {Object} params
  * @param {number[][]} params.grid
  * @param {boolean[][]} params.explored
@@ -115,7 +117,9 @@ export function buildMainViewBatch({
           const clamped = Math.max(0, Math.min(1, overlayA));
           if (clamped > 0) {
             base.overlayA = clamped;
-            const oc = overlayColorFn ? overlayColorFn(x, y) : overlayRgb;
+            const oc = overlayColorFn
+              ? overlayColorFn(x, y) ?? overlayRgb
+              : overlayRgb;
             if (oc) {
               base.overlayColor = oc;
             }

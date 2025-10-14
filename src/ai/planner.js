@@ -166,6 +166,7 @@ export function evaluateCandidates(candidates, ctx = {}) {
   /**
    * DEV: expose the latest decision for a DOM overlay.
    * This is a no-op in non-browser environments.
+   * Safe to leave in: only assigns a window property if it exists.
    */
   try {
     if (typeof window !== "undefined") {
