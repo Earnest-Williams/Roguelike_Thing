@@ -100,7 +100,7 @@ export const CONFIG = {
     light: {
       fallbackColor: "#ffe9a6",
       fallbackFlickerRate: 0,
-      baseOverlayAlpha: 0.2,
+      baseOverlayAlpha: 0.6,
       flickerVariance: 0.12,
       flickerNearDeadZoneTiles: 1,
       flickerFalloffPower: 1.75,
