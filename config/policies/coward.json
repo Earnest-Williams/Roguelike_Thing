@@ -1,0 +1,24 @@
+{
+  "id": "coward",
+  "label": "Coward",
+  "description": "Avoid danger at all costs and keep health topped up.",
+  "switches": { "pursueCombat": false, "healWhenHurt": true },
+  "thresholds": { "minimumLight": 0.5, "lowHealth": 0.75 },
+  "weights": {
+    "exploration": 0.2,
+    "light": 0.6,
+    "safety": 1.2,
+    "loot": 0.1,
+    "exit": 0.4
+  },
+  "gates": { "allowAggro": false },
+  "formulas": { "safety": "Math.max(0, 1 - threat * 1.5)" },
+  "pathCost": {
+    "lighting": -0.5,
+    "threat": 1.5,
+    "lava": 4,
+    "revisit": 0.6,
+    "loot": -0.2,
+    "unexplored": -0.3
+  }
+}

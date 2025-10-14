@@ -1,0 +1,24 @@
+{
+  "id": "greedy",
+  "label": "Greedy",
+  "description": "Loot-driven behaviour with some risk tolerance.",
+  "switches": { "pursueCombat": true, "healWhenHurt": false },
+  "thresholds": { "minimumLight": 0.2, "lowHealth": 0.4 },
+  "weights": {
+    "exploration": 0.4,
+    "light": 0.2,
+    "safety": 0.4,
+    "loot": 1.1,
+    "exit": 0.2
+  },
+  "gates": { "allowAggro": true },
+  "formulas": { "loot": "Math.max(0, loot - threat * 0.25)" },
+  "pathCost": {
+    "lighting": -0.1,
+    "threat": 0.9,
+    "lava": 2,
+    "revisit": 0.2,
+    "loot": -0.7,
+    "unexplored": -0.4
+  }
+}
