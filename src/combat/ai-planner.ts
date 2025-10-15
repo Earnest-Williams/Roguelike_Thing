@@ -561,6 +561,36 @@ function buildUtilityDecision(selfMob, selection, context, distance) {
 
   const candidates = [];
 
+  const healthAdvantage = clamp01Utility(Math.max(0, selfHealth - targetThreat));
+  const huntHealthThreshold = clamp01Utility(
+    Number.isFinite(context?.huntHealthThreshold) ? context.huntHealthThreshold : 0.6,
+  );
+  const huntConfidenceThreshold = clamp01Utility(
+    Number.isFinite(context?.huntConfidenceThreshold) ? context.huntConfidenceThreshold : 0.35,
+  );
+  const huntConfidence = clamp01Utility(
+    Math.max(distanceBias * 0.6, 0.2) + healthAdvantage * 0.8 + Math.max(0, selfHealth - 0.5) * 0.4,
+  );
+  const canHunt =
+    selection &&
+    selfHealth >= huntHealthThreshold &&
+    huntConfidence >= huntConfidenceThreshold &&
+    (targetThreat <= selfHealth + 0.15 || targetThreat <= 0.35 || healthAdvantage > 0.1);
+
+  const panicHealthThreshold = clamp01Utility(
+    Number.isFinite(context?.panicHealthThreshold) ? context.panicHealthThreshold : 0.4,
+  );
+  const panicConfidenceThreshold = clamp01Utility(
+    Number.isFinite(context?.panicConfidenceThreshold) ? context.panicConfidenceThreshold : 0.2,
+  );
+  const panicPressure = clamp01Utility(
+    Math.max(0, targetThreat - selfHealth) * 0.7 + Math.max(0, 0.5 - selfHealth) * 0.5 + distanceBias * 0.6,
+  );
+  const shouldPanic =
+    selection &&
+    (selfHealth <= panicHealthThreshold || targetThreat >= selfHealth + 0.2 || healthAdvantage < 0) &&
+    panicPressure >= panicConfidenceThreshold;
+
   if (selection) {
     candidates.push({
       goal: "engage",
@@ -585,6 +615,36 @@ function buildUtilityDecision(selfMob, selection, context, distance) {
     });
   }
 
+  if (canHunt) {
+    const huntUrgency = clamp01Utility(Math.max(distanceBias, huntConfidence));
+    candidates.push({
+      goal: "hunt",
+      target: selection.entity,
+      metrics: {
+        light: lightLevel,
+        minimumLight: lightLevel,
+        safety: clamp01Utility(selfHealth * 0.9 + huntConfidence * 0.1),
+        lowHealth: selfHealth,
+        threat: threatLevel,
+        loot: Math.max(lootFocus * 0.5, 0.05),
+        exit: clamp01Utility(exitUrgency * 0.25),
+        exploration: clamp01Utility(explorationFocus * 0.4),
+        combat: Math.max(distanceBias, huntUrgency),
+        targetThreat,
+        progress,
+      },
+      gates: ["allowAggro", "pursueCombat"],
+      context: {
+        distance: distVal,
+        distanceBias,
+        selfHealth,
+        targetThreat,
+        huntConfidence: huntUrgency,
+      },
+      baseScore: 0.4 + huntUrgency,
+    });
+  }
+
   candidates.push({
     goal: selection ? "hold_position" : "idle",
     target: selection?.entity ?? null,
@@ -604,6 +664,36 @@ function buildUtilityDecision(selfMob, selection, context, distance) {
     context: { distance: distVal, distanceBias, selfHealth, targetThreat },
     baseScore: selection ? 0.1 : 0.2,
   });
+
+  if (shouldPanic) {
+    const panicUrgency = clamp01Utility(Math.max(panicPressure, exitUrgency));
+    candidates.push({
+      goal: "panic",
+      target: selection?.entity ?? null,
+      metrics: {
+        light: lightLevel,
+        minimumLight: lightLevel,
+        safety: clamp01Utility(selfHealth * 0.6),
+        lowHealth: selfHealth,
+        threat: clamp01Utility(threatLevel + panicUrgency * 0.2),
+        loot: 0,
+        exit: Math.max(exitUrgency, panicUrgency),
+        exploration: clamp01Utility(explorationFocus * 0.2),
+        combat: clamp01Utility(Math.max(0, 0.15 - panicUrgency)),
+        targetThreat,
+        progress: clamp01Utility(progress * 0.5),
+      },
+      context: {
+        distance: distVal,
+        distanceBias,
+        selfHealth,
+        targetThreat,
+        panicUrgency,
+      },
+      baseScore: 0.25 + panicUrgency,
+      formulaOverrides: { safety: "Math.max(0, 1 - threat)" },
+    });
+  }
 
   if (!selection && guardState) {
     const urgency = guardState.radius != null && guardState.radius >= 0
@@ -785,11 +875,11 @@ export const AIPlanner = {
 
     const goalBias = (() => {
       if (!decision) return 0;
-      if (decision.goal === "engage") {
+      if (decision.goal === "engage" || decision.goal === "hunt") {
         const raw = Number.isFinite(decision.score) ? decision.score : 0;
         return Math.max(0, Math.min(0.4, 0.15 + raw * 0.05));
       }
-      if (decision.goal === "retreat") {
+      if (decision.goal === "retreat" || decision.goal === "panic") {
         return -0.35;
       }
       return 0;
