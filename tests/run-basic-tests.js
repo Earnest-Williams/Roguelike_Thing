@@ -13,6 +13,7 @@ import "./light-radius-unified.test.js";
 import "./light-math.test.js";
 import "./vision-radius.test.js";
 import "./theme-generation.test.js";
+import "./theme-spawn.test.js";
 import "./loot-budget.test.js";
 import "./faction-service.test.js";
 import "./spawn.test.js";

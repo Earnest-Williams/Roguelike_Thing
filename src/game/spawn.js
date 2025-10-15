@@ -61,6 +61,8 @@ export function spawnMonsters(
   const weights = buildSpawnWeights({ includeTags });
   if (!weights.length) return 0;
 
+  const overlays = collectThemeOverlays(gameCtx?.state?.chapter?.theme);
+
   let spawned = 0;
   const configuredDistance =
     gameCtx?.state?.config?.knobs?.spawnMinDistance ??
@@ -73,7 +75,12 @@ export function spawnMonsters(
     const id = pickWeighted(weights, rng);
     if (!id) break;
 
-    const mob = createMobFromTemplate(id);
+    const template = MOB_TEMPLATES[id];
+    if (!template) continue;
+    const roleSelection = pickOverlayRoles(template, overlays);
+    const mob = roleSelection.roleIds.length
+      ? createMobFromTemplate(id, roleSelection)
+      : createMobFromTemplate(id);
     const pos = randomOpenTile(maze, mobManager, player, safeDistance, rng);
     if (!pos) continue;
 
@@ -105,6 +112,7 @@ export function spawnByIdCounts(
 ) {
   const { maze, mobManager, player } = gameCtx;
   let spawned = 0;
+  const overlays = collectThemeOverlays(gameCtx?.state?.chapter?.theme);
   const fallbackDistance =
     gameCtx?.state?.config?.knobs?.spawnMinDistance ??
     CONFIG?.knobs?.spawnMinDistance ??
@@ -119,7 +127,12 @@ export function spawnByIdCounts(
     if (!Number.isFinite(parsed)) continue;
     const count = Math.max(0, Math.floor(parsed));
     for (let i = 0; i < count; i++) {
-      const mob = createMobFromTemplate(id);
+      const template = MOB_TEMPLATES[id];
+      if (!template) continue;
+      const roleSelection = pickOverlayRoles(template, overlays);
+      const mob = roleSelection.roleIds.length
+        ? createMobFromTemplate(id, roleSelection)
+        : createMobFromTemplate(id);
       const pos = randomOpenTile(maze, mobManager, player, safeDistance, rng);
       if (!pos) continue;
       mob.x = pos.x;
@@ -133,4 +146,55 @@ export function spawnByIdCounts(
   }
   mobManager.reindex?.();
   return spawned;
+}
+
+function collectThemeOverlays(theme) {
+  if (!theme || typeof theme !== "object") return [];
+  const overlays = [];
+  if (theme.roleOverlay) overlays.push(theme.roleOverlay);
+  if (Array.isArray(theme.roleOverlayCandidates)) {
+    for (const entry of theme.roleOverlayCandidates) {
+      if (entry) overlays.push(entry);
+    }
+  }
+  return overlays;
+}
+
+function pickOverlayRoles(template, overlays = []) {
+  if (!template) return { roleIds: [], overlayId: null };
+  for (const overlay of overlays) {
+    if (!overlayMatchesTemplate(overlay, template)) continue;
+    const ids = Array.isArray(overlay?.roleIds)
+      ? overlay.roleIds.filter((id) => typeof id === "string")
+      : [];
+    if (!ids.length) continue;
+    return {
+      roleIds: ids.slice(),
+      overlayId: typeof overlay.id === "string" ? overlay.id : null,
+    };
+  }
+  return { roleIds: [], overlayId: null };
+}
+
+function overlayMatchesTemplate(overlay, template) {
+  if (!overlay || !template) return false;
+  const templateTags = Array.isArray(template.tags) ? template.tags : [];
+  const includeTags = Array.isArray(overlay.includeTags) ? overlay.includeTags : null;
+  if (includeTags && includeTags.length) {
+    let match = false;
+    for (const tag of includeTags) {
+      if (templateTags.includes(tag)) {
+        match = true;
+        break;
+      }
+    }
+    if (!match) return false;
+  }
+  const excludeTags = Array.isArray(overlay.excludeTags) ? overlay.excludeTags : null;
+  if (excludeTags && excludeTags.length) {
+    for (const tag of excludeTags) {
+      if (templateTags.includes(tag)) return false;
+    }
+  }
+  return true;
 }

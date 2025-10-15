@@ -1912,6 +1912,35 @@ export function foldInnatesIntoModCache(actor, cache = actor?.modCache) {
     }
   }
 
+  if (innate.polarity && typeof innate.polarity === "object") {
+    const pol = innate.polarity;
+    if (pol.grant && cache.polarity) {
+      addGrantVector(actor, pol.grant);
+      cache.polarity.grant ||= Object.create(null);
+      merge(cache.polarity.grant, pol.grant);
+      if (cache.offense?.polarity) {
+        cache.offense.polarity.grant ||= Object.create(null);
+        merge(cache.offense.polarity.grant, pol.grant);
+      }
+      if (cache.defense?.polarity) {
+        cache.defense.polarity.grant ||= Object.create(null);
+        merge(cache.defense.polarity.grant, pol.grant);
+      }
+    }
+    if (pol.onHitBias && cache.offense?.polarity) {
+      cache.offense.polarity.onHitBias = mergePolarityBias(
+        cache.offense.polarity.onHitBias || Object.create(null),
+        pol.onHitBias,
+      );
+    }
+    if (pol.defenseBias && cache.defense?.polarity) {
+      cache.defense.polarity.defenseBias = mergePolarityBias(
+        cache.defense.polarity.defenseBias || Object.create(null),
+        pol.defenseBias,
+      );
+    }
+  }
+
   return cache;
 }
 
