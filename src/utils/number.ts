@@ -11,7 +11,7 @@ export function clamp(value, min, max) {
   let lo = min;
   let hi = max;
 
-  if (Number.isFinite(lo) && Number.isFinite(hi) && lo > hi) {
+  if (typeof lo === "number" && typeof hi === "number" && lo > hi) {
     [lo, hi] = [hi, lo];
   }
 
