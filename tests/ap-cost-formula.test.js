@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { finalAPForAction } from "../src/combat/time.js";
-import { Actor } from "../src/combat/actor.js";
+import { finalAPForAction } from "../dist/src/combat/time.js";
+import { Actor } from "../dist/src/combat/actor.js";
 
 (function testApFormula() {
   const actor = new Actor({

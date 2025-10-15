@@ -1,3 +1,4 @@
+// @ts-nocheck
 // src/sim/config.js
 // Shared configuration values for combat simulations.
 

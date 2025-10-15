@@ -1,4 +1,4 @@
-import { getPolicyPreset, mergePolicies, normalizePolicy } from "./explore_policy";
+import { getPolicyPreset, mergePolicies, normalizePolicy } from "./explore_policy.js";
 function resolvePolicy(input, overrides) {
     if (!input) {
         const preset = getPolicyPreset("cartographer");

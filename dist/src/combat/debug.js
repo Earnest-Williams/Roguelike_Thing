@@ -1,3 +1,4 @@
+// @ts-nocheck
 // src/combat/debug.ts
 export function logEvent(actor, kind, payload = {}) {
     if (!actor)

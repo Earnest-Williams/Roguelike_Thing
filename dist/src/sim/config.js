@@ -1,3 +1,4 @@
+// @ts-nocheck
 // src/sim/config.js
 // Shared configuration values for combat simulations.
 export const SIM_DEFAULT_RUN_COUNT = 50;

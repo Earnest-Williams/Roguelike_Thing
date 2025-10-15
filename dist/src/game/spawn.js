@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { MOB_TEMPLATES } from "../content/mobs.js";
 import { createItem, createMobFromTemplate } from "../factories/index.js";
 import { CONFIG } from "../config.js";

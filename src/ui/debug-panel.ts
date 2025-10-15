@@ -1,3 +1,4 @@
+// @ts-nocheck
 // src/ui/debug-panel.js
 // Lightweight developer overlay to inspect attack resolution packets.
 

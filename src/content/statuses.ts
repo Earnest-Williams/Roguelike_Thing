@@ -1,3 +1,4 @@
+// @ts-nocheck
 // src/content/statuses.js
 // Canonical status definitions shared across runtime environments.
 

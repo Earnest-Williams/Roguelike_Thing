@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { Actor } from "../src/combat/actor.js";
-import { resolveAttack as coreResolveAttack } from "../src/combat/resolve.js";
-import { setSeed as coreSetSeed, rand } from "../src/combat/rng.js";
-import { rebuildDerived, addStatus, tickStatuses } from "../src/combat/status.js";
-import { spendResources, canPay } from "../src/combat/resources.js";
-import { finalAPForAction, spendAP, beginCooldown } from "../src/combat/time.js";
-import { serializeActor, hydrateActor } from "../src/combat/save.js";
+import { Actor } from "../dist/src/combat/actor.js";
+import { resolveAttack as coreResolveAttack } from "../dist/src/combat/resolve.js";
+import { setSeed as coreSetSeed, rand } from "../dist/src/combat/rng.js";
+import { rebuildDerived, addStatus, tickStatuses } from "../dist/src/combat/status.js";
+import { spendResources, canPay } from "../dist/src/combat/resources.js";
+import { finalAPForAction, spendAP, beginCooldown } from "../dist/src/combat/time.js";
+import { serializeActor, hydrateActor } from "../dist/src/combat/save.js";
 import { createHash } from "node:crypto";
 
 let _idCounter = 1;

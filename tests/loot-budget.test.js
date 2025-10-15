@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
-import { applyAffixesBudgeted } from "../src/content/affixes.budgeted.js";
-import { AFFIX_POOLS } from "../src/content/affixes.js";
+import { applyAffixesBudgeted } from "../dist/src/content/affixes.budgeted.js";
+import { AFFIX_POOLS } from "../dist/src/content/affixes.js";
 
 function makeDeterministicRng(seed = 3) {
   let state = seed;

@@ -1,3 +1,4 @@
+// @ts-nocheck
 // src/content/statuses.js
 // Canonical status definitions shared across runtime environments.
 import { DEFAULT_MARTIAL_DAMAGE_TYPE, DAMAGE_TYPE } from "../../js/constants.js";

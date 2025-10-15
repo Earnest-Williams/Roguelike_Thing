@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 
-import { emit, emitAsync, subscribe } from "../src/ui/event-log.js";
+import { emit, emitAsync, subscribe } from "../dist/src/ui/event-log.js";
 
 (async function testEmitAsyncWaitsForHandlers() {
   const payloads = [];

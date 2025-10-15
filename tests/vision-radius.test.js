@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 
-import { Actor } from "../src/combat/actor.js";
-import { rebuildModCache } from "../src/combat/mod-folding.js";
+import { Actor } from "../dist/src/combat/actor.js";
+import { rebuildModCache } from "../dist/src/combat/mod-folding.js";
 import { SLOT } from "../js/constants.js";
 
 (function testInnateVisionStacksWithEquipmentRadius() {

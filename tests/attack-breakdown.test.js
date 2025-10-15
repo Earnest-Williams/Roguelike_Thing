@@ -1,10 +1,10 @@
 // tests/attack-breakdown.test.js
 import assert from "node:assert/strict";
 import { DAMAGE_TYPE } from "../js/constants.js";
-import { Actor } from "../src/combat/actor.js";
-import { foldModsFromEquipment } from "../src/combat/mod-folding.js";
+import { Actor } from "../dist/src/combat/actor.js";
+import { foldModsFromEquipment } from "../dist/src/combat/mod-folding.js";
 import { makeItem } from "../js/item-system.js";
-import { performEquippedAttack } from "../src/game/combat-glue.js";
+import { performEquippedAttack } from "../dist/src/game/combat-glue.js";
 
 function setupCombatants(dmgMult) {
   const attacker = new Actor({

@@ -1,4 +1,5 @@
-import { SCHOOL, TARGET_KIND } from "./types";
+// @ts-nocheck
+import { SCHOOL, TARGET_KIND } from "./types.js";
 export const SPELLS = {
     firebolt: {
         id: "firebolt",

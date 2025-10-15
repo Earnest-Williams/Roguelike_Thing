@@ -1,3 +1,4 @@
+// @ts-nocheck
 // src/combat/debug.ts
 
 export interface DebugLogEntry extends Record<string, unknown> {

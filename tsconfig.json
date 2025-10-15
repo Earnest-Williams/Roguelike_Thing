@@ -12,8 +12,7 @@
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
 
-    "allowJs": true,
-    "checkJs": false,
+    "allowJs": false,
     "outDir": "dist",
     "rootDir": ".",
     "baseUrl": ".",
@@ -29,7 +28,10 @@
     "main-runtime.ts",
     "js/**/*.ts",
     "js/**/*.d.ts",
-    "src/**/*",
-    "tests/**/*.ts"
+    "src/**/*.ts"
+  ],
+  "exclude": [
+    "dist",
+    "tests"
   ]
 }

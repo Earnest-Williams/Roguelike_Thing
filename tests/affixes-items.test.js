@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
-import { AFFIX_POOLS } from "../src/content/affixes.js";
-import { ITEMS } from "../src/content/items.js";
+import { AFFIX_POOLS } from "../dist/src/content/affixes.js";
+import { ITEMS } from "../dist/src/content/items.js";
 
 (function testAffixPools() {
   const prefixIds = new Set(AFFIX_POOLS.prefix.map((a) => a.id));

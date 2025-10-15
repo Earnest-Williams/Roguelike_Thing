@@ -1,8 +1,8 @@
 // tests/furniture-material.test.js
 // @ts-nocheck
 
-import { Furniture, FurnitureKind } from "../src/world/furniture/furniture.js";
-import { STUFF } from "../src/world/stuff.js";
+import { Furniture, FurnitureKind } from "../dist/src/world/furniture/furniture.js";
+import { STUFF } from "../dist/src/world/stuff.js";
 
 function assert(condition, message) {
   if (!condition) {

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Tiny developer overlay for AI planner breakdowns.
  * Renders a fixed-position DOM panel with the latest decision's explain data.

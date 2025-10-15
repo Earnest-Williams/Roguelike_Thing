@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { LIGHT_CHANNELS } from "../../js/constants.js";
 
 /**

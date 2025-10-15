@@ -1,8 +1,8 @@
 import { strict as assert } from "node:assert";
 
 import { TILE_FLOOR, TILE_WALL } from "../js/constants.js";
-import { createMobFromTemplate } from "../src/factories/index.js";
-import { planTurn, AIPlanner } from "../src/combat/ai-planner.js";
+import { createMobFromTemplate } from "../dist/src/factories/index.js";
+import { planTurn, AIPlanner } from "../dist/src/combat/ai-planner.js";
 
 function makeGrid(width, height, value = TILE_FLOOR) {
   const grid = [];

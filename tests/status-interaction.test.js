@@ -1,6 +1,6 @@
 // tests/status-interaction.test.js
 // @ts-nocheck
-import { applyOneStatusAttempt } from "../src/combat/status.js";
+import { applyOneStatusAttempt } from "../dist/src/combat/status.js";
 
 function mkActor() {
   return {

@@ -1,6 +1,6 @@
 // tests/phase4.bands.test.js
-import { simulate } from "../src/sim/sim.js";
-import { BANDS } from "../src/sim/balance-bands.js";
+import { simulate } from "../dist/src/sim/sim.js";
+import { BANDS } from "../dist/src/sim/balance-bands.js";
 function assert(c,m){ if(!c) throw new Error(m); }
 
 const r1 = simulate({ a:"brigand", b:"dummy", N:60, seed:42 });

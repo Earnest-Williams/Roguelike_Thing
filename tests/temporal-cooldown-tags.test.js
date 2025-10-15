@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { Actor } from "../src/combat/actor.js";
-import { finalCooldown } from "../src/combat/time.js";
+import { Actor } from "../dist/src/combat/actor.js";
+import { finalCooldown } from "../dist/src/combat/time.js";
 
 (function testCooldownTag() {
   const a = new Actor({

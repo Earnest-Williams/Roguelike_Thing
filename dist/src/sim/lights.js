@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { LIGHT_CHANNELS } from "../../js/constants.js";
 /**
  * World light collection (actors, dropped items, fixtures).

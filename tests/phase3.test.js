@@ -1,8 +1,8 @@
 // tests/phase3.test.js
 // @ts-nocheck
-import { Actor } from "../src/combat/actor.js";
-import { runTurn } from "../src/combat/loop.js";
-import { tryAttack } from "../src/combat/actions.js";
+import { Actor } from "../dist/src/combat/actor.js";
+import { runTurn } from "../dist/src/combat/loop.js";
+import { tryAttack } from "../dist/src/combat/actions.js";
 import { BASE_PASSIVE_REGEN } from "../js/constants.js";
 
 function assert(cond, msg) {

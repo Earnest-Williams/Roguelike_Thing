@@ -2,8 +2,8 @@
 import type { ActorLike, GameCtx } from "@types/core";
 import { resolveAttack } from "@combat/resolve";
 import { EVENT, emit } from "@ui/event-log";
-import type { SpellDef } from "./types";
-import { SPELLS } from "./registry";
+import type { SpellDef } from "./types.js";
+import { SPELLS } from "./registry.js";
 
 function getCooldownRemaining(
   actor: ActorLike & { __spellCD?: Record<string, number> },

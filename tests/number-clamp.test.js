@@ -1,5 +1,5 @@
 import { strict as assert } from "node:assert";
-import { clamp as clampNumber } from "../src/utils/number.js";
+import { clamp as clampNumber } from "../dist/src/utils/number.js";
 import { clamp as clampFrontend } from "../js/utils.js";
 
 (function testClampInfinity() {

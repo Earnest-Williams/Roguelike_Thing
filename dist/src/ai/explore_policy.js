@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Utility exploration policy schema and helpers.
  * Policies are JSON friendly so they can be tuned outside of the codebase and

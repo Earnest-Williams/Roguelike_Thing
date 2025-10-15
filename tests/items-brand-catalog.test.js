@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
-import { ITEMS } from "../src/content/items.js";
-import { AVAILABLE_BRANDS_BY_ID } from "../src/content/brands.js";
+import { ITEMS } from "../dist/src/content/items.js";
+import { AVAILABLE_BRANDS_BY_ID } from "../dist/src/content/brands.js";
 
 (function testItemBrandsRegistered() {
   const missing = new Set();

@@ -1,7 +1,7 @@
 // tests/phase4.sim.test.js
 // @ts-nocheck
-import { simulate } from "../src/sim/sim.js";
-import { MOB_TEMPLATES } from "../src/content/mobs.js";
+import { simulate } from "../dist/src/sim/sim.js";
+import { MOB_TEMPLATES } from "../dist/src/content/mobs.js";
 
 function assert(c,m){ if(!c) throw new Error(m); }
 

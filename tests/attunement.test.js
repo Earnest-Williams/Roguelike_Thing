@@ -1,7 +1,7 @@
 // tests/attunement.test.js
 import { strict as assert } from "node:assert";
-import { Actor } from "../src/combat/actor.js";
-import { gainAttunement, decayAttunements } from "../src/combat/attunement.js";
+import { Actor } from "../dist/src/combat/actor.js";
+import { gainAttunement, decayAttunements } from "../dist/src/combat/attunement.js";
 
 (function testGainAndDecay() {
   const actor = new Actor({

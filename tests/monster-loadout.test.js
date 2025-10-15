@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 
 import { SLOT } from "../js/constants.js";
-import { applyLoadout } from "../src/game/monster.js";
+import { applyLoadout } from "../dist/src/game/monster.js";
 
 function sequenceRng(values) {
   let index = 0;

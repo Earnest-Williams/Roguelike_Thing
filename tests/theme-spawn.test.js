@@ -1,9 +1,9 @@
 import { strict as assert } from "node:assert";
 
 import { TILE_FLOOR } from "../js/constants.js";
-import { spawnByIdCounts } from "../src/game/spawn.js";
-import { MOB_TEMPLATES } from "../src/content/mobs.js";
-import { Monster } from "../src/game/monster.js";
+import { spawnByIdCounts } from "../dist/src/game/spawn.js";
+import { MOB_TEMPLATES } from "../dist/src/content/mobs.js";
+import { Monster } from "../dist/src/game/monster.js";
 
 class StubMobManager {
   constructor() {

@@ -34,13 +34,13 @@ import "./save-load-stacks-timers.test.js";
 import "./determinism-seed.test.js";
 
 import { strict as assert } from "node:assert";
-import { foldModsFromEquipment, foldMods } from "../src/combat/mod-folding.js";
-import { resolveAttack } from "../src/combat/resolve.js";
-import { finalAPForAction, finalCooldown, beginCooldown, tickCooldowns, isOnCooldown } from "../src/combat/time.js";
-import { addStatus, tickStatuses, rebuildDerived } from "../src/combat/status.js";
-import { setSeed, roll } from "../src/combat/rng.js";
-import { serializeActor, hydrateActor } from "../src/combat/save.js";
-import { Actor } from "../src/combat/actor.js";
+import { foldModsFromEquipment, foldMods } from "../dist/src/combat/mod-folding.js";
+import { resolveAttack } from "../dist/src/combat/resolve.js";
+import { finalAPForAction, finalCooldown, beginCooldown, tickCooldowns, isOnCooldown } from "../dist/src/combat/time.js";
+import { addStatus, tickStatuses, rebuildDerived } from "../dist/src/combat/status.js";
+import { setSeed, roll } from "../dist/src/combat/rng.js";
+import { serializeActor, hydrateActor } from "../dist/src/combat/save.js";
+import { Actor } from "../dist/src/combat/actor.js";
 
 function testStatusTicking() {
   const actor = { statuses: [], turn: 0, hp: 10 };

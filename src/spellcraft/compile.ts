@@ -1,7 +1,7 @@
 // @ts-nocheck
 import type { SpellDef } from "@spells/types";
-import { LIB } from "./library";
-import { KINDS, type KnowledgeFragment, type CompileAccumulator, type CompileOptions } from "./types";
+import { LIB } from "./library.js";
+import { KINDS, type KnowledgeFragment, type CompileAccumulator, type CompileOptions } from "./types.js";
 
 export const MAX_SLOTS: Readonly<Record<string, number>> = {
   [KINDS.CORE]: 1,

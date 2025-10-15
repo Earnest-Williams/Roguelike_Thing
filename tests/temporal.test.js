@@ -1,7 +1,7 @@
 // tests/temporal.test.js
 // @ts-nocheck
-import { Actor } from "../src/combat/actor.js";
-import { tryAttack } from "../src/combat/actions.js";
+import { Actor } from "../dist/src/combat/actor.js";
+import { tryAttack } from "../dist/src/combat/actions.js";
 
 function assert(cond, msg) {
   if (!cond) {

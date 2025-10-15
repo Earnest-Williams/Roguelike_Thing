@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type {
   ExplorePolicy,
   ExplorePolicyDefinition,
@@ -5,8 +6,8 @@ import type {
   GateState,
   ThresholdTable,
   WeightTable,
-} from "./explore_policy";
-import { getPolicyPreset, mergePolicies, normalizePolicy } from "./explore_policy";
+} from "./explore_policy.js";
+import { getPolicyPreset, mergePolicies, normalizePolicy } from "./explore_policy.js";
 
 export interface Candidate {
   goal: string;

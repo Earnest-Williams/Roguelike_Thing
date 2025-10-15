@@ -1,5 +1,5 @@
-import { LIB } from "./library";
-import { KINDS } from "./types";
+import { LIB } from "./library.js";
+import { KINDS } from "./types.js";
 export const MAX_SLOTS = {
     [KINDS.CORE]: 1,
     [KINDS.FORM]: 1,

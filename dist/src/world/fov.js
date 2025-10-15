@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { clamp, colorStringToRgb, getNow as defaultGetNow, posKey, smoothstep01 } from "../../js/utils.js";
 import { FOV_TRANSFORMS, TILE_WALL } from "../../js/constants.js";
 function clampUnitInterval(value) {

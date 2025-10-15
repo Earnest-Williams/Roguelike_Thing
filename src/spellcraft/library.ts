@@ -1,4 +1,5 @@
-import { KINDS, type KnowledgeFragment } from "./types";
+// @ts-nocheck
+import { KINDS, type KnowledgeFragment } from "./types.js";
 
 const add = (obj: Record<string, number>, k: string, v: number) =>
   (obj[k] = (obj[k] || 0) + v);

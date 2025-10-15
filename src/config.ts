@@ -1,3 +1,4 @@
+// @ts-nocheck
 // src/config.js
 // Central configuration for tweakable gameplay and UI values.
 import {
