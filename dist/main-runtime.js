@@ -26,6 +26,7 @@ import { tryAttack, tryAttackEquipped } from "./src/combat/actions.js";
 import { FurnitureKind, FurnitureOrientation, Door, DOOR_TYPE, DOOR_STATE, DOOR_VARIANT_IDS, FURNITURE_EFFECT_IDS, } from "./src/world/furniture/index.js";
 import { generateDoorsForDungeon } from "./src/world/dungeon/door-placement.js";
 import { computeFieldOfView, computeLightOverlayVisuals, } from "./src/world/fov.js";
+import { computeVisionWithLights, filterLightsInLineOfSight, describeLightSignature, } from "./src/world/vision.js";
 import { createCompositeLightContext, compositeOverlayAt } from "./src/world/light_math.js";
 import { setAIOverlayEnabled, updateAIOverlay } from "./src/debug/ai_overlay.js";
 import "./src/combat/status-registry.js";
@@ -1916,15 +1917,43 @@ const Game = (() => {
      */
     function computeVisibleCells(pos) {
         const key = posKey(pos);
-        const radius = readPlayerLightRadius();
+        const baseRadius = readPlayerLightRadius();
+        const worldLightEntities = mapState?.groundItems ?? mapState?.entities ?? [];
+        const mobList = resolveMobListForLighting(mobManager);
+        const allLights = collectWorldLightSources({
+            player,
+            entities: Array.isArray(worldLightEntities) ? worldLightEntities : [],
+            mobs: mobList,
+            mapState,
+        });
+        const filteredLights = filterLightsInLineOfSight({
+            lights: allLights,
+            origin: pos,
+            grid: mapState?.grid,
+        });
+        const lightSignature = describeLightSignature(filteredLights);
         if (fovState.lastCache.visible &&
             fovState.lastCache.key === key &&
-            fovState.lastCache.radius === radius) {
+            fovState.lastCache.radius === baseRadius &&
+            fovState.lastCache.lightSignature === lightSignature) {
             return fovState.lastCache.visible;
         }
-        const visible = computeFieldOfView(pos, radius, mapState, { useKnownGrid: false });
-        fovState.lastCache = { key, radius, visible };
-        return visible;
+        const vision = computeVisionWithLights({
+            origin: pos,
+            baseRadius,
+            mapState,
+            lights: filteredLights,
+            lightsAlreadyFiltered: true,
+        });
+        fovState.lastCache = {
+            key,
+            radius: baseRadius,
+            visible: vision.visible,
+            lightSignature,
+            extraLit: vision.extraLit,
+            playerLos: vision.playerLos,
+        };
+        return vision.visible;
     }
     // --- A* PATHFINDING FOR MAP VALIDATION ---
     function inBounds(grid, x, y) {
@@ -3833,24 +3862,21 @@ const Game = (() => {
         const lightRadius = readPlayerLightRadius();
         const radiusSq = lightRadius * lightRadius;
         explorationState.newlyExplored = [];
-        const visibleCells = computeFieldOfView(pos, lightRadius, mapState, {
-            useKnownGrid: false,
-        });
-        fovState.lastCache = {
-            key: posKey(pos),
-            radius: lightRadius,
-            visible: visibleCells,
-        };
+        const visibleCells = computeVisibleCells(pos);
+        const lastCache = fovState.lastCache ?? {};
+        const extraLit = lastCache.extraLit instanceof Set ? lastCache.extraLit : new Set();
         const cellsToUpdate = new Set(visibleCells);
         for (const cellKey of visibleCells) {
             const [x, y] = cellKey.split(",").map(Number);
             if (mapState.grid[y][x] === TILE_FLOOR) {
+                const floorKey = cellKey;
+                const isExtraLit = extraLit.has(floorKey);
                 for (const { dx, dy } of CARDINAL_DIRECTIONS) {
                     const n = { x: x + dx, y: y + dy };
                     const withinRadius = (n.x - pos.x) * (n.x - pos.x) +
                         (n.y - pos.y) * (n.y - pos.y) <=
                         radiusSq;
-                    if (withinRadius &&
+                    if ((withinRadius || isExtraLit) &&
                         n.x >= 0 &&
                         n.x < mapState.width &&
                         n.y >= 0 &&
@@ -4735,7 +4761,14 @@ const Game = (() => {
         gameState.hasPrevPlayerPos = hasPrevPlayerPos;
         fovState.currentVisible = new Set();
         explorationState.newlyExplored = [];
-        fovState.lastCache = { key: null, radius: null, visible: null };
+        fovState.lastCache = {
+            key: null,
+            radius: null,
+            visible: null,
+            lightSignature: "",
+            extraLit: new Set(),
+            playerLos: new Set(),
+        };
         updateVisionAndExploration(player.startPos);
         fovState.currentVisible = computeVisibleCells(player.startPos);
         renderScene();
