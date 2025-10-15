@@ -214,6 +214,7 @@ const Game = (() => {
         }
     })();
     const MENU_SETTINGS_KEY = "rl_menu_settings";
+    const MENU_LAST_SUMMARY_KEY = "rl_last_summary";
     const LAST_RUN_MODE_KEY = "rl_last_run_mode";
     const viewportEl = (gameState.ui.viewport = document.getElementById("maze-viewport"));
     const canvas = (gameState.ui.canvas = document.getElementById("maze-canvas"));
@@ -232,6 +233,8 @@ const Game = (() => {
     const containerEl = (gameState.ui.container = document.getElementById("container"));
     let startMenuDom = null;
     let startMenuForm = null;
+    let startMenuSummaryList = null;
+    let startMenuSummaryEmpty = null;
     const uiManager = new UIManager({
         status: statusDiv,
         restartButton: restartBtn,
@@ -4823,9 +4826,16 @@ const Game = (() => {
         if (!startMenuForm) {
             startMenuForm = document.getElementById("customForm");
         }
+        if (!startMenuSummaryList) {
+            startMenuSummaryList = document.getElementById("lastRunSummaryList");
+        }
+        if (!startMenuSummaryEmpty) {
+            startMenuSummaryEmpty = document.getElementById("lastRunSummaryEmpty");
+        }
         if (startMenuForm) {
             startMenuForm.style.display = "none";
         }
+        renderLastRunSummary();
         if (startMenuDom) {
             startMenuDom.style.display = "flex";
         }
@@ -4833,6 +4843,8 @@ const Game = (() => {
     function initStartMenu() {
         startMenuDom = document.getElementById("startMenu");
         startMenuForm = document.getElementById("customForm");
+        startMenuSummaryList = document.getElementById("lastRunSummaryList");
+        startMenuSummaryEmpty = document.getElementById("lastRunSummaryEmpty");
         const quickBtn = document.getElementById("startQuickBtn");
         const openCustomBtn = document.getElementById("openCustomBtn");
         const cancelCustomBtn = document.getElementById("cancelCustomBtn");
@@ -4845,10 +4857,12 @@ const Game = (() => {
         }
         const saved = loadMenuSettings();
         prefillForm(saved);
+        renderLastRunSummary();
         quickBtn?.addEventListener("click", (event) => {
             event?.preventDefault?.();
             setLastRunMode("quick");
             applyQuickSettings({ resetSpeed: true });
+            saveLastRunSummary(createQuickSummary());
             hideStartMenu();
             startNewSimulation();
         });
@@ -4876,6 +4890,7 @@ const Game = (() => {
             event.preventDefault();
             const settings = collectFormSettings();
             saveMenuSettings(settings);
+            saveLastRunSummary(createCustomSummary(settings));
             setLastRunMode("custom");
             applyCustomSettings(settings);
             hideStartMenu();
@@ -5090,6 +5105,227 @@ const Game = (() => {
             const lines = Object.entries(arena.spawnsById || {}).map(([id, count]) => `${id}=${count}`);
             spawnArea.value = lines.join("\n");
         }
+    }
+    function createQuickSummary() {
+        const speed = Number.isFinite(CONFIG?.ai?.ticksPerSecond)
+            ? CONFIG.ai.ticksPerSecond
+            : DEFAULT_TICKS_PER_SECOND;
+        return {
+            mode: "quick",
+            timestamp: Date.now(),
+            details: { speed },
+        };
+    }
+    function createCustomSummary(settings = {}) {
+        return {
+            mode: "custom",
+            timestamp: Date.now(),
+            settings: clonePlain(settings),
+        };
+    }
+    function saveLastRunSummary(summary) {
+        if (!summary || typeof summary !== "object") {
+            return;
+        }
+        try {
+            localStorage.setItem(MENU_LAST_SUMMARY_KEY, JSON.stringify(summary));
+        }
+        catch {
+            // ignore storage errors
+        }
+        renderLastRunSummary(summary);
+    }
+    function loadLastRunSummary() {
+        try {
+            const raw = localStorage.getItem(MENU_LAST_SUMMARY_KEY);
+            if (!raw)
+                return null;
+            const parsed = JSON.parse(raw);
+            return parsed && typeof parsed === "object" ? parsed : null;
+        }
+        catch {
+            return null;
+        }
+    }
+    function renderLastRunSummary(summaryOverride = null) {
+        if (!startMenuSummaryList) {
+            startMenuSummaryList = document.getElementById("lastRunSummaryList");
+        }
+        if (!startMenuSummaryEmpty) {
+            startMenuSummaryEmpty = document.getElementById("lastRunSummaryEmpty");
+        }
+        if (!startMenuSummaryList || !startMenuSummaryEmpty) {
+            return;
+        }
+        const summary = summaryOverride || loadLastRunSummary();
+        if (!summary) {
+            startMenuSummaryList.innerHTML = "";
+            startMenuSummaryEmpty.style.display = "";
+            return;
+        }
+        const entries = createSummaryEntries(summary);
+        startMenuSummaryList.innerHTML = "";
+        if (!entries.length) {
+            startMenuSummaryEmpty.style.display = "";
+            return;
+        }
+        startMenuSummaryEmpty.style.display = "none";
+        const frag = document.createDocumentFragment();
+        for (const entry of entries) {
+            const dt = document.createElement("dt");
+            dt.textContent = entry.label;
+            const dd = document.createElement("dd");
+            dd.textContent = entry.value;
+            frag.appendChild(dt);
+            frag.appendChild(dd);
+        }
+        startMenuSummaryList.appendChild(frag);
+    }
+    function createSummaryEntries(summary) {
+        if (!summary || typeof summary !== "object") {
+            return [];
+        }
+        const entries = [];
+        const mode = summary.mode === "custom" ? "Custom run" : "Quick start";
+        entries.push({ label: "Mode", value: mode });
+        const timestamp = Number(summary.timestamp);
+        if (Number.isFinite(timestamp)) {
+            const date = new Date(timestamp);
+            if (!Number.isNaN(date.getTime())) {
+                entries.push({
+                    label: "Saved",
+                    value: date.toLocaleString(undefined, {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                    }),
+                });
+            }
+        }
+        if (summary.mode !== "custom") {
+            const speed = Number(summary?.details?.speed);
+            if (Number.isFinite(speed)) {
+                entries.push({ label: "Speed", value: `${speed} tps` });
+            }
+            entries.push({ label: "Parameters", value: "Default configuration" });
+            return entries;
+        }
+        const settings = summary.settings && typeof summary.settings === "object"
+            ? summary.settings
+            : {};
+        if (Number.isFinite(settings.seed)) {
+            entries.push({ label: "Seed", value: String(settings.seed >>> 0) });
+        }
+        if (Number.isFinite(settings.depth)) {
+            entries.push({ label: "Depth", value: `${Math.max(0, settings.depth)}` });
+        }
+        if (Number.isFinite(settings.initialSpawns)) {
+            entries.push({
+                label: "Initial spawns",
+                value: `${Math.max(0, settings.initialSpawns)}`,
+            });
+        }
+        if (Number.isFinite(settings.tps)) {
+            entries.push({ label: "Speed override", value: `${settings.tps} tps` });
+        }
+        if (Array.isArray(settings.monsterTags) && settings.monsterTags.length) {
+            entries.push({
+                label: "Monster tags",
+                value: settings.monsterTags.join(", "),
+            });
+        }
+        const gen = settings.gen && typeof settings.gen === "object" ? settings.gen : {};
+        const doorSpawn = Number(gen?.doors?.spawnChance);
+        if (Number.isFinite(doorSpawn)) {
+            entries.push({
+                label: "Door spawn",
+                value: `${(Math.round(doorSpawn * 100) / 100).toFixed(2)}`,
+            });
+        }
+        const extraEdges = Number(gen?.extraEdgesFraction);
+        if (Number.isFinite(extraEdges)) {
+            entries.push({
+                label: "Extra corridors",
+                value: `${(Math.round(extraEdges * 100) / 100).toFixed(2)}`,
+            });
+        }
+        const smallRooms = gen?.smallRooms && typeof gen.smallRooms === "object"
+            ? gen.smallRooms
+            : {};
+        const candidateCount = Number(smallRooms?.candidateCount);
+        if (Number.isFinite(candidateCount)) {
+            entries.push({
+                label: "Small room candidates",
+                value: `${Math.max(0, Math.floor(candidateCount))}`,
+            });
+        }
+        const minSize = Number(smallRooms?.minSize);
+        if (Number.isFinite(minSize)) {
+            entries.push({ label: "Small room min", value: `${Math.max(1, minSize)}` });
+        }
+        const maxSize = Number(smallRooms?.maxSize);
+        if (Number.isFinite(maxSize)) {
+            entries.push({ label: "Small room max", value: `${Math.max(1, maxSize)}` });
+        }
+        const knobs = settings.knobs && typeof settings.knobs === "object"
+            ? settings.knobs
+            : {};
+        const fovOverride = Number(knobs?.playerFovOverride);
+        if (Number.isFinite(fovOverride)) {
+            entries.push({ label: "Player FOV", value: `${Math.max(0, fovOverride)}` });
+        }
+        const spawnDist = Number(knobs?.spawnMinDistance);
+        if (Number.isFinite(spawnDist)) {
+            entries.push({
+                label: "Spawn distance",
+                value: `${Math.max(0, Math.floor(spawnDist))}`,
+            });
+        }
+        const mapWidth = Number(knobs?.mapWidth);
+        if (Number.isFinite(mapWidth)) {
+            entries.push({ label: "Map width", value: `${Math.max(8, mapWidth)}` });
+        }
+        const mapHeight = Number(knobs?.mapHeight);
+        if (Number.isFinite(mapHeight)) {
+            entries.push({ label: "Map height", value: `${Math.max(8, mapHeight)}` });
+        }
+        const arena = settings?.modes?.arena &&
+            typeof settings.modes.arena === "object"
+            ? settings.modes.arena
+            : null;
+        if (arena) {
+            const enabled = !!arena.enabled;
+            if (enabled) {
+                const width = Number.isFinite(arena.width) ? arena.width : undefined;
+                const height = Number.isFinite(arena.height) ? arena.height : undefined;
+                const size = width && height ? ` (${width}×${height})` : "";
+                entries.push({ label: "Arena", value: `Enabled${size}` });
+            }
+            else {
+                entries.push({ label: "Arena", value: "Disabled" });
+            }
+            const suppressExit = arena.suppressExitSeekUntilClear;
+            if (enabled && suppressExit !== undefined) {
+                entries.push({
+                    label: "Exit delay",
+                    value: suppressExit ? "Wait for safe exit" : "Exit immediately",
+                });
+            }
+            if (enabled && arena.spawnsById) {
+                const spawnEntries = Object.entries(arena.spawnsById)
+                    .filter(([, value]) => Number.isFinite(Number(value)) && Number(value) > 0)
+                    .map(([id, value]) => `${id}×${value}`);
+                if (spawnEntries.length) {
+                    entries.push({
+                        label: "Arena spawns",
+                        value: spawnEntries.join(", "),
+                    });
+                }
+            }
+        }
+        return entries;
     }
     function setLastRunMode(mode) {
         try {
