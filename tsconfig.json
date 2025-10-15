@@ -28,6 +28,7 @@
     "main.ts",
     "main-runtime.ts",
     "js/**/*.ts",
+    "js/**/*.d.ts",
     "src/**/*",
     "tests/**/*.ts"
   ]
