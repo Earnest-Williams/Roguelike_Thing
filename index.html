@@ -326,6 +326,37 @@
         <div id="maze-viewport">
           <canvas id="maze-canvas"></canvas>
         </div>
+        <div
+          id="mob-inspector"
+          role="dialog"
+          aria-live="polite"
+          aria-label="Mob inspector"
+          data-visible="false"
+        >
+          <div class="mob-inspector-header">
+            <h2 id="mob-inspector-title">Mob Details</h2>
+            <button
+              type="button"
+              id="mob-inspector-close"
+              aria-label="Close mob inspector"
+            >
+              ×
+            </button>
+          </div>
+          <dl id="mob-inspector-stats" class="mob-inspector-stats"></dl>
+          <div class="mob-inspector-section">
+            <h3>Inventory</h3>
+            <ul id="mob-inspector-inventory" class="mob-inspector-list"></ul>
+          </div>
+          <div class="mob-inspector-section">
+            <h3>Equipment</h3>
+            <ul id="mob-inspector-equipment" class="mob-inspector-list"></ul>
+          </div>
+          <div class="mob-inspector-section">
+            <h3>Brain</h3>
+            <pre id="mob-inspector-brain" class="mob-inspector-brain"></pre>
+          </div>
+        </div>
         <div id="status">Generating dungeon...</div>
         <div id="controls">
           <label for="speed-slider">Speed:</label>

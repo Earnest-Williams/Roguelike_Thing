@@ -232,6 +232,19 @@ const Game = (() => {
     const lightSettingsPanelEl = (gameState.ui.lightSettingsPanel =
         document.getElementById("light-settings-panel"));
     const containerEl = (gameState.ui.container = document.getElementById("container"));
+    const mobInspectorEl = (gameState.ui.mobInspector = document.getElementById("mob-inspector"));
+    const mobInspectorTitle = (gameState.ui.mobInspectorTitle =
+        document.getElementById("mob-inspector-title"));
+    const mobInspectorStats = (gameState.ui.mobInspectorStats =
+        document.getElementById("mob-inspector-stats"));
+    const mobInspectorInventory = (gameState.ui.mobInspectorInventory =
+        document.getElementById("mob-inspector-inventory"));
+    const mobInspectorEquipment = (gameState.ui.mobInspectorEquipment =
+        document.getElementById("mob-inspector-equipment"));
+    const mobInspectorBrain = (gameState.ui.mobInspectorBrain =
+        document.getElementById("mob-inspector-brain"));
+    const mobInspectorCloseBtn = (gameState.ui.mobInspectorClose =
+        document.getElementById("mob-inspector-close"));
     let startMenuDom = null;
     let startMenuForm = null;
     let startMenuSummaryList = null;
@@ -253,6 +266,19 @@ const Game = (() => {
     gameState.render.renderController = renderController;
     let rendererReady = false;
     gameState.render.ready = rendererReady;
+    if (mobInspectorCloseBtn) {
+        mobInspectorCloseBtn.addEventListener("click", () => hideMobInspector());
+    }
+    if (typeof document !== "undefined") {
+        document.addEventListener("keydown", (event) => {
+            if (event.key === "Escape" && isMobInspectorVisible()) {
+                hideMobInspector();
+            }
+        });
+    }
+    if (viewportEl) {
+        viewportEl.addEventListener("click", handleMobInspectorClick);
+    }
     let minimapModalEl = (gameState.ui.minimapModal = document.getElementById("minimapModal"));
     const minimapCanvasEl = (gameState.ui.minimapCanvas =
         document.getElementById("minimapCanvas"));
@@ -484,6 +510,7 @@ const Game = (() => {
         gameState.player = player;
     }
     let mobManager = gameState.mobManager;
+    let inspectedMob = null;
     let isEndRendered = gameState.isEndRendered;
     const INVALID_POSITION_COORD = -1;
     let prevPlayerPos = gameState.prevPlayerPos;
@@ -3265,6 +3292,7 @@ const Game = (() => {
         uiManager.setupEquipmentSlots(ALL_SLOTS_ORDER, labelForSlot);
         uiManager.setupInventorySlots(invCapacity);
         updateResponsiveLayout(false);
+        hideMobInspector();
     }
     function tooltipForItem(item) {
         if (!item)
@@ -3293,6 +3321,370 @@ const Game = (() => {
             capacity: player.inventory.capacitySlots,
             tooltipForStack,
         });
+    }
+    function safeStringify(value) {
+        if (value == null)
+            return "";
+        const seen = new WeakSet();
+        try {
+            return JSON.stringify(value, (key, val) => {
+                if (typeof val === "bigint")
+                    return val.toString();
+                if (typeof val === "symbol")
+                    return val.toString();
+                if (typeof val === "function") {
+                    return `[Function ${val.name || "anonymous"}]`;
+                }
+                if (val instanceof Map) {
+                    return Array.from(val.entries());
+                }
+                if (val instanceof Set) {
+                    return Array.from(val.values());
+                }
+                if (val && typeof val === "object") {
+                    if (seen.has(val))
+                        return "[Circular]";
+                    seen.add(val);
+                }
+                return val;
+            }, 2);
+        }
+        catch (err) {
+            try {
+                return String(value);
+            }
+            catch {
+                return "[unserializable]";
+            }
+        }
+    }
+    function renderDefinitionList(container, entries) {
+        if (!container || typeof document === "undefined")
+            return;
+        container.textContent = "";
+        if (!Array.isArray(entries) || !entries.length)
+            return;
+        for (const entry of entries) {
+            if (!entry || typeof entry.term !== "string")
+                continue;
+            const dt = document.createElement("dt");
+            dt.textContent = entry.term;
+            const dd = document.createElement("dd");
+            dd.textContent = entry.detail != null ? String(entry.detail) : "";
+            container.appendChild(dt);
+            container.appendChild(dd);
+        }
+    }
+    function renderList(container, entries, emptyMessage) {
+        if (!container || typeof document === "undefined")
+            return;
+        container.textContent = "";
+        const list = Array.isArray(entries) ? entries : [];
+        if (!list.length) {
+            const li = document.createElement("li");
+            li.classList.add("mob-inspector-empty");
+            li.textContent = emptyMessage;
+            container.appendChild(li);
+            return;
+        }
+        for (const entry of list) {
+            if (entry == null)
+                continue;
+            const li = document.createElement("li");
+            li.textContent = String(entry);
+            container.appendChild(li);
+        }
+    }
+    function resolveItemName(entry) {
+        if (!entry)
+            return "Unknown item";
+        let current = entry;
+        let guard = 0;
+        while (current &&
+            typeof current === "object" &&
+            "item" in current &&
+            current.item &&
+            current.item !== current &&
+            guard < 6) {
+            current = current.item;
+            guard += 1;
+        }
+        if (typeof current?.name === "string" && current.name.trim()) {
+            return current.name;
+        }
+        if (typeof current?.id === "string") {
+            return current.id;
+        }
+        return "Unknown item";
+    }
+    function collectInventoryEntries(mob) {
+        const entries = [];
+        if (!mob)
+            return entries;
+        let stacks = null;
+        if (Array.isArray(mob?.inventory?.stacks)) {
+            stacks = mob.inventory.stacks;
+        }
+        else if (typeof mob?.inventory?.list === "function") {
+            try {
+                const result = mob.inventory.list();
+                if (Array.isArray(result))
+                    stacks = result;
+            }
+            catch {
+                // ignore inventory access failures
+            }
+        }
+        if (!Array.isArray(stacks))
+            return entries;
+        for (let i = 0; i < stacks.length; i++) {
+            const stack = stacks[i];
+            if (!stack)
+                continue;
+            const item = stack.item ?? stack;
+            const qty = Number.isFinite(stack.qty) ? stack.qty : 1;
+            const qtySuffix = qty > 1 ? ` ×${qty}` : "";
+            entries.push(`Slot ${i + 1}: ${resolveItemName(item)}${qtySuffix}`);
+        }
+        return entries;
+    }
+    function collectEquipmentEntries(mob) {
+        const entries = [];
+        if (!mob)
+            return entries;
+        const seen = new Set();
+        if (mob?.equipment?.slots instanceof Map) {
+            for (const slot of ALL_SLOTS_ORDER) {
+                if (!mob.equipment.slots.has(slot))
+                    continue;
+                const item = mob.equipment.slots.get(slot);
+                if (!item)
+                    continue;
+                seen.add(slot);
+                entries.push(`${labelForSlot(slot)}: ${resolveItemName(item)}`);
+            }
+        }
+        else if (mob?.equipment instanceof Map) {
+            for (const [slot, item] of mob.equipment.entries()) {
+                if (!item)
+                    continue;
+                seen.add(slot);
+                entries.push(`${labelForSlot(slot)}: ${resolveItemName(item)}`);
+            }
+        }
+        else if (mob?.equipment && typeof mob.equipment === "object") {
+            for (const slot of ALL_SLOTS_ORDER) {
+                if (!Object.prototype.hasOwnProperty.call(mob.equipment, slot))
+                    continue;
+                const item = mob.equipment[slot];
+                if (!item)
+                    continue;
+                seen.add(slot);
+                entries.push(`${labelForSlot(slot)}: ${resolveItemName(item)}`);
+            }
+            for (const [slot, item] of Object.entries(mob.equipment)) {
+                if (seen.has(slot) || !item)
+                    continue;
+                entries.push(`${labelForSlot(slot)}: ${resolveItemName(item)}`);
+            }
+        }
+        return entries;
+    }
+    function resolveMaxHp(mob, actor) {
+        const mobMax = Number.isFinite(mob?.maxHp) ? Number(mob.maxHp) : null;
+        if (Number.isFinite(mobMax))
+            return Math.round(mobMax);
+        const resources = [mob?.res, mob?.resources, actor?.res, actor?.resources];
+        for (const res of resources) {
+            if (res && Number.isFinite(res.maxHP)) {
+                return Math.round(res.maxHP);
+            }
+        }
+        const bases = [actor?.base, actor?.baseStats];
+        for (const base of bases) {
+            if (base && Number.isFinite(base.maxHP)) {
+                return Math.round(base.maxHP);
+            }
+        }
+        return null;
+    }
+    function isMobInspectorVisible() {
+        return mobInspectorEl?.dataset?.visible === "true";
+    }
+    function hideMobInspector() {
+        inspectedMob = null;
+        if (mobInspectorEl) {
+            mobInspectorEl.dataset.visible = "false";
+        }
+    }
+    function showMobInspector(mob) {
+        if (!mobInspectorEl)
+            return;
+        if (!mob) {
+            hideMobInspector();
+            return;
+        }
+        inspectedMob = mob;
+        mobInspectorEl.dataset.visible = "true";
+        if (mobInspectorTitle) {
+            const name = (typeof mob.name === "string" && mob.name) ||
+                (typeof mob.actor?.name === "string" && mob.actor.name) ||
+                (typeof mob.id === "string" && mob.id) ||
+                "Unknown mob";
+            const kind = (typeof mob.kind === "string" && mob.kind) ||
+                (typeof mob.actor?.kind === "string" && mob.actor.kind) ||
+                "";
+            mobInspectorTitle.textContent = kind ? `${name} (${kind})` : name;
+        }
+        const actor = mob.actor ?? mob.__actor ?? null;
+        const statsEntries = [];
+        const posX = Number.isFinite(mob?.x) ? mob.x : Number(mob?.pos?.x);
+        const posY = Number.isFinite(mob?.y) ? mob.y : Number(mob?.pos?.y);
+        statsEntries.push({
+            term: "Position",
+            detail: Number.isFinite(posX) && Number.isFinite(posY)
+                ? `${posX}, ${posY}`
+                : "Unknown",
+        });
+        const current = currentHp(mob);
+        const max = resolveMaxHp(mob, actor);
+        statsEntries.push({
+            term: "HP",
+            detail: Number.isFinite(max) ? `${current} / ${max}` : `${current}`,
+        });
+        const stamina = Number.isFinite(actor?.res?.stamina)
+            ? actor.res.stamina
+            : Number.isFinite(actor?.resources?.stamina)
+                ? actor.resources.stamina
+                : Number.isFinite(mob?.res?.stamina)
+                    ? mob.res.stamina
+                    : Number.isFinite(mob?.resources?.stamina)
+                        ? mob.resources.stamina
+                        : null;
+        if (Number.isFinite(stamina)) {
+            statsEntries.push({ term: "Stamina", detail: `${Math.round(stamina)}` });
+        }
+        const mana = Number.isFinite(actor?.res?.mana)
+            ? actor.res.mana
+            : Number.isFinite(actor?.resources?.mana)
+                ? actor.resources.mana
+                : Number.isFinite(mob?.res?.mana)
+                    ? mob.res.mana
+                    : Number.isFinite(mob?.resources?.mana)
+                        ? mob.resources.mana
+                        : null;
+        if (Number.isFinite(mana)) {
+            statsEntries.push({ term: "Mana", detail: `${Math.round(mana)}` });
+        }
+        const factions = (Array.isArray(mob?.factions) && mob.factions.length && mob.factions) ||
+            (Array.isArray(actor?.factions) && actor.factions.length && actor.factions) ||
+            null;
+        if (factions) {
+            statsEntries.push({ term: "Factions", detail: factions.join(", ") });
+        }
+        const affiliations = (Array.isArray(mob?.affiliations) &&
+            mob.affiliations.length &&
+            mob.affiliations) ||
+            (Array.isArray(actor?.affiliations) &&
+                actor.affiliations.length &&
+                actor.affiliations) ||
+            null;
+        if (affiliations) {
+            statsEntries.push({
+                term: "Affiliations",
+                detail: affiliations.join(", "),
+            });
+        }
+        const baseStats = actor?.base ?? actor?.baseStats ?? null;
+        if (baseStats) {
+            const statLine = [
+                `STR ${Math.round(baseStats.str ?? 0)}`,
+                `DEX ${Math.round(baseStats.dex ?? 0)}`,
+                `INT ${Math.round(baseStats.int ?? 0)}`,
+                `VIT ${Math.round(baseStats.vit ?? 0)}`,
+                `CON ${Math.round(baseStats.con ?? 0)}`,
+                `WILL ${Math.round(baseStats.will ?? 0)}`,
+                `LUCK ${Math.round(baseStats.luck ?? 0)}`,
+            ].join(", ");
+            statsEntries.push({ term: "Base Stats", detail: statLine });
+        }
+        const statusesSource = (Array.isArray(actor?.statuses) && actor.statuses.length && actor.statuses) ||
+            (Array.isArray(mob?.statuses) && mob.statuses.length && mob.statuses) ||
+            null;
+        if (Array.isArray(statusesSource) && statusesSource.length) {
+            const formatted = statusesSource
+                .map((status) => {
+                if (!status)
+                    return null;
+                const id = typeof status.id === "string" ? status.id : "status";
+                const stacks = Number.isFinite(status.stacks) && status.stacks !== 1
+                    ? ` ×${status.stacks}`
+                    : "";
+                return `${id}${stacks}`;
+            })
+                .filter(Boolean);
+            if (formatted.length) {
+                statsEntries.push({
+                    term: "Statuses",
+                    detail: formatted.join(", "),
+                });
+            }
+        }
+        renderDefinitionList(mobInspectorStats, statsEntries);
+        renderList(mobInspectorInventory, collectInventoryEntries(mob), "Inventory is empty");
+        renderList(mobInspectorEquipment, collectEquipmentEntries(mob), "No equipment equipped");
+        if (mobInspectorBrain) {
+            const brain = mob.lastPlannerDecision ?? actor?.lastPlannerDecision ?? null;
+            mobInspectorBrain.textContent = brain
+                ? safeStringify(brain)
+                : "No planner data available";
+        }
+    }
+    function handleMobInspectorClick(event) {
+        if (!simState?.isPaused)
+            return;
+        if (!canvas)
+            return;
+        if (!mapState.width || !mapState.height)
+            return;
+        if (CELL_SIZE <= 0)
+            return;
+        const rect = canvas.getBoundingClientRect();
+        if (!rect || rect.width === 0 || rect.height === 0)
+            return;
+        const scaleX = canvas.width / rect.width || 1;
+        const scaleY = canvas.height / rect.height || 1;
+        const localX = (event.clientX - rect.left) * scaleX;
+        const localY = (event.clientY - rect.top) * scaleY;
+        if (localX < 0 ||
+            localY < 0 ||
+            localX > canvas.width ||
+            localY > canvas.height) {
+            hideMobInspector();
+            return;
+        }
+        const tileX = Math.floor(localX / CELL_SIZE);
+        const tileY = Math.floor(localY / CELL_SIZE);
+        if (!Number.isFinite(tileX) ||
+            !Number.isFinite(tileY) ||
+            tileX < 0 ||
+            tileY < 0 ||
+            tileX >= mapState.width ||
+            tileY >= mapState.height) {
+            hideMobInspector();
+            return;
+        }
+        const mob = getMobAtPosition(tileX, tileY);
+        if (mob && inspectedMob && mob === inspectedMob && isMobInspectorVisible()) {
+            hideMobInspector();
+            return;
+        }
+        if (mob) {
+            showMobInspector(mob);
+        }
+        else {
+            hideMobInspector();
+        }
     }
     function calculateViewportTransform(playerPos) {
         const mapPxW = mapState.width * CELL_SIZE;
@@ -4549,6 +4941,9 @@ const Game = (() => {
             msg: simState.isPaused ? "Simulation paused" : "Simulation resumed",
             paused: simState.isPaused,
         });
+        if (!simState.isPaused) {
+            hideMobInspector();
+        }
         if (!simState.isPaused && typeof simState.loopFn === "function") {
             simState.timeout = setTimeout(simState.loopFn, 1000 / simState.speed); // Resume the loop
         }
@@ -4563,6 +4958,7 @@ const Game = (() => {
             paused: false,
             restartVisible: false,
         });
+        hideMobInspector();
         currentEndPos = null;
         gameState.currentEndPos = currentEndPos;
         hasPrevPlayerPos = false;
