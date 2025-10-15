@@ -67,6 +67,19 @@ export const MOB_TEMPLATES = {
     loadout: ["battle_axe"],
     glyph: "o", color: "#8bc34a",
   },
+
+  dummy: {
+    id: "dummy",
+    name: "Debug Dummy",
+    factions: ["unaligned"],
+    affiliations: [],
+    tags: ["debug", "test", "target"],
+    spawnWeight: 0,
+    baseStats: { str: 1, dex: 1, int: 1, vit: 1, con: 1, will: 1, luck: 1,
+                 maxHP: 1, maxStamina: 1, maxMana: 0, baseSpeed: 1 },
+    loadout: [],
+    glyph: "*", color: "#9e9e9e",
+  },
 };
 
 // --- TEMPLATE VALIDATION ---
