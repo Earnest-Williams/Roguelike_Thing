@@ -3,7 +3,7 @@
 import { BASE_ITEMS } from "../content/items.js";
 import { MOB_TEMPLATES, cloneGuardConfig, cloneWanderConfig } from "../content/mobs.js";
 import { normalizeRoleIdList, resolveRoleTemplates } from "../content/roles.js";
-import { SLOT } from "../../js/constants.js";
+import { DEFAULT_AP_CAP, SLOT } from "../../js/constants.js";
 import { makeItem, registerItem, upsertItem } from "../../js/item-system.js";
 import { Actor } from "../combat/actor.js";
 import { attachLogs } from "../combat/debug-log.js";
@@ -76,6 +76,11 @@ export function createActorFromTemplate(tid) {
     factions: t.factions,
     affiliations: t.affiliations,
   });
+
+  if (!Number.isFinite(a.ap) || a.ap <= 0) {
+    const cap = Number.isFinite(a.apCap) && a.apCap > 0 ? a.apCap : DEFAULT_AP_CAP;
+    a.ap = cap;
+  }
 
   Object.defineProperty(a, "__template", {
     value: t,
