@@ -5,8 +5,8 @@ import { FactionService } from "../game/faction-service.js";
 // All entity targeting must normalize to Actor and exclude self before hostility checks.
 import { asActor } from "../combat/actor.js";
 import { hasLineOfSight } from "../../js/utils.js";
-import { evaluateCandidates, explainDecision, clamp01 as clamp01Utility } from "../ai/planner.js";
-import { computePathCost } from "../ai/path_cost.js";
+import { evaluateCandidates, explainDecision, clamp01 as clamp01Utility } from "../ai/planner";
+import { computePathCost } from "../ai/path_cost";
 import { TILE_FLOOR } from "../../js/constants.js";
 
 /**

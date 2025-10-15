@@ -55,19 +55,23 @@ const ZERO_WEIGHTS: PathCostWeights = Object.freeze({
   unexplored: 0,
 });
 
-export function normalizePolicy(def: ExplorePolicyDefinition): ExplorePolicy {
+export function normalizePolicy(def?: ExplorePolicyDefinition | ExplorePolicy): ExplorePolicy {
+  const base: ExplorePolicyDefinition = def ? { ...def } : ({} as ExplorePolicyDefinition);
   return {
-    ...def,
-    switches: { ...(def.switches ?? {}) },
-    thresholds: { ...(def.thresholds ?? {}) },
-    weights: { ...(def.weights ?? {}) },
-    gates: { ...(def.gates ?? {}) },
-    formulas: { ...(def.formulas ?? {}) },
-    pathCost: { ...ZERO_WEIGHTS, ...(def.pathCost ?? {}) },
-  };
+    ...base,
+    switches: { ...(base.switches ?? {}) },
+    thresholds: { ...(base.thresholds ?? {}) },
+    weights: { ...(base.weights ?? {}) },
+    gates: { ...(base.gates ?? {}) },
+    formulas: { ...(base.formulas ?? {}) },
+    pathCost: { ...ZERO_WEIGHTS, ...(base.pathCost ?? {}) },
+  } as ExplorePolicy;
 }
 
-export function mergePolicies(base: ExplorePolicyDefinition, overrides?: Partial<ExplorePolicyDefinition>): ExplorePolicy {
+export function mergePolicies(
+  base: ExplorePolicyDefinition | ExplorePolicy,
+  overrides?: Partial<ExplorePolicyDefinition>,
+): ExplorePolicy {
   if (!overrides) return normalizePolicy(base);
   const merged: ExplorePolicyDefinition = {
     ...base,
