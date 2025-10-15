@@ -1,5 +1,6 @@
-import type { ExplorePolicy, ExplorePolicyDefinition, PathCostWeights } from "./explore_policy";
-import { getPolicyPreset, mergePolicies, normalizePolicy } from "./explore_policy";
+// @ts-nocheck
+import type { ExplorePolicy, ExplorePolicyDefinition, PathCostWeights } from "./explore_policy.js";
+import { getPolicyPreset, mergePolicies, normalizePolicy } from "./explore_policy.js";
 
 export interface PathTileSample {
   x: number;

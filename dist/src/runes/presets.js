@@ -1,4 +1,5 @@
-import { RUNE_ANCHOR, RUNE_TRIGGER, RUNE_EFFECT } from "./types";
+// @ts-nocheck
+import { RUNE_ANCHOR, RUNE_TRIGGER, RUNE_EFFECT } from "./types.js";
 export const RUNES = {
     fireburst_sigil: {
         id: "fireburst_sigil",

@@ -2,7 +2,7 @@
 import type { ActorLike, GameCtx } from "@types/core";
 import { resolveAttack } from "@combat/resolve";
 import { EVENT, emit } from "@ui/event-log";
-import { RUNE_TRIGGER, RUNE_EFFECT, type RuneDef, type RuneInstance } from "./types";
+import { RUNE_TRIGGER, RUNE_EFFECT, type RuneDef, type RuneInstance } from "./types.js";
 
 export class RuneStore {
   readonly byTile = new Map<string, RuneInstance[]>();

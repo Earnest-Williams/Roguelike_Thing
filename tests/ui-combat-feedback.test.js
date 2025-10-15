@@ -2,12 +2,12 @@
 // Test that combat messages appear in the UI status element
 
 import { strict as assert } from "node:assert";
-import { UIManager } from "../src/ui/UIManager.js";
-import { CombatDebugOverlay } from "../src/ui/combat-debug.js";
-import { emit, EVENT } from "../src/ui/event-log.js";
-import { attachLogs } from "../src/combat/debug-log.js";
-import { makeAttackContext, recordAttackStep } from "../src/combat/attack-context.js";
-import { breakdownFromContext } from "../src/combat/attack-breakdown.js";
+import { UIManager } from "../dist/src/ui/UIManager.js";
+import { CombatDebugOverlay } from "../dist/src/ui/combat-debug.js";
+import { emit, EVENT } from "../dist/src/ui/event-log.js";
+import { attachLogs } from "../dist/src/combat/debug-log.js";
+import { makeAttackContext, recordAttackStep } from "../dist/src/combat/attack-context.js";
+import { breakdownFromContext } from "../dist/src/combat/attack-breakdown.js";
 
 function createMockStatusElement() {
   return {

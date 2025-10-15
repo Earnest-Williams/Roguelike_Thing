@@ -1,6 +1,6 @@
 // src/combat/actor.js
 // @ts-nocheck
-import { ALL_SLOTS_ORDER, BASE_DAMAGE_MULTIPLIER, BASE_SPEED_MULTIPLIER, DEFAULT_AP_CAP, DEFAULT_BASE_ACTION_AP, MIN_TOTAL_ACTION_COST_MULTIPLIER, MIN_TOTAL_COOLDOWN_MULTIPLIER, SLOT, LIGHT_CHANNELS, } from "../../js/constants.js";
+import { ALL_SLOTS_ORDER, BASE_DAMAGE_MULTIPLIER, BASE_SPEED_MULTIPLIER, DEFAULT_AP_CAP, DEFAULT_BASE_ACTION_AP, MIN_TOTAL_ACTION_COST_MULTIPLIER, MIN_TOTAL_COOLDOWN_MULTIPLIER, LIGHT_CHANNELS, } from "../../js/constants.js";
 import { planTurn } from "./ai-planner.js";
 import { updatePerception } from "./perception.js";
 import { executeDecision } from "./actions.js";

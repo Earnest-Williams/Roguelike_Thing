@@ -1,10 +1,10 @@
 // tests/phase2.test.js
 // @ts-nocheck
-import { Actor } from "../src/combat/actor.js";
-import { addStatus, rebuildDerived } from "../src/combat/status.js";
-import { runTurn } from "../src/combat/loop.js";
-import { simplePlanner } from "../src/combat/loop.sample-planner.js";
-import { foldModsFromEquipment } from "../src/combat/mod-folding.js";
+import { Actor } from "../dist/src/combat/actor.js";
+import { addStatus, rebuildDerived } from "../dist/src/combat/status.js";
+import { runTurn } from "../dist/src/combat/loop.js";
+import { simplePlanner } from "../dist/src/combat/loop.sample-planner.js";
+import { foldModsFromEquipment } from "../dist/src/combat/mod-folding.js";
 import { makeItem } from "../js/item-system.js";
 import { SLOT } from "../js/constants.js";
 

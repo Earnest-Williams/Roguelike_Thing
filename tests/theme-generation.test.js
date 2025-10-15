@@ -1,5 +1,5 @@
 import { strict as assert } from "node:assert";
-import { generateDungeonTheme } from "../src/content/themes.js";
+import { generateDungeonTheme } from "../dist/src/content/themes.js";
 
 function makeDeterministicRng(seed = 1) {
   let state = seed;

@@ -1,7 +1,7 @@
-import { startTurn, endTurn } from "../src/combat/loop.js";
-import { resolveAttack } from "../src/combat/resolve.js";
-import { applyStatus } from "../src/combat/status.js";
-import { attachLogs } from "../src/combat/debug-log.js";
+import { startTurn, endTurn } from "../dist/src/combat/loop.js";
+import { resolveAttack } from "../dist/src/combat/resolve.js";
+import { applyStatus } from "../dist/src/combat/status.js";
+import { attachLogs } from "../dist/src/combat/debug-log.js";
 
 function mkActor(id, hp, mods) {
   const attuneRules = mods?.attunementRules || Object.create(null);

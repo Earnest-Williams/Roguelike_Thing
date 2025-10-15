@@ -1,8 +1,8 @@
 import { strict as assert } from "node:assert";
 
-import { Actor } from "../src/combat/actor.js";
-import { runTurnAsync } from "../src/combat/loop.js";
-import { EVENT, subscribe } from "../src/ui/event-log.js";
+import { Actor } from "../dist/src/combat/actor.js";
+import { runTurnAsync } from "../dist/src/combat/loop.js";
+import { EVENT, subscribe } from "../dist/src/ui/event-log.js";
 
 (async function testRunTurnAsyncAwaitsPlanner() {
   const actor = new Actor({

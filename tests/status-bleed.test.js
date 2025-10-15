@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { addStatus, tickStatuses } from "../src/combat/status.js";
+import { addStatus, tickStatuses } from "../dist/src/combat/status.js";
 
 function mkActor(hp = 20) {
   return {

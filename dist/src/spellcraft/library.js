@@ -1,4 +1,5 @@
-import { KINDS } from "./types";
+// @ts-nocheck
+import { KINDS } from "./types.js";
 const add = (obj, k, v) => (obj[k] = (obj[k] || 0) + v);
 export const LIB = {
     "core.fire": {

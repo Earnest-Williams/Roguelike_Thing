@@ -1,4 +1,4 @@
-import { getPolicyPreset, mergePolicies, normalizePolicy } from "./explore_policy";
+import { getPolicyPreset, mergePolicies, normalizePolicy } from "./explore_policy.js";
 const SAFE_FORMULA = /^[0-9+\-*/%().,_ a-zA-Z\[\]]+$/;
 const UNSAFE_TOKENS = /(constructor|__proto__|prototype|Function|globalThis|process|require)/i;
 const clamp01 = (v) => Math.max(0, Math.min(1, Number(v) || 0));

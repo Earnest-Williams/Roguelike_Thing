@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { computeItemPower } from "../src/content/power-budget.js";
+import { computeItemPower } from "../dist/src/content/power-budget.js";
 import {
   SAMPLE_GEARSETS,
   SAMPLE_GEAR_SUMMARIES,
   summarizeSampleGear,
-} from "../src/content/combat-presets.js";
+} from "../dist/src/content/combat-presets.js";
 
 (function testResistCapsAndPower() {
   const first = SAMPLE_GEARSETS[0];

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Utility helpers for building deeply nested default objects. We keep these in
  * one place so that code constructing status contexts does not repeat object

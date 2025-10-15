@@ -1,8 +1,8 @@
 // tests/phase4.perf.manual.js
 import { performance } from "perf_hooks";
 import { DAMAGE_TYPE } from "../js/constants.js";
-import { resolveAttack } from "../src/combat/resolve.js";
-import { Actor } from "../src/combat/actor.js";
+import { resolveAttack } from "../dist/src/combat/resolve.js";
+import { Actor } from "../dist/src/combat/actor.js";
 
 const a = new Actor({
   id: "A",

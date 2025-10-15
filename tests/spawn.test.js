@@ -1,8 +1,8 @@
 import { strict as assert } from "node:assert";
 
 import { TILE_FLOOR } from "../js/constants.js";
-import { buildSpawnWeights, spawnMonsters } from "../src/game/spawn.js";
-import { Monster } from "../src/game/monster.js";
+import { buildSpawnWeights, spawnMonsters } from "../dist/src/game/spawn.js";
+import { Monster } from "../dist/src/game/monster.js";
 
 function sequenceRng(values) {
   let index = 0;

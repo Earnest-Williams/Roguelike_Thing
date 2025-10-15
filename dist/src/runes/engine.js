@@ -1,6 +1,6 @@
 import { resolveAttack } from "@combat/resolve";
 import { EVENT, emit } from "@ui/event-log";
-import { RUNE_EFFECT } from "./types";
+import { RUNE_EFFECT } from "./types.js";
 export class RuneStore {
     constructor() {
         this.byTile = new Map();

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { createDefaultModCache, createEmptyStatusDerivedMods, } from "./utils.js";
 const INVALID_POSITION_COORD = -1;
 /**

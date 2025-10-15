@@ -1,3 +1,4 @@
+// @ts-nocheck
 // src/config.js
 // Central configuration for tweakable gameplay and UI values.
 import { DEFAULT_ATTACK_BASE_DAMAGE, DEFAULT_MELEE_RANGE_TILES, DEFAULT_STATUS_DURATION_TURNS, DEFAULT_STATUS_STACKS, BURN_MAX_STACKS, BURN_TICK_DAMAGE_PER_STACK, BLEED_DURATION_TURNS, BLEED_TICK_DAMAGE_PER_STACK, } from "../js/constants.js";

@@ -1,6 +1,6 @@
 import { resolveAttack } from "@combat/resolve";
 import { EVENT, emit } from "@ui/event-log";
-import { SPELLS } from "./registry";
+import { SPELLS } from "./registry.js";
 function getCooldownRemaining(actor, spellId, turn) {
     const cd = actor.__spellCD?.[spellId] ?? 0;
     return Math.max(0, cd - turn);

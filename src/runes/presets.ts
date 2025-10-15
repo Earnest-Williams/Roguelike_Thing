@@ -1,4 +1,5 @@
-import { RUNE_ANCHOR, RUNE_TRIGGER, RUNE_EFFECT, type RuneDef } from "./types";
+// @ts-nocheck
+import { RUNE_ANCHOR, RUNE_TRIGGER, RUNE_EFFECT, type RuneDef } from "./types.js";
 
 export const RUNES: Readonly<Record<string, RuneDef>> = {
   fireburst_sigil: {

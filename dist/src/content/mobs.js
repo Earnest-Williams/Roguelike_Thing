@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @file Defines mob templates. Note the separation of concerns:
  * - `id`: The species/creature type (e.g., "orc"). Role-based variants like "orc_warrior"

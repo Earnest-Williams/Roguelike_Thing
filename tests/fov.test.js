@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 
-import { computeFieldOfView } from "../src/world/fov.js";
+import { computeFieldOfView } from "../dist/src/world/fov.js";
 import { TILE_WALL } from "../js/constants.js";
 
 function buildMap(width, height, wallPositions = []) {

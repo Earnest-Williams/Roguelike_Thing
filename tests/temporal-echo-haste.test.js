@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { DAMAGE_TYPE } from "../js/constants.js";
-import { Actor } from "../src/combat/actor.js";
-import { resolveAttack } from "../src/combat/resolve.js";
+import { Actor } from "../dist/src/combat/actor.js";
+import { resolveAttack } from "../dist/src/combat/resolve.js";
 
 function createBasicActors() {
   const attacker = new Actor({

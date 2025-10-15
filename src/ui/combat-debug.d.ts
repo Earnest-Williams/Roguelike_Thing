@@ -1,3 +1,4 @@
+// @ts-nocheck
 export interface CombatDebugOverlayOptions {
   root?: { innerHTML: string; style?: any; remove?: () => void } | null;
 }

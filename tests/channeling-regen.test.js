@@ -1,9 +1,9 @@
 import { strict as assert } from "node:assert";
-import { Actor } from "../src/combat/actor.js";
-import { startTurn, endTurn } from "../src/combat/loop.js";
-import { tickResources } from "../src/combat/resources.js";
-import { hasStatus } from "../src/combat/status.js";
-import "../src/combat/status-registry.js";
+import { Actor } from "../dist/src/combat/actor.js";
+import { startTurn, endTurn } from "../dist/src/combat/loop.js";
+import { tickResources } from "../dist/src/combat/resources.js";
+import { hasStatus } from "../dist/src/combat/status.js";
+import "../dist/src/combat/status-registry.js";
 
 function makeChannelingActor() {
   const actor = new Actor({

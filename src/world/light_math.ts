@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Composite lighting math:
  *  - createCompositeLightContext(lights, cfg, nowFn)

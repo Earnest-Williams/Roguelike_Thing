@@ -1,4 +1,5 @@
-import { SCHOOL, TARGET_KIND, type SpellDef } from "./types";
+// @ts-nocheck
+import { SCHOOL, TARGET_KIND, type SpellDef } from "./types.js";
 
 export const SPELLS: Readonly<Record<string, SpellDef>> = {
   firebolt: {

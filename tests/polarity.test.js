@@ -1,7 +1,7 @@
 // tests/polarity.test.js
 // @ts-nocheck
 import assert from "node:assert/strict";
-import { normalizePolarity, polarityOffenseMult, polarityDefenseMult } from "../src/combat/polarity.js";
+import { normalizePolarity, polarityOffenseMult, polarityDefenseMult } from "../dist/src/combat/polarity.js";
 
 (function testNormalization() {
   const p = normalizePolarity({ order: 2, chaos: 1 });

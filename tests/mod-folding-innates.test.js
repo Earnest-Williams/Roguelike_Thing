@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 
-import { foldInnatesIntoModCache } from "../src/combat/mod-folding.js";
+import { foldInnatesIntoModCache } from "../dist/src/combat/mod-folding.js";
 
 (function testActorInnatesFold() {
   const actor = {

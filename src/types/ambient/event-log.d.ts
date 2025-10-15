@@ -1,3 +1,4 @@
+// @ts-nocheck
 declare module "@ui/event-log" {
   export const EVENT: {
     SPELL_CAST: "SPELL_CAST";

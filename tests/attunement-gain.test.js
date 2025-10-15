@@ -6,7 +6,7 @@ import {
   decayAttunements,
   contributeDerived,
   tickAttunements,
-} from "../src/combat/attunement.js";
+} from "../dist/src/combat/attunement.js";
 
 function fakeActorWithRule(type, patch = {}) {
   const baseRule = { onUseGain: 1, decayPerTurn: 1, maxStacks: 10, perStack: {} };

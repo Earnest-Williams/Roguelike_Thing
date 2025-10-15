@@ -1,5 +1,5 @@
-import { RUNE_TRIGGER } from "./types";
-import { tryTriggerRune } from "./engine";
+import { RUNE_TRIGGER } from "./types.js";
+import { tryTriggerRune } from "./engine.js";
 export function onAttemptOpenDoor(gameCtx, actor, door) {
     const list = gameCtx.runeStore.byDoor.get(door) ?? [];
     for (const r of list)

@@ -44,7 +44,7 @@ function loadCombatDebugOverlayModule(): CombatDebugLoader {
         if (!mod || typeof mod.ensureCombatDebugOverlay !== "function") {
           return null;
         }
-        return mod.ensureCombatDebugOverlay();
+        return mod.ensureCombatDebugOverlay(undefined);
       })
       .catch((err: unknown) => {
         if (typeof console !== "undefined" && console.warn) {

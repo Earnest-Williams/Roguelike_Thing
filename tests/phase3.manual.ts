@@ -9,10 +9,10 @@
  * consistent while you tweak combat formulas.
  */
 
-import { Actor } from "../src/combat/actor.js";
-import { foldModsFromEquipment } from "../src/combat/mod-folding.js";
+import { Actor } from "../dist/src/combat/actor.js";
+import { foldModsFromEquipment } from "../dist/src/combat/mod-folding.js";
 import { makeItem } from "../js/item-system.js";
-import { performEquippedAttack } from "../src/game/combat-glue.js";
+import { performEquippedAttack } from "../dist/src/game/combat-glue.js";
 
 /** Item instances returned by the item factory. */
 type Item = ReturnType<typeof makeItem>;

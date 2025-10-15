@@ -1,11 +1,11 @@
 import { strict as assert } from "node:assert";
 
-import { createCompositeLightContext, compositeOverlayAt } from "../src/world/light_math.js";
+import { createCompositeLightContext, compositeOverlayAt } from "../dist/src/world/light_math.js";
 import { LIGHT_CHANNELS } from "../js/constants.js";
 import {
   resetLightFalloffSettings,
   setLightFalloffSettings,
-} from "../src/world/light_settings.js";
+} from "../dist/src/world/light_settings.js";
 
 (function testCompositeOverlayRespectsLosFn() {
   const lights = [

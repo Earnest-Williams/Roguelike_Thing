@@ -1,1 +1,2 @@
-export * from "./potions";
+// @ts-nocheck
+export * from "./potions.js";

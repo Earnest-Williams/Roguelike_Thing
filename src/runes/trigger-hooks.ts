@@ -1,9 +1,9 @@
 // @ts-nocheck
 import type { ActorLike, GameCtx } from "@types/core";
-import { RUNE_TRIGGER } from "./types";
-import { tryTriggerRune } from "./engine";
+import { RUNE_TRIGGER } from "./types.js";
+import { tryTriggerRune } from "./engine.js";
 
-export function onAttemptOpenDoor(gameCtx: GameCtx & { runeStore: import("./engine").RuneStore }, actor: ActorLike, door: unknown): boolean {
+export function onAttemptOpenDoor(gameCtx: GameCtx & { runeStore: import("./engine.js").RuneStore }, actor: ActorLike, door: unknown): boolean {
   const list = gameCtx.runeStore.byDoor.get(door) ?? [];
   for (const r of list) if (r.def.trigger === RUNE_TRIGGER.OPEN) {
     const fired = tryTriggerRune({ rune: r, actor, ctx: gameCtx });
@@ -12,7 +12,7 @@ export function onAttemptOpenDoor(gameCtx: GameCtx & { runeStore: import("./engi
   return true;
 }
 
-export function onStepIntoTile(gameCtx: GameCtx & { runeStore: import("./engine").RuneStore }, actor: ActorLike, x: number, y: number, layer = 0): void {
+export function onStepIntoTile(gameCtx: GameCtx & { runeStore: import("./engine.js").RuneStore }, actor: ActorLike, x: number, y: number, layer = 0): void {
   const key = `${x},${y},${layer}`;
   const list = gameCtx.runeStore.byTile.get(key) ?? [];
   for (const r of list) if (r.def.trigger === RUNE_TRIGGER.STEP_ON) {
@@ -20,7 +20,7 @@ export function onStepIntoTile(gameCtx: GameCtx & { runeStore: import("./engine"
   }
 }
 
-export function tickRunes(gameCtx: GameCtx & { runeStore: import("./engine").RuneStore }): void {
+export function tickRunes(gameCtx: GameCtx & { runeStore: import("./engine.js").RuneStore }): void {
   for (const r of gameCtx.runeStore.all) {
     if (r.def.trigger === RUNE_TRIGGER.TIMER) {
       tryTriggerRune({ rune: r, actor: gameCtx.player, ctx: gameCtx });

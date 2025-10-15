@@ -3,10 +3,10 @@
 
 import { strict as assert } from "node:assert";
 import { TILE_FLOOR } from "../js/constants.js";
-import { createMobFromTemplate } from "../src/factories/index.js";
-import { Actor } from "../src/combat/actor.js";
-import { tryAttack } from "../src/combat/actions.js";
-import { FactionService } from "../src/game/faction-service.js";
+import { createMobFromTemplate } from "../dist/src/factories/index.js";
+import { Actor } from "../dist/src/combat/actor.js";
+import { tryAttack } from "../dist/src/combat/actions.js";
+import { FactionService } from "../dist/src/game/faction-service.js";
 import { findEntityAtPosition, hasValidPosition } from "./helpers/entity-utils.js";
 
 function makeGrid(width, height, value = TILE_FLOOR) {

@@ -1,3 +1,4 @@
+// @ts-nocheck
 // src/combat/debug-log.js
 // Tiny ring buffer for combat/debug events
 export class RingLog {

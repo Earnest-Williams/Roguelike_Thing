@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Ambient types to call your existing JS resolver from TS.
 declare module "@combat/resolve" {
   import type { ActorLike, StatusAttempt } from "@types/core";

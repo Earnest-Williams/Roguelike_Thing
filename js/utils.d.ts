@@ -1,36 +1,16 @@
-import type { TileKind } from "./constants.js";
-
-export type XY = { x: number; y: number };
-
-export interface RGB {
-  r: number;
-  g: number;
-  b: number;
-}
-
-export interface RGBA extends RGB {
-  a: number;
-}
-
-export function shuffle<T>(array: T[]): T[];
-export function posKey(pos: { x: number; y: number }): string;
-export function posKeyFromCoords(x: number, y: number): string;
-export function randChoice<T>(arr: readonly T[]): T;
-export function clamp(value: number, min: number, max: number): number;
-export function clamp01Normalized(value: number): number;
-export function colorStringToRgb(color: string | null | undefined, fallbackColor?: string): RGB;
-export function colorStringToRgba(
-  color: string | null | undefined,
-  fallbackColor?: string
-): RGBA;
-export const getNow: () => number;
-export function smoothstep01(x: number): number;
-export function chebyshevDistance(
-  a: XY | null | undefined,
-  b: XY | null | undefined
-): number;
-export function hasLineOfSight(
-  grid: ArrayLike<ArrayLike<TileKind>> | null | undefined,
-  from: XY | null | undefined,
-  to: XY | null | undefined
-): boolean;
+export declare function shuffle(array: any): any;
+export declare function posKey(pos: any): string;
+export declare function posKeyFromCoords(x: any, y: any): string;
+export declare const randChoice: (arr: any) => any;
+export declare function clamp(value: any, min: any, max: any): number;
+export declare const clamp01Normalized: (value: any) => number;
+export declare function colorStringToRgb(color: any, fallbackColor?: string): {
+    r: number;
+    g: number;
+    b: number;
+};
+export declare function colorStringToRgba(color: any, fallbackColor?: string): any;
+export declare const getNow: () => number;
+export declare function smoothstep01(x: any): number;
+export declare function chebyshevDistance(a: any, b: any): number;
+export declare function hasLineOfSight(grid: any, from: any, to: any): boolean;

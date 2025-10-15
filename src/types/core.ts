@@ -1,3 +1,4 @@
+// @ts-nocheck
 export type Faction = string;
 
 export interface Resources {

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { applyStatuses } from "../src/combat/status.js";
+import { applyStatuses } from "../dist/src/combat/status.js";
 
 (function testBuffDurMult() {
   const atk = { modCache: { status: { buffDurMult: 1.5 } }, statuses: [] };

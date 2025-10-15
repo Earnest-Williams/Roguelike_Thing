@@ -2,9 +2,9 @@ import { strict as assert } from "node:assert";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createLightOverlayContext } from "../src/world/fov.js";
-import { Monster } from "../src/game/monster.js";
-import { Actor } from "../src/combat/actor.js";
+import { createLightOverlayContext } from "../dist/src/world/fov.js";
+import { Monster } from "../dist/src/game/monster.js";
+import { Actor } from "../dist/src/combat/actor.js";
 import { SLOT } from "../js/constants.js";
 
 // Meta-guard: prohibit resurrection of legacy Mob class in source.

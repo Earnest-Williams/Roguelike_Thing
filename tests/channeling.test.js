@@ -1,9 +1,9 @@
 // tests/channeling.test.js
 // @ts-nocheck
-import { tickResources } from "../src/combat/resources.js";
-import { startTurn, endTurn } from "../src/combat/loop.js";
-import { hasStatus } from "../src/combat/status.js";
-import { Actor } from "../src/combat/actor.js";
+import { tickResources } from "../dist/src/combat/resources.js";
+import { startTurn, endTurn } from "../dist/src/combat/loop.js";
+import { hasStatus } from "../dist/src/combat/status.js";
+import { Actor } from "../dist/src/combat/actor.js";
 
 function assert(cond, msg) {
   if (!cond) throw new Error(msg);

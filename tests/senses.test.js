@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 
 import { TILE_FLOOR } from "../js/constants.js";
-import { collectWorldLightSources, updatePerception } from "../src/sim/senses.js";
+import { collectWorldLightSources, updatePerception } from "../dist/src/sim/senses.js";
 
 function makeMap(width, height) {
   const grid = Array.from({ length: height }, () => Array(width).fill(TILE_FLOOR));
