@@ -91,8 +91,9 @@ import {
   applyStatuses,
   getStatusDefinitionCore,
   rebuildStatusDerivedCore,
-  tickStatusesAtTurnStart,
 } from "./src/combat/status.js";
+import { startTurn, endTurn } from "./src/combat/loop.js";
+import { gainAP, tickCooldowns } from "./src/combat/time.js";
 import { setStatusDamageAdapter } from "./src/content/statuses.js";
 
 setStatusDamageAdapter(({ statusId, target, amount, type, turn }) => {
@@ -1465,16 +1466,38 @@ const Game = (() => {
           continue;
         }
 
-        const hpBeforeTick =
-          m?.res && typeof m.res.hp === "number" ? m.res.hp : null;
-        tickStatusesAtTurnStart(m, turn);
-        if (
-          hpBeforeTick != null &&
-          typeof m?.res?.hp === "number" &&
-          m.res.hp > hpBeforeTick &&
-          (m.kind === "player" || (gameCtx?.player && m === gameCtx.player))
-        ) {
-          Sound.playHeal();
+        const performer = m?.actor ?? m?.__actor ?? m;
+        const hpBeforeTurn =
+          performer?.res && typeof performer.res.hp === "number"
+            ? performer.res.hp
+            : null;
+        const nextActAt =
+          typeof m.nextActAt === "number" ? m.nextActAt : 0;
+
+        if (turn < nextActAt) {
+          if (!this.list.includes(m) || m.__dead) {
+            startIndex.delete(startKey);
+            continue;
+          }
+          if (handleDeath(gameCtx, m)) {
+            startIndex.delete(startKey);
+          }
+          continue;
+        }
+
+        if (performer) {
+          startTurn(performer);
+          gainAP(performer);
+          if (
+            hpBeforeTurn != null &&
+            typeof performer?.res?.hp === "number" &&
+            performer.res.hp > hpBeforeTurn &&
+            (m.kind === "player" ||
+              (gameCtx?.player &&
+                (m === gameCtx.player || performer === gameCtx.player?.actor)))
+          ) {
+            Sound.playHeal();
+          }
         }
 
         if (!this.list.includes(m) || m.__dead) {
@@ -1487,13 +1510,15 @@ const Game = (() => {
           continue;
         }
 
-        if (m.statusDerived?.canAct === false) {
-          continue;
-        }
-
-        const nextActAt =
-          typeof m.nextActAt === "number" ? m.nextActAt : 0;
-        if (turn < nextActAt) {
+        const actorCanAct =
+          performer?.statusDerived?.canAct ?? m.statusDerived?.canAct ?? true;
+        if (!actorCanAct) {
+          if (performer) {
+            tickCooldowns(performer);
+            endTurn(performer);
+          }
+          const delay = computeActorDelay(m);
+          m.nextActAt = turn + delay;
           continue;
         }
 
@@ -1519,10 +1544,16 @@ const Game = (() => {
         }
 
         let delay = Number.isFinite(delayResult) ? delayResult : null;
+        const baseDelay = computeActorDelay(m);
         if (!Number.isFinite(delay) || delay <= 0) {
-          delay = computeActorDelay(m);
+          delay = baseDelay;
         }
-        m.nextActAt = turn + (Number.isFinite(delay) && delay > 0 ? delay : computeActorDelay(m));
+        if (performer) {
+          tickCooldowns(performer);
+          endTurn(performer);
+        }
+        const resolvedDelay = Number.isFinite(delay) && delay > 0 ? delay : baseDelay;
+        m.nextActAt = turn + resolvedDelay;
       }
 
       const occupancy = new Map(startIndex);
@@ -5661,19 +5692,32 @@ const Game = (() => {
         if (typeof gameCtx.attachRuneHooks === "function") {
           gameCtx.attachRuneHooks(gameCtx);
         }
+        const playerActor = player?.actor ?? player;
         const playerHpBefore =
-          player?.res && typeof player.res.hp === "number"
-            ? player.res.hp
+          playerActor?.res && typeof playerActor.res.hp === "number"
+            ? playerActor.res.hp
             : null;
-        tickStatusesAtTurnStart(player, turn);
-        if (
-          playerHpBefore != null &&
-          typeof player?.res?.hp === "number" &&
-          player.res.hp > playerHpBefore
-        ) {
-          Sound.playHeal();
+        const nextPlayerActAt =
+          typeof player.nextActAt === "number" ? player.nextActAt : 0;
+        const playerCanActNow =
+          (player.statusDerived?.canAct ?? true) && turn >= nextPlayerActAt;
+
+        if (playerCanActNow && playerActor) {
+          startTurn(playerActor);
+          gainAP(playerActor);
+          if (
+            playerHpBefore != null &&
+            typeof playerActor?.res?.hp === "number" &&
+            playerActor.res.hp > playerHpBefore
+          ) {
+            Sound.playHeal();
+          }
         }
         if (handleDeath(gameCtx, player)) {
+          if (playerActor && playerCanActNow) {
+            tickCooldowns(playerActor);
+            endTurn(playerActor);
+          }
           return;
         }
         updatePerception(gameCtx);
@@ -5713,22 +5757,17 @@ const Game = (() => {
           return;
         }
 
-        const playerCanAct =
-          (player.statusDerived?.canAct ?? true) &&
-          turn >=
-            (typeof player.nextActAt === "number"
-              ? player.nextActAt
-              : 0);
-
-        if (playerCanAct) {
+        if (playerCanActNow && playerActor) {
           const result = processPlayerTurn();
           if (result?.ended) {
+            tickCooldowns(playerActor);
+            endTurn(playerActor);
             return;
           }
-          if (result?.acted) {
-            const delay = computeActorDelay(player);
-            player.nextActAt = turn + delay;
-          }
+          tickCooldowns(playerActor);
+          endTurn(playerActor);
+          const delay = computeActorDelay(player);
+          player.nextActAt = turn + delay;
         }
       }
       const delay = Math.max(16, 1000 / simState.speed);
