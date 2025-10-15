@@ -50,15 +50,15 @@ export interface DamageProfile {
 }
 
 export interface LightDescriptorInput {
-  radius?: number;
-  color?: string | null;
-  intensity?: number;
-  baseIntensity?: number;
-  flickerRate?: number;
-  worksWhenDropped?: boolean;
-  angle?: number;
-  width?: number;
-  channel?: number;
+  radius?: number | undefined;
+  color?: string | null | undefined;
+  intensity?: number | undefined;
+  baseIntensity?: number | undefined;
+  flickerRate?: number | undefined;
+  worksWhenDropped?: boolean | undefined;
+  angle?: number | undefined;
+  width?: number | undefined;
+  channel?: number | undefined;
 }
 
 export interface LightDescriptor {
@@ -137,7 +137,7 @@ export interface WeaponProfile {
   aimTime: number;
   volley: number;
   ammo: AmmoProfile | null;
-  damage: DamageProfile;
+  damage: DamageProfile | null;
   accuracy: number;
   consumeWeaponOnUse: boolean;
   recoveryChance: number;
@@ -260,37 +260,52 @@ function normalizeLightDescriptor(
   defaults: LightDescriptorInput = {},
 ): LightDescriptor | null {
   const source = light && typeof light === "object" ? light : {};
-  const merged: LightDescriptorInput = { ...defaults, ...source };
-  const radiusCandidate = merged.radius;
-  const radius =
-    typeof radiusCandidate === "number" && Number.isFinite(radiusCandidate)
-      ? radiusCandidate
-      : 0;
+  const radiusCandidate = source.radius ?? defaults.radius;
+  const radius = Number.isFinite(radiusCandidate) ? Number(radiusCandidate) : 0;
   if (radius <= 0) return null;
+  const color =
+    typeof source.color === "string"
+      ? source.color
+      : typeof defaults.color === "string"
+        ? defaults.color
+        : null;
   const intensitySource =
-    merged.intensity ??
-    (typeof merged.baseIntensity === "number" && Number.isFinite(merged.baseIntensity)
-      ? merged.baseIntensity
-      : undefined);
+    source.intensity ??
+    defaults.intensity ??
+    (Number.isFinite(defaults.baseIntensity) ? defaults.baseIntensity : undefined);
+  const intensity =
+    intensitySource === undefined ? 1 : clamp01Normalized(Number(intensitySource));
+  const flickerRateCandidate = source.flickerRate ?? defaults.flickerRate;
+  const flickerRate = Number.isFinite(flickerRateCandidate)
+    ? Number(flickerRateCandidate)
+    : 0;
+  const worksWhenDropped =
+    source.worksWhenDropped ?? defaults.worksWhenDropped ?? true;
+  const angleCandidate = source.angle ?? defaults.angle;
+  const angle = Number.isFinite(angleCandidate) ? Number(angleCandidate) : undefined;
+  const widthCandidate = source.width ?? defaults.width;
+  const width = Number.isFinite(widthCandidate)
+    ? Math.max(0, Number(widthCandidate))
+    : undefined;
+  const channelCandidate = source.channel ?? defaults.channel;
+  const channel = Number.isFinite(channelCandidate)
+    ? Number(channelCandidate)
+    : undefined;
   const descriptor: LightDescriptor = {
     radius,
-    color: typeof merged.color === "string" ? merged.color : null,
-    intensity:
-      intensitySource === undefined ? 1 : clamp01Normalized(Number(intensitySource)),
-    flickerRate:
-      typeof merged.flickerRate === "number" && Number.isFinite(merged.flickerRate)
-        ? merged.flickerRate
-        : 0,
-    worksWhenDropped: merged.worksWhenDropped ?? true,
+    color,
+    intensity,
+    flickerRate,
+    worksWhenDropped,
   };
-  if (typeof merged.angle === "number" && Number.isFinite(merged.angle)) {
-    descriptor.angle = merged.angle;
+  if (angle !== undefined) {
+    descriptor.angle = angle;
   }
-  if (typeof merged.width === "number" && Number.isFinite(merged.width)) {
-    descriptor.width = Math.max(0, merged.width);
+  if (width !== undefined) {
+    descriptor.width = width;
   }
-  if (typeof merged.channel === "number" && Number.isFinite(merged.channel)) {
-    descriptor.channel = merged.channel;
+  if (channel !== undefined) {
+    descriptor.channel = channel;
   }
   return descriptor;
 }
@@ -599,7 +614,7 @@ export function normalizeWeaponProfile(profile: WeaponProfileInput | null | unde
   const max = Math.max(optimal, Math.floor(rangeIn.max ?? rangeIn.long ?? optimal));
   return {
     category,
-    isRanged: category !== WEAPON_CATEGORY.MELEE,
+    isRanged: RANGED_WEAPON_CATEGORIES.has(category),
     range: { min, optimal, max },
     reloadTime: Math.max(0, Math.floor(profile.reloadTime ?? profile.reload ?? 0)),
     aimTime: Math.max(0, Math.floor(profile.aimTime ?? profile.aim ?? 0)),
@@ -626,7 +641,7 @@ export function cloneWeaponProfile(profile: WeaponProfile | null | undefined): W
     aimTime: profile.aimTime,
     volley: profile.volley,
     ammo: profile.ammo ? { ...profile.ammo } : null,
-    damage: normalizeDamageProfile(profile.damage),
+    damage: profile.damage ? { ...profile.damage } : null,
     accuracy: profile.accuracy,
     consumeWeaponOnUse: profile.consumeWeaponOnUse,
     recoveryChance: profile.recoveryChance,
@@ -676,27 +691,16 @@ export class Item {
     this.lightRadius = o.lightRadius ?? 0;
     this.lightColor = o.lightColor ?? null;
     this.flickerRate = typeof o.flickerRate === "number" ? o.flickerRate : 0;
-    const defaultLight: LightDescriptorInput = {
+    this.light = normalizeLightDescriptor(o.light, {
       radius: this.lightRadius,
       color: this.lightColor,
+      intensity: o.light?.intensity,
       flickerRate: this.flickerRate,
-    };
-    if (typeof o.light?.intensity === "number") {
-      defaultLight.intensity = o.light.intensity;
-    }
-    if (typeof o.light?.worksWhenDropped === "boolean") {
-      defaultLight.worksWhenDropped = o.light.worksWhenDropped;
-    }
-    if (typeof o.light?.angle === "number") {
-      defaultLight.angle = o.light.angle;
-    }
-    if (typeof o.light?.width === "number") {
-      defaultLight.width = o.light.width;
-    }
-    if (typeof o.light?.channel === "number") {
-      defaultLight.channel = o.light.channel;
-    }
-    this.light = normalizeLightDescriptor(o.light, defaultLight);
+      worksWhenDropped: o.light?.worksWhenDropped,
+      angle: o.light?.angle,
+      width: o.light?.width,
+      channel: o.light?.channel,
+    });
     this.lightMask = o.lightMask ?? LIGHT_CHANNELS.ALL;
     this.container = o.container ? { ...o.container } : null;
     if (this.container) this.contents = [];
@@ -770,7 +774,6 @@ export class Item {
         ? this.equipSlots.slice()
         : this.equipSlots,
       handsRequired: this.handsRequired,
-      dims: { ...this.dims },
       mass: this.mass,
       stackable: this.stackable,
       maxStack: this.maxStack,
@@ -787,12 +790,17 @@ export class Item {
         : this.affixes,
     };
 
+    if (this.dims) {
+      copy.dims = { ...this.dims };
+    }
     if (this.container) {
       copy.container = { ...this.container };
     }
 
     if (this.brands !== undefined) {
-      copy.brands = this.brands ? this.brands.map((b) => ({ ...b })) : null;
+      copy.brands = this.brands
+        ? this.brands.map((b) => ({ ...b }))
+        : this.brands;
     }
     if (this.resists) {
       copy.resists = { ...this.resists };
