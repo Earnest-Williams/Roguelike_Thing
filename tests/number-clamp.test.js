@@ -34,4 +34,14 @@ import { clamp as clampFrontend } from "../js/utils.js";
     5,
     "frontend clamp should support inverted bounds",
   );
+  assert.equal(
+    clampNumber(5, Infinity, 0),
+    5,
+    "numeric clamp should handle inverted bounds when Infinity is involved",
+  );
+  assert.equal(
+    clampFrontend(5, Infinity, 0),
+    5,
+    "frontend clamp should handle inverted bounds when Infinity is involved",
+  );
 })();
