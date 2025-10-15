@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { TILE_FLOOR, TILE_WALL, DEFAULT_MOB_HP, DEFAULT_MOB_SPEED, DEFAULT_INVENTORY_CAPACITY, SHORT_TERM_MEMORY_PENALTY, CARDINAL_DIRECTIONS, WEAPON_CATEGORY, ATTACK_KIND, THROW_CLASS, DEFAULT_MARTIAL_DAMAGE_TYPE, SLOT, ALL_SLOTS_ORDER, LIGHT_CHANNELS, } from "./js/constants.js";
-import { shuffle, posKey, posKeyFromCoords, randChoice, clamp, getNow, chebyshevDistance, hasLineOfSight, clamp01Normalized, } from "./js/utils.js";
+import { shuffle, posKey, posKeyFromCoords, randChoice, clamp, getNow, chebyshevDistance, hasLineOfSight, clamp01Normalized, colorStringToRgba, } from "./js/utils.js";
 import { CONFIG } from "./src/config.js";
 import { createInitialState } from "./src/game/state.js";
 import { ChapterState } from "./src/game/chapter-state.js";
@@ -3476,6 +3476,8 @@ const Game = (() => {
         if (!(visibleSet instanceof Set))
             return [];
         const visuals = [];
+        const unseenColor = colorToRgba(colors?.unseen ?? "#111111", "#111111");
+        const floorColor = colorToRgba(colors?.floor ?? "#1f2933", "#1f2933");
         for (const placement of map.furniture) {
             if (!placement || !placement.position)
                 continue;
@@ -3484,16 +3486,37 @@ const Game = (() => {
             if (!map.explored?.[y]?.[x])
                 continue;
             const keyStr = posKeyFromCoords(x, y);
-            if (!visibleSet.has(keyStr))
-                continue;
+            const isVisible = visibleSet.has(keyStr);
             const visual = describeFurnitureVisual(placement.furniture, colors);
             if (!visual)
                 continue;
             visual.x = x;
             visual.y = y;
+            if (!isVisible) {
+                applyFurnitureShadow(visual, colors, unseenColor, floorColor);
+            }
             visuals.push(visual);
         }
         return visuals;
+    }
+    function applyFurnitureShadow(visual, colors, unseenColor, floorColor) {
+        if (!visual)
+            return;
+        const glyphFallback = visual.fg || colors?.fixtureGlyph || colors?.door || "#e2e8f0";
+        const bgFallback = visual.bg || colors?.floor || floorColor;
+        const badgeFallback = visual.badgeColor || glyphFallback;
+        const badgeBgFallback = visual.badgeBg || bgFallback;
+        visual.fg = dimColorValue(visual.fg ?? glyphFallback, unseenColor, 0.35, glyphFallback);
+        visual.bg = dimColorValue(visual.bg ?? bgFallback, unseenColor, 0.45, bgFallback);
+        if (visual.badgeColor) {
+            visual.badgeColor = dimColorValue(visual.badgeColor, unseenColor, 0.35, badgeFallback);
+        }
+        if (visual.badgeBg) {
+            visual.badgeBg = dimColorValue(visual.badgeBg, unseenColor, 0.45, badgeBgFallback);
+        }
+        if (visual.overlayColor) {
+            visual.overlayColor = dimColorValue(visual.overlayColor, unseenColor, 0.5, visual.overlayColor);
+        }
     }
     function describeFurnitureVisual(furniture, colors) {
         if (!furniture)
@@ -3657,6 +3680,59 @@ const Game = (() => {
             visual.overlayColor = colors.doorMagic || "#a855f7";
         }
         return visual;
+    }
+    function dimColorValue(value, unseenColor, weight, fallback) {
+        const base = colorToRgba(value ?? fallback, fallback ?? "#ffffff");
+        return blendRgba(base, unseenColor, weight);
+    }
+    function colorToRgba(value, fallback) {
+        if (typeof value === "string") {
+            const fb = typeof fallback === "string" ? fallback : rgbaToCss(fallback);
+            return colorStringToRgba(value, fb);
+        }
+        if (value && typeof value === "object") {
+            return {
+                r: clampColorChannel(value.r ?? 0),
+                g: clampColorChannel(value.g ?? 0),
+                b: clampColorChannel(value.b ?? 0),
+                a: clampAlpha(value.a ?? 1),
+            };
+        }
+        if (typeof fallback === "string") {
+            return colorStringToRgba(fallback, fallback);
+        }
+        if (fallback && typeof fallback === "object") {
+            return {
+                r: clampColorChannel(fallback.r ?? 0),
+                g: clampColorChannel(fallback.g ?? 0),
+                b: clampColorChannel(fallback.b ?? 0),
+                a: clampAlpha(fallback.a ?? 1),
+            };
+        }
+        return colorStringToRgba("#ffffff", "#ffffff");
+    }
+    function blendRgba(color, target, weight = 0.5) {
+        const w = Math.max(0, Math.min(1, weight));
+        const inv = 1 - w;
+        return {
+            r: Math.round(color.r * w + target.r * inv),
+            g: Math.round(color.g * w + target.g * inv),
+            b: Math.round(color.b * w + target.b * inv),
+            a: clampAlpha(color.a ?? 1),
+        };
+    }
+    function clampColorChannel(value) {
+        return Math.max(0, Math.min(255, Math.round(Number(value) || 0)));
+    }
+    function clampAlpha(value) {
+        return Math.max(0, Math.min(1, Number(value) || 0));
+    }
+    function rgbaToCss(color) {
+        const r = clampColorChannel(color?.r ?? 0);
+        const g = clampColorChannel(color?.g ?? 0);
+        const b = clampColorChannel(color?.b ?? 0);
+        const a = clampAlpha(color?.a ?? 1);
+        return `rgba(${r},${g},${b},${a})`;
     }
     function buildMobVisuals(manager, visibleSet) {
         if (!manager || !Array.isArray(manager.list))

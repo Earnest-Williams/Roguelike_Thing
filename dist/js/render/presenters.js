@@ -13,6 +13,12 @@ export function buildMainViewBatch({ grid, explored, visibleSet, player, startPo
     const endBG = colors.end ? toRgba(colors.end) : playerBG;
     const floorGlyph = colors.floorGlyph ? toRgba(colors.floorGlyph) : toRgba("#888888");
     const playerGlyph = colors.playerGlyph ? toRgba(colors.playerGlyph) : toRgba("#ffffff");
+    const unseenBG = colors.unseen ? toRgba(colors.unseen) : toRgba("#111111");
+    const wallBGDim = dimRgba(wallBG, unseenBG, 0.45);
+    const floorBGDim = dimRgba(floorBG, unseenBG, 0.45);
+    const startBGDim = dimRgba(startBG, unseenBG, 0.45);
+    const endBGDim = dimRgba(endBG, unseenBG, 0.45);
+    const floorGlyphDim = dimRgba(floorGlyph, unseenBG, 0.35);
     const overlayRgb = normalizeColor(overlayColor);
     const rawPlayerLightRadius = Number.isFinite(lightRadius)
         ? lightRadius
@@ -61,6 +67,20 @@ export function buildMainViewBatch({ grid, explored, visibleSet, player, startPo
                 base.bg = endBG;
                 delete base.glyph;
                 delete base.fg;
+            }
+            if (!isVisible) {
+                if (base.kind === "start") {
+                    base.bg = startBGDim;
+                }
+                else if (base.kind === "end") {
+                    base.bg = endBGDim;
+                }
+                else {
+                    base.bg = isWall ? wallBGDim : floorBGDim;
+                }
+                if (base.glyph && !isWall) {
+                    base.fg = floorGlyphDim;
+                }
             }
             if (isVisible) {
                 const overlayA = playerLightRadius > 0 && overlayAlphaFn ? overlayAlphaFn(x, y) : 0;
@@ -131,6 +151,16 @@ export function buildMainViewBatch({ grid, explored, visibleSet, player, startPo
         }
     }
     return batch;
+}
+function dimRgba(color, background, weight = 0.5) {
+    const w = Math.max(0, Math.min(1, weight));
+    const inv = 1 - w;
+    return {
+        r: Math.round(color.r * w + background.r * inv),
+        g: Math.round(color.g * w + background.g * inv),
+        b: Math.round(color.b * w + background.b * inv),
+        a: Math.max(0, Math.min(1, color.a ?? 1)),
+    };
 }
 export function buildMinimapPresentation({ grid, explored, player, padding = 0, colors = {}, }) {
     const pad = Math.max(0, Math.floor(padding));
