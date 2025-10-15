@@ -6,7 +6,7 @@ import { SLOT } from "../../js/constants.js";
 import { makeItem, registerItem, upsertItem } from "../../js/item-system.js";
 import { Actor } from "../combat/actor.js";
 import { attachLogs } from "../combat/debug-log.js";
-import { foldInnatesIntoModCache, foldModsFromEquipment } from "../combat/mod-folding.js";
+import { rebuildModCache } from "../combat/mod-folding.js";
 // [Unified Implementation] Always use the canonical Monster wrapper.
 import { Monster } from "../game/monster.js";
 
@@ -83,8 +83,7 @@ export function createActorFromTemplate(tid) {
     writable: false,
   });
 
-  foldModsFromEquipment(a);
-  foldInnatesIntoModCache(a);
+  rebuildModCache(a);
   attachLogs(a); // enable turn/attack/status ring buffers
   return a;
 }

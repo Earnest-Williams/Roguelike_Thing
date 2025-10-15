@@ -75,7 +75,7 @@ function testMonsterDelegatesToActorGetter() {
     baseStats: { baseSpeed: 1, maxHP: 1 },
   });
   actor.equipment.getLightRadius = () => 3;
-  actor.modCache.vision.lightBonus = 2;
+  actor.innates = { vision: { lightBonus: 2 } };
 
   const monster = new Monster({ actor });
   assert.equal(
