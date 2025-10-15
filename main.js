@@ -1601,9 +1601,11 @@ const Game = (() => {
         if (typeof gameCtx.attachRuneHooks === "function") {
           gameCtx.attachRuneHooks(worldCtx);
         }
+        const turnCtx = { ...worldCtx, rng: rngFn, now: turn };
+
         let delayResult;
         try {
-          delayResult = await m.takeTurn({ world: worldCtx, rng: rngFn, now: turn });
+          delayResult = await m.takeTurn(turnCtx);
         } catch (err) {
           console.error("mob takeTurn threw", err);
           delayResult = null;
