@@ -9,45 +9,25 @@
   </head>
   <body>
     <!-- Start Menu Overlay (hidden during play) -->
-    <div
-      id="startMenu"
-      style="position: fixed; inset: 0; background: rgba(0, 0, 0, 0.75);
-        display: flex; align-items: center; justify-content: center; z-index: 9999;
-        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;"
-    >
-      <div
-        style="background: #111; color: #eee; width: min(900px, 96vw);
-          max-height: 90vh; overflow: auto; border-radius: 12px; padding: 20px;
-          box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6);"
-      >
-        <h1 style="margin: 0 0 12px 0; font-size: 1.6rem;">
-          Roguelike — Start Menu
-        </h1>
-        <p style="margin: 0 0 14px 0; opacity: 0.9;">
-          Choose a normal run, or set custom parameters. Any blank field uses the
-          current default.
-        </p>
+    <div id="startMenu" class="start-menu-overlay">
+      <div class="start-menu-card">
+        <div class="start-menu-main">
+          <h1 class="start-menu-title">Roguelike — Start Menu</h1>
+          <p class="start-menu-subtitle">
+            Choose a normal run, or set custom parameters. Any blank field uses the
+            current default.
+          </p>
 
-        <div style="display: flex; gap: 16px; flex-wrap: wrap;">
-          <button
-            id="startQuickBtn"
-            type="button"
-            style="padding: 10px 14px; border-radius: 8px; border: 1px solid #444;
-              background: #1f6feb; color: #fff; cursor: pointer;"
-          >
-            Quick Start
-          </button>
-          <button
-            id="openCustomBtn"
-            type="button"
-            style="padding: 10px 14px; border-radius: 8px; border: 1px solid #444;
-              background: #333; color: #eee; cursor: pointer;"
-          >
-            Custom Run…
-          </button>
-        </div>
+          <div class="start-menu-actions">
+            <button id="startQuickBtn" type="button" class="start-menu-btn primary">
+              Quick Start
+            </button>
+            <button id="openCustomBtn" type="button" class="start-menu-btn">
+              Custom Run…
+            </button>
+          </div>
 
-        <form id="customForm" style="display: none; margin-top: 16px;">
+          <form id="customForm" class="start-menu-form" aria-live="polite">
           <fieldset
             style="border: 1px solid #333; padding: 12px; border-radius: 8px;
               margin-bottom: 12px;"
@@ -328,7 +308,16 @@
               Reset
             </button>
           </div>
-        </form>
+          </form>
+        </div>
+
+        <aside class="start-menu-summary" aria-live="polite">
+          <h2 class="start-menu-summary-title">Last run summary</h2>
+          <p id="lastRunSummaryEmpty" class="start-menu-summary-empty">
+            Start a quick run to see a summary here.
+          </p>
+          <dl id="lastRunSummaryList" class="start-menu-summary-list"></dl>
+        </aside>
       </div>
     </div>
     <div id="app-container">
