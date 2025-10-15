@@ -618,8 +618,11 @@ const INTELLIGENT_TAGS = new Set(["humanoid", "intelligent", "caster", "bandit",
 
 function ensureIntelligentMobLight(actor, template, rng, createItem) {
   if (!actor || typeof createItem !== "function") return;
-  if (!template || !Array.isArray(template.tags)) return;
-  const isIntelligent = template.tags.some((tag) => INTELLIGENT_TAGS.has(tag));
+  if (!template) return;
+  const isIntelligent =
+    typeof template.intelligent === "boolean"
+      ? template.intelligent
+      : Array.isArray(template.tags) && template.tags.some((tag) => INTELLIGENT_TAGS.has(tag));
   if (!isIntelligent) return;
 
   const random = typeof rng === "function" ? rng : Math.random;
