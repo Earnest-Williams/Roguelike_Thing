@@ -302,17 +302,16 @@ export function getAttackModesForItem(item) {
         return [];
     const modes = [];
     const isThrownWeapon = item.weaponProfile?.category === WEAPON_CATEGORY.THROWN;
+    const meleeProfile = item.weaponProfile && !item.weaponProfile.isRanged && !isThrownWeapon
+        ? item.weaponProfile
+        : null;
     if (item.weaponProfile?.isRanged && !isThrownWeapon) {
         modes.push({ kind: ATTACK_KIND.RANGED, profile: item.weaponProfile });
     }
-    else if (item.weaponProfile && !item.weaponProfile.isRanged) {
-        modes.push({ kind: ATTACK_KIND.MELEE, profile: item.weaponProfile });
+    else if (meleeProfile) {
+        modes.push({ kind: ATTACK_KIND.MELEE, profile: meleeProfile });
     }
-    const throwProfile = buildEffectiveThrowProfile(item);
-    if (throwProfile) {
-        modes.push({ kind: ATTACK_KIND.THROW, profile: throwProfile });
-    }
-    if (!modes.length && item.isWeapon()) {
+    if (!meleeProfile && item.isWeapon()) {
         modes.push({
             kind: ATTACK_KIND.MELEE,
             profile: {
@@ -320,6 +319,10 @@ export function getAttackModesForItem(item) {
                 damage: normalizeDamageProfile(item.weaponProfile?.damage),
             },
         });
+    }
+    const throwProfile = buildEffectiveThrowProfile(item);
+    if (throwProfile) {
+        modes.push({ kind: ATTACK_KIND.THROW, profile: throwProfile });
     }
     return modes;
 }
