@@ -2,7 +2,8 @@
 // @ts-check
 import { createActorFromTemplate, ensureItemsRegistered } from "../factories/index.js";
 import { runTurn, runTurnAsync } from "../combat/loop.js";
-import { AIPlanner } from "../combat/ai-planner.js";
+import { planTurn } from "../combat/ai-planner.js";
+import { executeDecision } from "../combat/actions.js";
 import {
   SIM_DEFAULT_RUN_COUNT,
   SIM_DEFAULT_SEED,
@@ -24,6 +25,44 @@ export function mulberry32(seed) {
     let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
     t ^= t + Math.imul(t ^ t >>> 7, 61 | t);
     return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+function initializeActorPosition(actor, x, y) {
+  if (!actor) return;
+  actor.x = x;
+  actor.y = y;
+  actor.spawnPos = { x, y };
+  actor.homePos = { x, y };
+}
+
+function createSimulationWorld(primary, secondary, rng) {
+  const mobs = [primary, secondary];
+  const mobManager = {
+    list: () => mobs,
+    getMobAt(x, y) {
+      return mobs.find((mob) =>
+        mob && Number.isFinite(mob.x) && Number.isFinite(mob.y) && mob.x === x && mob.y === y
+      ) ?? null;
+    },
+  };
+
+  const getMobAt = (x, y) => mobManager.getMobAt(x, y);
+  const playerCandidate = mobs.find((mob) => mob?.isPlayer) ?? primary;
+
+  return {
+    mobManager,
+    getMobAt,
+    player: playerCandidate,
+    rng,
+  };
+}
+
+function createActionPlanner(world, rng) {
+  return (actor) => {
+    if (!actor) return;
+    const decision = planTurn({ actor, combatant: actor, world, rng });
+    executeDecision({ actor, combatant: actor, world, decision, rng });
   };
 }
 
@@ -58,21 +97,21 @@ export function simulate({
   for (let i=0;i<N;i++) {
     const A = createActorFromTemplate(a);
     const B = createActorFromTemplate(b);
+    initializeActorPosition(A, 0, 0);
+    initializeActorPosition(B, 1, 0);
+    const world = createSimulationWorld(A, B, rng);
+    const planner = createActionPlanner(world, rng);
     let turns=0, dmg=0;
-
-    // simple planners: evaluate available actions against the opponent
-    const planA = (actor) => AIPlanner.takeTurn(actor, { target: B, distance: 1 });
-    const planB = (actor) => AIPlanner.takeTurn(actor, { target: A, distance: 1 });
 
     let partialTurn = 0;
     while (A.res.hp>0 && B.res.hp>0 && turns<SIM_MAX_TURNS) {
-      const aDefeated = runTurn(A, planA);
+      const aDefeated = runTurn(A, planner);
       if (aDefeated || B.res.hp <= 0) {
         partialTurn = SIM_PARTIAL_TURN_CREDIT;
         break;
       }
 
-      const bDefeated = runTurn(B, planB);
+      const bDefeated = runTurn(B, planner);
       if (bDefeated || A.res.hp <= 0) {
         turns++;
         break;
@@ -113,21 +152,22 @@ export async function simulateAsync({
   for (let i = 0; i < N; i += 1) {
     const A = createActorFromTemplate(a);
     const B = createActorFromTemplate(b);
+    initializeActorPosition(A, 0, 0);
+    initializeActorPosition(B, 1, 0);
+    const world = createSimulationWorld(A, B, rng);
+    const planner = createActionPlanner(world, rng);
     let turns = 0;
     let dmg = 0;
 
-    const planA = (actor) => AIPlanner.takeTurn(actor, { target: B, distance: 1 });
-    const planB = (actor) => AIPlanner.takeTurn(actor, { target: A, distance: 1 });
-
     let partialTurn = 0;
     while (A.res.hp > 0 && B.res.hp > 0 && turns < SIM_MAX_TURNS) {
-      const aDefeated = await runTurnAsync(A, planA);
+      const aDefeated = await runTurnAsync(A, planner);
       if (aDefeated || B.res.hp <= 0) {
         partialTurn = SIM_PARTIAL_TURN_CREDIT;
         break;
       }
 
-      const bDefeated = await runTurnAsync(B, planB);
+      const bDefeated = await runTurnAsync(B, planner);
       if (bDefeated || A.res.hp <= 0) {
         turns += 1;
         break;
