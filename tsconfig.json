@@ -26,6 +26,7 @@
   },
   "include": [
     "main.ts",
+    "main-runtime.ts",
     "js/**/*.ts",
     "src/**/*",
     "tests/**/*.ts"
