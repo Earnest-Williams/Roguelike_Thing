@@ -8,6 +8,13 @@ import { polarityOffenseScalar, polarityDefenseScalar } from "./polarity.js";
 import { clamp01 } from "../utils/number.js";
 import { consolidatedResists } from "./defense-merge.js";
 import { showAttackDebug } from "../ui/debug-panel.js";
+import {
+  attachPacketView,
+  cloneStatusAttempt,
+  cloneStatusAttemptList,
+  makeAttackContext,
+  recordAttackStep,
+} from "./attack-context.js";
 
 /**
  * @typedef {{ type:string, amount:number, __isBase?:boolean }} Packet
@@ -120,23 +127,20 @@ function resolveAttackCore(attacker, defender, opts = {}) {
     ? [opts.statusAttempts]
     : [];
 
-  const ctx /** @type {AttackContext} */ = {
+  const hpBefore = getCurrentHp(defender);
+  const ctx = makeAttackContext({
     attacker,
     defender,
     turn,
     rng,
     isEcho: Boolean(opts?.isEcho),
-    prePackets: attachPacketAccess(initialPackets),
-    packetsAfterOffense: attachPacketAccess([]),
-    packetsAfterDefense: attachPacketAccess([]),
-    statusAttempts: sanitizeStatusAttempts(attemptSource),
-    totalDamage: 0,
-    appliedStatuses: [],
-    hooks: Object.create(null),
-    echo: null,
-    hpBefore: getCurrentHp(defender),
-    hpAfter: getCurrentHp(defender),
-  };
+    prePackets: initialPackets,
+    attempts: attemptSource,
+    hpBefore,
+    hpAfter: hpBefore,
+  });
+  ctx.hpBefore = hpBefore;
+  ctx.hpAfter = hpBefore;
 
   // ----- offense stages -----
   const conversionSources = [];
@@ -146,7 +150,13 @@ function resolveAttackCore(attacker, defender, opts = {}) {
   if (Array.isArray(opts?.conversions)) {
     conversionSources.push(...opts.conversions);
   }
-  let packets = conversionPipeline(ctx.prePackets, conversionSources);
+  let packets = conversionPipeline(initialPackets, conversionSources);
+  recordAttackStep(
+    ctx,
+    "conversions",
+    packets,
+    conversionSources.length ? { sources: conversionSources.length } : undefined,
+  );
 
   const brandSources = [];
   if (Array.isArray(attacker?.modCache?.offense?.brands)) {
@@ -163,6 +173,10 @@ function resolveAttackCore(attacker, defender, opts = {}) {
   if (brandResult.statusAttempts.length) {
     ctx.statusAttempts.push(...brandResult.statusAttempts);
   }
+  const brandMeta = {};
+  if (brandSources.length) brandMeta.sources = brandSources.length;
+  if (brandResult.statusAttempts.length) brandMeta.statusAttempts = brandResult.statusAttempts.length;
+  recordAttackStep(ctx, "brands", packets, Object.keys(brandMeta).length ? brandMeta : undefined);
 
   const affinitySources = [];
   if (attacker?.modCache?.offense?.affinities) affinitySources.push(attacker.modCache.offense.affinities);
@@ -184,6 +198,11 @@ function resolveAttackCore(attacker, defender, opts = {}) {
       )
     );
   }
+  const affinityMeta = {};
+  if (Object.keys(affinityMap).length) affinityMeta.affinities = affinityMap;
+  if (statusDamagePct) affinityMeta.statusDamagePct = statusDamagePct;
+  if (statusDamageFlat) affinityMeta.statusDamageFlat = statusDamageFlat;
+  recordAttackStep(ctx, "affinities", packets, Object.keys(affinityMeta).length ? affinityMeta : undefined);
 
   const attackerForPolarity = opts?.atkPol ? { ...attacker, polarity: opts.atkPol } : attacker;
   const defenderForPolarity = opts?.defPol ? { ...defender, polarity: opts.defPol } : defender;
@@ -193,14 +212,15 @@ function resolveAttackCore(attacker, defender, opts = {}) {
     packets = packets.map((pkt) => createPacket(pkt.type, Math.max(0, Math.floor(pkt.amount * offenseMult)), false));
   }
 
-  ctx.packetsAfterOffense = attachPacketAccess(packets);
+  ctx.packetsAfterOffense = attachPacketView(packets);
+  recordAttackStep(ctx, "polarity", packets, { offenseScalar });
 
   // ----- defense stages -----
   const immunities = mergeImmunities(defender, opts);
   const defenseScalar = polarityDefenseScalar(defenderForPolarity, attackerForPolarity);
   const defenseMult = Math.max(0, 1 + defenseScalar);
   const extraResists = opts?.resists;
-  let defendedPackets = applyDefense(packets, {
+  const defenseResult = applyDefense(packets, {
     defender,
     resists: extraResists,
     immunities,
@@ -209,13 +229,22 @@ function resolveAttackCore(attacker, defender, opts = {}) {
     atkPol: attackerForPolarity,
     polScalar: defenseScalar,
   });
+  let defendedPackets = defenseResult.packets;
 
   const damageScalar = Number.isFinite(opts?.damageScalar) ? Math.max(0, Number(opts.damageScalar)) : 1;
   if (damageScalar !== 1) {
     defendedPackets = defendedPackets.map((pkt) => createPacket(pkt.type, Math.max(0, Math.floor(pkt.amount * damageScalar)), false));
   }
 
-  ctx.packetsAfterDefense = attachPacketAccess(defendedPackets);
+  ctx.packetsAfterDefense = attachPacketView(defendedPackets);
+  const defenseMeta = {};
+  if (defenseResult.mergedResists && Object.keys(defenseResult.mergedResists).length) {
+    defenseMeta.resists = defenseResult.mergedResists;
+  }
+  if (immunities && immunities.size) defenseMeta.immunities = Array.from(immunities);
+  if (defenseMult !== 1) defenseMeta.defenseMult = Number(defenseMult.toFixed(3));
+  if (damageScalar !== 1) defenseMeta.damageScalar = Number(damageScalar.toFixed(3));
+  recordAttackStep(ctx, "resists", defendedPackets, Object.keys(defenseMeta).length ? defenseMeta : undefined);
   let totalDamage = defendedPackets.reduce((sum, pkt) => sum + Math.max(0, Math.floor(pkt.amount)), 0);
   if (totalDamage <= 0 && ctx.packetsAfterOffense.length > 0) {
     totalDamage = 1;
@@ -228,6 +257,9 @@ function resolveAttackCore(attacker, defender, opts = {}) {
   ctx.hpAfter = getCurrentHp(defender);
   const killed = ctx.hpBefore > 0 && ctx.hpAfter <= 0;
 
+  const statusMeta = {};
+  if (ctx.statusAttempts.length) statusMeta.attempts = ctx.statusAttempts.length;
+  if (opts?.skipOnHitStatuses) statusMeta.skipped = true;
   if (!opts?.skipOnHitStatuses && ctx.statusAttempts.length) {
     const applied = [];
     for (const attempt of ctx.statusAttempts) {
@@ -239,11 +271,32 @@ function resolveAttackCore(attacker, defender, opts = {}) {
     if (applied.length) {
       ctx.appliedStatuses = applied;
       rebuildStatusDerived(defender);
+      statusMeta.applied = applied.map((entry) => ({
+        id: entry.id,
+        stacks: entry.stacks,
+        potency: entry.potency,
+        durationRemaining: Number.isFinite(entry.endsAt)
+          ? Math.max(0, Math.floor(entry.endsAt - ctx.turn))
+          : null,
+      }));
     }
   }
+  recordAttackStep(ctx, "statuses", defendedPackets, Object.keys(statusMeta).length ? statusMeta : undefined);
 
-  maybeApplyOnKillHaste(attacker, killed, ctx);
-  maybeEcho(attacker, defender, ctx);
+  const triggerSummary = maybeApplyOnKillHaste(attacker, killed, ctx);
+  const echoSummary = maybeEcho(attacker, defender, ctx);
+  const triggerMeta = {};
+  if (triggerSummary?.hasteApplied) triggerMeta.haste = triggerSummary.hasteApplied;
+  if (triggerSummary?.resourceGains) triggerMeta.resource = triggerSummary.resourceGains;
+  if (echoSummary) {
+    triggerMeta.echo = {
+      triggered: echoSummary.triggered,
+      chance: echoSummary.chance,
+      fraction: echoSummary.fraction,
+      totalDamage: echoSummary.totalDamage,
+    };
+  }
+  recordAttackStep(ctx, "triggers", defendedPackets, Object.keys(triggerMeta).length ? triggerMeta : undefined);
 
   const dealtTypes = [];
   for (const pkt of defendedPackets) {
@@ -355,72 +408,6 @@ function createPacket(type, amount, isBase = false) {
     pkt.__isBase = true;
   }
   return pkt;
-}
-
-/**
- * @template T extends Packet
- * @param {T[]} list
- * @returns {(T[] & Record<string, number>) & { byType?: Record<string, number> }}
- */
-function attachPacketAccess(list) {
-  const arr = Array.isArray(list) ? list.map((pkt) => ({ ...pkt })) : [];
-  const totals = Object.create(null);
-  for (const pkt of arr) {
-    totals[pkt.type] = (totals[pkt.type] || 0) + Math.max(0, Math.floor(pkt.amount));
-  }
-  for (const [type, amount] of Object.entries(totals)) {
-    arr[type] = amount;
-  }
-  arr.byType = totals;
-  return /** @type {(T[] & Record<string, number>) & { byType?: Record<string, number> }} */ (arr);
-}
-
-/**
- * @param {any[]} attempts
- */
-function sanitizeStatusAttempts(attempts) {
-  if (!Array.isArray(attempts)) return [];
-  const out = [];
-  for (const attempt of attempts) {
-    const cloned = cloneStatusAttempt(attempt);
-    if (cloned) out.push(cloned);
-  }
-  return out;
-}
-
-/**
- * @param {any} attempt
- */
-function cloneStatusAttempt(attempt) {
-  if (!attempt || typeof attempt !== "object" || !attempt.id) return null;
-  const entry = { id: String(attempt.id) };
-  for (const key of [
-    "chance",
-    "baseChance",
-    "chancePct",
-    "stacks",
-    "duration",
-    "potency",
-    "copy",
-  ]) {
-    if (attempt[key] !== undefined) {
-      entry[key] = attempt[key];
-    }
-  }
-  return entry;
-}
-
-/**
- * @param {Array<Record<string, any>>} attempts
- */
-function cloneStatusAttemptList(attempts) {
-  if (!Array.isArray(attempts)) return [];
-  const out = [];
-  for (const attempt of attempts) {
-    const cloned = cloneStatusAttempt(attempt);
-    if (cloned) out.push(cloned);
-  }
-  return out;
 }
 
 /**
@@ -630,7 +617,7 @@ function applyDefense(packets, { defender, resists, immunities, defenseMult, pol
       out.push(createPacket(pkt.type, scaled, false));
     }
   }
-  return out;
+  return { packets: out, mergedResists };
 }
 
 /**
@@ -639,11 +626,11 @@ function applyDefense(packets, { defender, resists, immunities, defenseMult, pol
  * @param {AttackContext} ctx
  */
 function maybeApplyOnKillHaste(attacker, killed, ctx) {
-  if (!attacker || !killed) return;
+  if (!attacker || !killed) return null;
   const temporal = attacker?.modCache?.temporal || Object.create(null);
   const echoCfg = temporal.echo;
   if (ctx?.isEcho && echoCfg && echoCfg.allowOnKill === false) {
-    return;
+    return null;
   }
   let hasteApplied = null;
   if (temporal.onKillHaste) {
@@ -656,6 +643,7 @@ function maybeApplyOnKillHaste(attacker, killed, ctx) {
   if (attacker?.modCache?.resource?.onKillGain) {
     resourceGains = applyOnKillResourceGain(attacker, attacker.modCache.resource.onKillGain);
   }
+  const summary = {};
   if (hasteApplied) {
     ctx.hooks ||= Object.create(null);
     ctx.hooks.hasteApplied = {
@@ -666,11 +654,14 @@ function maybeApplyOnKillHaste(attacker, killed, ctx) {
         : undefined,
       potency: hasteApplied.potency,
     };
+    summary.hasteApplied = ctx.hooks.hasteApplied;
   }
   if (resourceGains) {
     ctx.hooks ||= Object.create(null);
     ctx.hooks.resourceGains = resourceGains;
+    summary.resourceGains = resourceGains;
   }
+  return Object.keys(summary).length ? summary : null;
 }
 
 /**
@@ -681,7 +672,7 @@ function maybeApplyOnKillHaste(attacker, killed, ctx) {
 function maybeEcho(attacker, defender, ctx) {
   const temporal = attacker?.modCache?.temporal || Object.create(null);
   const echoCfg = temporal.echo;
-  if (!echoCfg || ctx.isEcho) return;
+  if (!echoCfg || ctx.isEcho) return null;
 
   const chance = clamp01(pickNumber(
     echoCfg.chancePct,
@@ -698,8 +689,9 @@ function maybeEcho(attacker, defender, ctx) {
       ctx.echo = summary;
       ctx.hooks ||= Object.create(null);
       ctx.hooks.echo = summary;
+      return summary;
     }
-    return;
+    return null;
   }
 
   const fraction = clamp01(pickNumber(
@@ -716,7 +708,7 @@ function maybeEcho(attacker, defender, ctx) {
     ctx.echo = summary;
     ctx.hooks ||= Object.create(null);
     ctx.hooks.echo = summary;
-    return;
+    return summary;
   }
 
   const basePackets = Array.isArray(ctx.packetsAfterOffense) ? ctx.packetsAfterOffense : [];
@@ -728,7 +720,7 @@ function maybeEcho(attacker, defender, ctx) {
     ctx.echo = summary;
     ctx.hooks ||= Object.create(null);
     ctx.hooks.echo = summary;
-    return;
+    return summary;
   }
 
   const statusAttempts = echoCfg.copyStatuses ? cloneStatusAttemptList(ctx.statusAttempts) : [];
@@ -753,6 +745,7 @@ function maybeEcho(attacker, defender, ctx) {
   ctx.echo = summary;
   ctx.hooks ||= Object.create(null);
   ctx.hooks.echo = summary;
+  return summary;
 }
 
 function isAttackDebugEnabled() {

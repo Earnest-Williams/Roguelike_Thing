@@ -9,7 +9,11 @@ export class RingLog {
   }
 
   push(evt) {
-    this.buf[this.write] = { t: performance.now(), ...evt };
+    const now =
+      typeof performance !== "undefined" && typeof performance.now === "function"
+        ? performance.now()
+        : Date.now();
+    this.buf[this.write] = { t: now, ...evt };
     this.write = (this.write + 1) % this.cap;
     this.size = Math.min(this.size + 1, this.cap);
   }
