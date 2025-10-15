@@ -39,8 +39,13 @@ The item/brand/status layer defines atomic modifiers with **per-mod power costs*
 ## Dungeon Themes & Content (Design)
 `DungeonTheme` drives spawns via `monsterTags`, template weights, item tag/affix weights, and a power-budget curve; it can also define level-based culmination events. This mirrors the thematic spawning flow already implemented in the spawner.
 
-## Known Gaps / Open Work
-- **Wandering/guarding** when no hostile target is present.
-- **Full combat UI + debug panel** (event buffers + AttackContext viewer).
-- **Role templates** (e.g., “Orc Shaman” overlays) for fast content scaling.
-- **Complete integration of brand/affinity/resist/polarity** into `resolveAttack()` across all action types (melee/ranged/spell).
+## Milestone Plan & Open Work
+The [Milestone Delivery Plan](./docs/milestone-plan.md) tracks how we will close the remaining gaps while holding the success
+criteria front and centre:
+
+1. **AI wander & guard behaviours** to give idle mobs purposeful motion inside their leashes.
+2. **Combat debug UI + instrumentation** so designers can inspect each `AttackContext` stage.
+3. **Role template overlays** for richer themed encounters without duplicating base monsters.
+4. **Unified brand/affinity/polarity coverage** for melee, ranged, and spell actions through `resolveAttack()`.
+
+Refer to the plan document for the detailed task breakdown, owner prompts, and related test coverage.
