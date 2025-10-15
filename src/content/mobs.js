@@ -132,6 +132,14 @@ function isFiniteNumber(value) {
   return typeof value === "number" && Number.isFinite(value);
 }
 
+function isPointLike(value) {
+  return value && isFiniteNumber(value.x) && isFiniteNumber(value.y);
+}
+
+function sanitizePoint(point) {
+  return { x: point.x | 0, y: point.y | 0 };
+}
+
 function validateAnchorPoint(id, scope, point, allowNull = true) {
   if (!point && allowNull) return;
   if (!point || !isFiniteNumber(point.x) || !isFiniteNumber(point.y)) {
@@ -145,50 +153,41 @@ function clamp01(value) {
   return Math.max(0, Math.min(1, v));
 }
 
-function normalizeGuardConfig(id, raw) {
-  if (!raw) return null;
-  const cfg = { ...raw };
-  if (cfg.anchorOffset) {
-    validateAnchorPoint(id, "guard.anchorOffset", cfg.anchorOffset, false);
-    cfg.anchorOffset = { x: cfg.anchorOffset.x | 0, y: cfg.anchorOffset.y | 0 };
+function normalizeBehaviorConfig(id, scope, raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const cfg = {};
+
+  if (raw.anchor) {
+    validateAnchorPoint(id, `${scope}.anchor`, raw.anchor, false);
+    cfg.anchor = sanitizePoint(raw.anchor);
   }
-  if (cfg.anchor) {
-    validateAnchorPoint(id, "guard.anchor", cfg.anchor, false);
-    cfg.anchor = { x: cfg.anchor.x | 0, y: cfg.anchor.y | 0 };
+
+  if (raw.anchorOffset) {
+    validateAnchorPoint(id, `${scope}.anchorOffset`, raw.anchorOffset, false);
+    cfg.anchorOffset = sanitizePoint(raw.anchorOffset);
   }
-  if (cfg.radius != null) {
-    if (!isFiniteNumber(cfg.radius) || cfg.radius < 0) {
-      throw new Error(`Template ${id}: guard.radius must be a non-negative number`);
+
+  if (raw.radius != null) {
+    const radius = Number(raw.radius);
+    if (!Number.isFinite(radius) || radius < 0) {
+      throw new Error(`Template ${id}: ${scope}.radius must be a non-negative number`);
     }
-    cfg.radius = cfg.radius;
+    cfg.radius = radius;
   }
-  if (cfg.resumeBias != null) {
-    cfg.resumeBias = clamp01(cfg.resumeBias);
+
+  if (raw.resumeBias != null) {
+    cfg.resumeBias = clamp01(raw.resumeBias);
   }
-  return cfg;
+
+  return Object.keys(cfg).length ? cfg : {};
+}
+
+function normalizeGuardConfig(id, raw) {
+  return normalizeBehaviorConfig(id, "guard", raw);
 }
 
 function normalizeWanderConfig(id, raw) {
-  if (!raw) return null;
-  const cfg = { ...raw };
-  if (cfg.anchorOffset) {
-    validateAnchorPoint(id, "wander.anchorOffset", cfg.anchorOffset, false);
-    cfg.anchorOffset = { x: cfg.anchorOffset.x | 0, y: cfg.anchorOffset.y | 0 };
-  }
-  if (cfg.anchor) {
-    validateAnchorPoint(id, "wander.anchor", cfg.anchor, false);
-    cfg.anchor = { x: cfg.anchor.x | 0, y: cfg.anchor.y | 0 };
-  }
-  if (cfg.radius != null) {
-    if (!isFiniteNumber(cfg.radius) || cfg.radius < 0) {
-      throw new Error(`Template ${id}: wander.radius must be a non-negative number`);
-    }
-    cfg.radius = cfg.radius;
-  }
-  if (cfg.resumeBias != null) {
-    cfg.resumeBias = clamp01(cfg.resumeBias);
-  }
-  return cfg;
+  return normalizeBehaviorConfig(id, "wander", raw);
 }
 
 for (const t of Object.values(MOB_TEMPLATES)) {
@@ -207,25 +206,32 @@ for (const t of Object.values(MOB_TEMPLATES)) {
   if (wander) t.wander = wander;
 }
 
+function cloneBehaviorConfig(input) {
+  if (!input || typeof input !== "object") return null;
+  const out = {};
+  if (isPointLike(input.anchor)) {
+    out.anchor = sanitizePoint(input.anchor);
+  }
+  if (isPointLike(input.anchorOffset)) {
+    out.anchorOffset = sanitizePoint(input.anchorOffset);
+  }
+  if (input.radius != null) {
+    const radius = Number(input.radius);
+    if (Number.isFinite(radius) && radius >= 0) {
+      out.radius = radius;
+    }
+  }
+  if (input.resumeBias != null) {
+    out.resumeBias = clamp01(input.resumeBias);
+  }
+  return Object.keys(out).length ? out : null;
+}
+
 export function cloneGuardConfig(input) {
-  if (!input) return null;
-  const out = {
-    anchor: input.anchor ? { x: input.anchor.x, y: input.anchor.y } : null,
-    anchorOffset: input.anchorOffset ? { x: input.anchorOffset.x, y: input.anchorOffset.y } : null,
-    radius: typeof input.radius === "number" ? input.radius : null,
-    resumeBias: typeof input.resumeBias === "number" ? clamp01(input.resumeBias) : null,
-  };
-  return out;
+  return cloneBehaviorConfig(input);
 }
 
 export function cloneWanderConfig(input) {
-  if (!input) return null;
-  const out = {
-    anchor: input.anchor ? { x: input.anchor.x, y: input.anchor.y } : null,
-    anchorOffset: input.anchorOffset ? { x: input.anchorOffset.x, y: input.anchorOffset.y } : null,
-    radius: typeof input.radius === "number" ? input.radius : null,
-    resumeBias: typeof input.resumeBias === "number" ? clamp01(input.resumeBias) : null,
-  };
-  return out;
+  return cloneBehaviorConfig(input);
 }
 

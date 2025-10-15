@@ -155,7 +155,11 @@ function manhattan(a, b) {
   monster.guard = { anchorOffset: { x: 2, y: 0 }, radius: 1, resumeBias: 1 };
   monster.guardRadius = 1;
   monster.spawnPos = { x: 4, y: 4 };
+  monster.homePos = { x: 4, y: 4 };
   monster.pos = { x: 8, y: 4 };
+  if (monster.actor) {
+    monster.actor.homePos = { x: 4, y: 4 };
+  }
 
   const world = makeWorld(monster);
   const rng = () => 0.2;
@@ -165,6 +169,11 @@ function manhattan(a, b) {
   assert.equal(monster.x, 7, "guard anchor offset should pull monster toward anchor tile");
   assert.equal(monster.lastPlannerStep?.label, "guard_step", "guard movement should record guard_step action");
   assert.equal(monster.lastPlannerStep?.blocked, false, "guard step should succeed when path is clear");
+  assert.deepEqual(monster.guard?.anchor, { x: 6, y: 4 }, "monster guard anchor should resolve relative to spawn");
+  assert.deepEqual(monster.actor?.guard?.anchor, { x: 6, y: 4 }, "actor guard anchor should mirror monster guard");
+  assert.deepEqual(monster.homePos, { x: 6, y: 4 }, "monster home position should update to guard anchor");
+  assert.deepEqual(monster.actor?.homePos, { x: 6, y: 4 }, "actor home position should align with guard anchor");
+  assert.equal(monster.lastPlannerDecision?.radius ?? monster.lastPlannerDecision?.guard?.radius, 1, "planner payload should include guard radius");
   console.log("✓ guard anchor offset returns monster toward anchor");
 })().catch((err) => {
   console.error(err);
@@ -194,6 +203,8 @@ function manhattan(a, b) {
   }
 
   assert.equal(monster.lastPlannerStep?.label, "wander_step", "wander movement should record wander_step action");
+  assert.equal(monster.actor?.wanderRadius, 2, "actor wander radius should reflect leash radius");
+  assert.equal(monster.lastPlannerDecision?.type ?? monster.lastPlannerDecision?.goal, "WANDER", "planner should surface wander intent");
   console.log("✓ wander respects leash radius");
 })().catch((err) => {
   console.error(err);
@@ -210,6 +221,7 @@ function manhattan(a, b) {
 
   await monster.takeTurn({ world, rng, now: 0 });
   assert.ok(monster.lastPlannerDecision?.type === "GUARD" || monster.lastPlannerDecision?.type === "WANDER", "idle turn should prefer guard/wander when no hostile present");
+  assert.ok(monster.actor?.guard || monster.actor?.wander, "actor metadata should mirror guard or wander configuration");
 
   const player = {
     id: "priority-player",
@@ -238,6 +250,10 @@ function manhattan(a, b) {
 
   assert.notEqual(monster.lastPlannerDecision?.type, "GUARD", "hostile presence should override guard fallback");
   assert.notEqual(monster.lastPlannerDecision?.type, "WANDER", "hostile presence should override wander fallback");
+  assert.ok(
+    ["MOVE", "ATTACK"].includes(monster.lastPlannerDecision?.type ?? ""),
+    "planner should pursue or attack hostile targets when they reappear",
+  );
   console.log("✓ hostile priority overrides idle guard state");
 })().catch((err) => {
   console.error(err);

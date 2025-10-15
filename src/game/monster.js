@@ -24,7 +24,16 @@ import { rebuildModCache } from "../combat/mod-folding.js";
  * World entity wrapper around a combat actor.
  */
 export class Monster {
-  constructor({ actor, glyph = "?", color = "#fff", baseDelay = 1 }) {
+  constructor({
+    actor,
+    glyph = "?",
+    color = "#fff",
+    baseDelay = 1,
+    guard = null,
+    wander = null,
+    spawnPos = null,
+    homePos = null,
+  } = {}) {
     if (!actor) throw new Error("Monster requires an actor instance");
     this.__actor = actor;
     if (actor) {
@@ -40,10 +49,52 @@ export class Monster {
     this.id = `${actor.id}#${Math.random().toString(36).slice(2, 7)}`;
     this.name = actor.name ?? actor.id ?? "monster";
     this.__template = actor.__template || null;
-    this.spawnPos = null;
-    this.homePos = actor.homePos ?? null;
-    this.guard = cloneGuardConfig(actor.guard ?? actor.__template?.guard ?? null);
-    this.wander = cloneWanderConfig(actor.wander ?? actor.__template?.wander ?? null);
+
+    let resolvedSpawn = null;
+    let spawnExplicit = false;
+    let spawnFromFallback = false;
+    if (isPoint(spawnPos)) {
+      resolvedSpawn = clonePoint(spawnPos);
+      spawnExplicit = true;
+    } else if (isPoint(actor.spawnPos)) {
+      resolvedSpawn = clonePoint(actor.spawnPos);
+      spawnExplicit = true;
+    } else {
+      const fallbackSpawn = snapshotPosition(actor);
+      if (fallbackSpawn) {
+        resolvedSpawn = fallbackSpawn;
+        spawnFromFallback = true;
+      }
+    }
+    this.spawnPos = resolvedSpawn;
+    this._spawnFromFallback = spawnFromFallback && !spawnExplicit;
+
+    const actorHome = clonePoint(actor.homePos);
+    const actorHomePlaceholder = actorHome
+      && actorHome.x === 0 && actorHome.y === 0
+      && !spawnExplicit
+      && !isPoint(homePos);
+    const homeExplicitParam = isPoint(homePos);
+    let resolvedHome = null;
+    let homeFromFallback = false;
+    if (homeExplicitParam) {
+      resolvedHome = clonePoint(homePos);
+    } else if (actorHome && !actorHomePlaceholder) {
+      resolvedHome = actorHome;
+    } else if (resolvedSpawn) {
+      resolvedHome = { ...resolvedSpawn };
+      homeFromFallback = true;
+    }
+    this.homePos = resolvedHome;
+    this._homeFromFallback = homeFromFallback || (!resolvedHome && !homeExplicitParam);
+    if (this.homePos && !spawnExplicit && !homeExplicitParam && this.homePos.x === 0 && this.homePos.y === 0) {
+      this._homeFromFallback = true;
+    }
+
+    const guardSource = guard ?? actor.guard ?? actor.__template?.guard ?? null;
+    const wanderSource = wander ?? actor.wander ?? actor.__template?.wander ?? null;
+    this.guard = cloneGuardConfig(guardSource);
+    this.wander = cloneWanderConfig(wanderSource);
     this.guardRadius = resolveRadius(this.guard, actor.guardRadius, actor.__template?.guardRadius);
     this.wanderRadius = resolveRadius(this.wander, actor.wanderRadius, actor.__template?.wanderRadius);
     this.guardResumeBias = resolveResumeBias(this.guard, actor.guardResumeBias);
@@ -51,7 +102,23 @@ export class Monster {
     this.lightMask = actor.lightMask ?? LIGHT_CHANNELS.ALL;
     this.lightChannel = actor.lightChannel ?? LIGHT_CHANNELS.ALL;
 
+    if (this.spawnPos) {
+      actor.spawnPos = clonePoint(this.spawnPos);
+    }
+    if (!this.homePos && this.spawnPos) {
+      this.homePos = { ...this.spawnPos };
+      this._homeFromFallback = false;
+    }
+    if (!this.homePos && this.guard?.anchor) {
+      this.homePos = clonePoint(this.guard.anchor);
+      this._homeFromFallback = false;
+    }
+    if (this.homePos) {
+      actor.homePos = clonePoint(this.homePos);
+    }
+
     syncBehaviorToActor(this);
+    updateAnchorsFromPosition(this);
   }
 
   get actor() {
@@ -158,11 +225,14 @@ export class Monster {
     if (!p) return;
     this.x = p.x | 0;
     this.y = p.y | 0;
-    if (!this.spawnPos && Number.isFinite(this.x) && Number.isFinite(this.y)) {
+    const valid = Number.isFinite(this.x) && Number.isFinite(this.y);
+    if (valid && (!this.spawnPos || this._spawnFromFallback)) {
       this.spawnPos = { x: this.x, y: this.y };
+      this._spawnFromFallback = false;
     }
-    if (!this.homePos && Number.isFinite(this.x) && Number.isFinite(this.y)) {
+    if (valid && (!this.homePos || this._homeFromFallback)) {
       this.homePos = { x: this.x, y: this.y };
+      this._homeFromFallback = false;
     }
     updateAnchorsFromPosition(this);
   }
@@ -197,8 +267,12 @@ export class Monster {
 
     updateAnchorsFromPosition(this);
     if (world && typeof world === "object") {
-      world.guard = world.guard ?? this.guard;
-      world.wander = world.wander ?? this.wander;
+      if (this.guard && world.guard == null) {
+        world.guard = cloneGuardConfig(this.guard);
+      }
+      if (this.wander && world.wander == null) {
+        world.wander = cloneWanderConfig(this.wander);
+      }
     }
 
     this.perception = updatePerception(this, world);
@@ -206,12 +280,13 @@ export class Monster {
     const decision = planTurn({
       actor: this,
       combatant: this.__actor,
+      selfMob: this,
       world,
       perception: this.perception,
       rng,
       now: ctx?.now,
-      guard: this.guard,
-      wander: this.wander,
+      guard: this.guard ? cloneGuardConfig(this.guard) : null,
+      wander: this.wander ? cloneWanderConfig(this.wander) : null,
     });
 
     this.lastPlannerDecision = decision;
@@ -258,6 +333,25 @@ function resolveResumeBias(config, fallback) {
   if (config && typeof config.resumeBias === "number") return clamp01(config.resumeBias);
   if (Number.isFinite(fallback)) return clamp01(fallback);
   return null;
+}
+
+function snapshotPosition(entity) {
+  if (!entity) return null;
+  if (Number.isFinite(entity.x) && Number.isFinite(entity.y)) {
+    return { x: entity.x | 0, y: entity.y | 0 };
+  }
+  if (isPoint(entity.spawnPos)) {
+    return clonePoint(entity.spawnPos);
+  }
+  const pos = typeof entity.pos === "function" ? entity.pos() : entity.pos;
+  if (isPoint(pos)) {
+    return clonePoint(pos);
+  }
+  return null;
+}
+
+function clonePoint(point) {
+  return isPoint(point) ? { x: point.x | 0, y: point.y | 0 } : null;
 }
 
 function clamp01(value) {
@@ -313,6 +407,7 @@ function updateAnchorsFromPosition(monster) {
       monster.guard.anchor = anchor;
       if (!monster.homePos) {
         monster.homePos = { ...anchor };
+        monster._homeFromFallback = false;
       }
       if (actor) {
         actor.guard = cloneGuardConfig(monster.guard);
@@ -346,6 +441,9 @@ function updateAnchorsFromPosition(monster) {
   }
   if (monster.homePos && actor && !actor.homePos) {
     actor.homePos = { ...monster.homePos };
+  }
+  if (monster.homePos) {
+    monster._homeFromFallback = false;
   }
 }
 
