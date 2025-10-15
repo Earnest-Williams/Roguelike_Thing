@@ -1,0 +1,30 @@
+{
+  "id": "opportunist",
+  "label": "Opportunist",
+  "description": "Pursue easy victories and unattended loot while staying nimble.",
+  "switches": { "pursueCombat": true, "healWhenHurt": false },
+  "thresholds": { "minimumLight": 0.3, "lowHealth": 0.5 },
+  "weights": {
+    "exploration": 0.3,
+    "light": 0.3,
+    "safety": 0.55,
+    "loot": 1.25,
+    "exit": 0.35,
+    "combat": 0.9,
+    "progress": 0.5
+  },
+  "gates": { "allowAggro": true },
+  "formulas": {
+    "loot": "Math.max(0, loot + Math.max(0, 0.6 - threat))",
+    "combat": "Math.max(0, combat - targetThreat * 0.4)"
+  },
+  "pathCost": {
+    "lighting": -0.25,
+    "threat": 0.8,
+    "lava": 1.8,
+    "revisit": 0.2,
+    "loot": -0.6,
+    "unexplored": -0.35
+  },
+  "metadata": { "role": "raider" }
+}
