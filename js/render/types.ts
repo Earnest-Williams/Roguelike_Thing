@@ -1,13 +1,18 @@
 export type RGBA = { r: number; g: number; b: number; a: number };
 
+export type TileKind = "wall" | "floor" | "player" | "start" | "end" | "entity" | string;
+
 export interface TileVisual {
   x: number; y: number;
-  kind: "wall" | "floor" | "player" | "start" | "end";
+  kind: TileKind;
   glyph?: string;
   fg?: RGBA;
   bg?: RGBA;
   overlayA?: number;
   overlayColor?: RGBA;
+  badge?: string;
+  badgeColor?: RGBA;
+  badgeBg?: RGBA;
 }
 
 export interface ViewTransform {

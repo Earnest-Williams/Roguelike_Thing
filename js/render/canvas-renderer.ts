@@ -1,60 +1,52 @@
-// @ts-nocheck
+import type {
+  IRenderer,
+  RendererMinimapColors,
+  RendererMinimapOptions,
+  TileVisual,
+  ViewTransform,
+  RGBA,
+} from "./types.js";
 
-/** @typedef {import("./types.js").TileVisual} TileVisual */
-/** @typedef {import("./types.js").ViewTransform} ViewTransform */
+const DEFAULT_OVERLAY_RGBA: RGBA = { r: 255, g: 255, b: 102, a: 1 };
+const DEFAULT_BADGE_BG: RGBA = { r: 15, g: 23, b: 42, a: 0.85 };
 
-const DEFAULT_OVERLAY_RGBA = { r: 255, g: 255, b: 102, a: 1 };
-const DEFAULT_BADGE_BG = { r: 15, g: 23, b: 42, a: 0.85 };
+export class CanvasRenderer implements IRenderer {
+  readonly canvas: HTMLCanvasElement;
+  readonly ctx: CanvasRenderingContext2D;
+  private width = 0;
+  private height = 0;
+  private cell = 20;
+  private lastView: ViewTransform | null = null;
 
-/**
- * Basic canvas-backed renderer that implements the IRenderer contract.
- */
-export class CanvasRenderer {
-  /**
-   * @param {HTMLCanvasElement} canvas
-   * @param {CanvasRenderingContext2D} [ctx]
-   */
-  constructor(canvas, ctx = canvas.getContext("2d")) {
+  constructor(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D | null = canvas.getContext("2d")) {
     if (!ctx) {
       throw new Error("Canvas 2D context unavailable");
     }
     this.canvas = canvas;
     this.ctx = ctx;
-    this.width = 0;
-    this.height = 0;
-    this.cell = 20;
-    /** @type {ViewTransform | null} */
-    this.lastView = null;
   }
 
-  /**
-   * @param {number} w
-   * @param {number} h
-   * @param {number} cell
-   */
-  init(w, h, cell) {
-    this.width = Math.max(0, Math.floor(w));
-    this.height = Math.max(0, Math.floor(h));
-    this.cell = Math.max(1, Math.floor(cell));
+  init(widthTiles: number, heightTiles: number, cellSize: number): void {
+    this.width = Math.max(0, Math.floor(widthTiles));
+    this.height = Math.max(0, Math.floor(heightTiles));
+    this.cell = Math.max(1, Math.floor(cellSize));
     this.canvas.width = this.width * this.cell;
     this.canvas.height = this.height * this.cell;
     this.canvas.style.width = `${this.canvas.width}px`;
     this.canvas.style.height = `${this.canvas.height}px`;
   }
 
-  /** @param {ViewTransform} view */
-  setViewTransform(view) {
+  setViewTransform(view: ViewTransform): void {
     this.lastView = view;
     this.cell = Math.max(1, Math.floor(view.cellSize));
     this.canvas.style.transform = `translate3d(${view.tx}px, ${view.ty}px, 0)`;
   }
 
-  clear() {
+  clear(): void {
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
   }
 
-  /** @param {TileVisual[]} batch */
-  drawTiles(batch) {
+  drawTiles(batch: TileVisual[]): void {
     const c = this.cell;
     const ctx = this.ctx;
     for (const t of batch) {
@@ -72,24 +64,17 @@ export class CanvasRenderer {
       }
       if (t.glyph) {
         const size = Math.max(10, Math.floor(c * 0.85));
-        const isPlayer = t.kind === "player";
         const fontWeight = t.kind === "player" || t.kind === "mob" ? "bold " : "";
         ctx.font = `${fontWeight}${size}px monospace`;
-        if (t.fg) {
-          ctx.fillStyle = rgbaToString(t.fg);
-        } else {
-          ctx.fillStyle = "#fff";
-        }
+        ctx.fillStyle = t.fg ? rgbaToString(t.fg) : "#fff";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillText(t.glyph, px + c / 2, py + c / 2);
       }
       if (typeof t.overlayA === "number" && t.overlayA > 0) {
-        const overlayColor = t.overlayColor || DEFAULT_OVERLAY_RGBA;
-        ctx.fillStyle = `rgba(${overlayColor.r},${overlayColor.g},${overlayColor.b},${Math.min(
-          1,
-          Math.max(0, t.overlayA),
-        ).toFixed(3)})`;
+        const overlayColor = t.overlayColor ?? DEFAULT_OVERLAY_RGBA;
+        const alpha = Math.min(1, Math.max(0, t.overlayA));
+        ctx.fillStyle = `rgba(${overlayColor.r},${overlayColor.g},${overlayColor.b},${alpha.toFixed(3)})`;
         ctx.fillRect(px, py, c, c);
       }
       if (t.badge) {
@@ -107,27 +92,22 @@ export class CanvasRenderer {
         const bgHeight = fontSize + padY * 2;
         const bgX = textX - bgWidth / 2;
         const bgY = textY - bgHeight + padY;
-        const bgColor = t.badgeBg || DEFAULT_BADGE_BG;
-        ctx.fillStyle = `rgba(${bgColor.r},${bgColor.g},${bgColor.b},${Math.min(
-          1,
-          Math.max(0, bgColor.a ?? 1),
-        ).toFixed(3)})`;
+        const bgColor = t.badgeBg ?? DEFAULT_BADGE_BG;
+        const bgAlpha = Math.min(1, Math.max(0, bgColor.a ?? 1));
+        ctx.fillStyle = `rgba(${bgColor.r},${bgColor.g},${bgColor.b},${bgAlpha.toFixed(3)})`;
         ctx.fillRect(bgX, bgY, bgWidth, bgHeight);
-        const badgeColor = t.badgeColor || { r: 255, g: 255, b: 255, a: 1 };
-        ctx.fillStyle = `rgba(${badgeColor.r},${badgeColor.g},${badgeColor.b},${Math.min(
-          1,
-          Math.max(0, badgeColor.a ?? 1),
-        ).toFixed(3)})`;
+        const badgeColor = t.badgeColor ?? { r: 255, g: 255, b: 255, a: 1 };
+        const badgeAlpha = Math.min(1, Math.max(0, badgeColor.a ?? 1));
+        ctx.fillStyle = `rgba(${badgeColor.r},${badgeColor.g},${badgeColor.b},${badgeAlpha.toFixed(3)})`;
         ctx.fillText(t.badge, textX, textY);
       }
     }
   }
 
-  /**
-   * @param {TileVisual[]} batch
-   * @param {{ viewportRect?: { x: number, y: number, w: number, h: number }, padding?: number, colors?: import("./types.js").RendererMinimapColors }} [opts]
-   */
-  drawMinimap(batch, opts) {
+  drawMinimap(
+    batch: TileVisual[],
+    opts?: RendererMinimapOptions & { colors?: RendererMinimapColors },
+  ): void {
     const ctx = this.ctx;
     const c = this.cell;
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
@@ -151,7 +131,7 @@ export class CanvasRenderer {
     }
 
     const padding = typeof opts?.padding === "number" ? Math.max(0, Math.floor(opts.padding)) : 0;
-    const colors = opts?.colors || {};
+    const colors = opts?.colors ?? {};
 
     if (colors.border && this.width > padding * 2 && this.height > padding * 2) {
       const borderX = padding * c;
@@ -177,22 +157,14 @@ export class CanvasRenderer {
     }
   }
 
-  /**
-   * @param {number} w
-   * @param {number} h
-   * @param {number} cell
-   */
-  resize(w, h, cell) {
-    this.init(w, h, cell);
+  resize(widthTiles: number, heightTiles: number, cellSize: number): void {
+    this.init(widthTiles, heightTiles, cellSize);
     if (this.lastView) {
       this.setViewTransform(this.lastView);
     }
   }
 }
 
-/**
- * @param {import("./types.js").RGBA} color
- */
-function rgbaToString(color) {
+function rgbaToString(color: RGBA): string {
   return `rgba(${color.r},${color.g},${color.b},${color.a})`;
 }
