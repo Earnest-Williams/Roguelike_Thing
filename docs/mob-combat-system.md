@@ -60,6 +60,8 @@ All branches resolve a base delay through `resolveDelayBase()`, respecting comba
 
 Each stage snapshot is pushed into per-actor ring buffers (`actor.logs.attack/status`), mirrored in the developer inspection panel (`showAttackDebug`), and stored on the context for save/load inspection. This makes it easy to trace combat math while iterating on new content.
 
+For day-to-day tuning there is also a lightweight combat debug overlay (`src/ui/combat-debug.js`). It reads the same ring buffers to render the most recent `AttackContext` stages (with packet deltas, status rolls, and temporal hooks) alongside a short list of recent combatants. Toggle it at runtime with **F4**, or preload it by passing `?combatDebug=1` in the URL / setting `window.DEBUG_FLAGS.combatDebug = true`. The overlay remembers its state via `localStorage.setItem("combat-debug-overlay", "1")`, making it easy to keep the breakdown visible while iterating on content.
+
 ### 5. World Wrapper (`src/game/monster.js`)
 
 `Monster.takeTurn(ctx)` orchestrates the entire process:

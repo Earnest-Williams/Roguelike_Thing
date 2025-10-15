@@ -3,7 +3,11 @@
 
 import { strict as assert } from "node:assert";
 import { UIManager } from "../src/ui/UIManager.js";
+import { CombatDebugOverlay } from "../src/ui/combat-debug.js";
 import { emit, EVENT } from "../src/ui/event-log.js";
+import { attachLogs } from "../src/combat/debug-log.js";
+import { makeAttackContext, recordAttackStep } from "../src/combat/attack-context.js";
+import { breakdownFromContext } from "../src/combat/attack-breakdown.js";
 
 function createMockStatusElement() {
   return {
@@ -105,7 +109,7 @@ async function sleep(ms) {
     
     uiManager.destroy();
   }
-  
+
   // Test 4: System messages override combat messages
   {
     const statusEl = createMockStatusElement();
@@ -130,14 +134,78 @@ async function sleep(ms) {
     await sleep(50);
     
     assert.equal(statusEl.textContent, systemMsg, "System message should override combat message");
-    
+
     uiManager.destroy();
   }
-  
+
+  // Test 5: Combat debug overlay renders attack breakdown
+  {
+    class FakeElement {
+      constructor() {
+        this.innerHTML = "";
+        this.style = {};
+      }
+      remove() {}
+    }
+
+    const root = new FakeElement();
+    const overlay = new CombatDebugOverlay({ root });
+    overlay.show();
+
+    const attacker = attachLogs({ id: "player", name: "Player", turn: 7, res: { hp: 20 } });
+    const defender = attachLogs({ id: "goblin", name: "Goblin", turn: 7, res: { hp: 12 } });
+
+    const ctx = makeAttackContext({
+      attacker,
+      defender,
+      turn: 7,
+      prePackets: [{ type: "slash", amount: 5 }],
+      hpBefore: 12,
+      hpAfter: 8,
+    });
+    recordAttackStep(ctx, "accuracy", [], { chance: 0.8, roll: 0.2, hit: true });
+    recordAttackStep(ctx, "resists", [{ type: "slash", amount: 4 }], { resists: { slash: 0.2 } });
+    ctx.statusAttempts.push({ id: "bleed", chance: 0.45 });
+    ctx.appliedStatuses.push({ id: "bleed", stacks: 1, potency: 1, durationRemaining: 3 });
+    ctx.hooks = { echo: { triggered: false, chance: 0.25, fraction: 0.5 } };
+    ctx.totalDamage = 4;
+    ctx.hpBefore = 12;
+    ctx.hpAfter = 8;
+
+    const breakdown = breakdownFromContext(ctx);
+
+    emit(EVENT.COMBAT, {
+      who: "Player",
+      vs: "Goblin",
+      totalDamage: 4,
+      hpBefore: 12,
+      hpAfter: 8,
+      attackContext: ctx,
+      breakdown,
+      ctx: { attackKind: "melee" },
+    });
+
+    assert.ok(
+      root.innerHTML.includes("accuracy"),
+      "Combat debug overlay should include accuracy stage",
+    );
+    assert.ok(
+      root.innerHTML.includes("Temporal Hooks"),
+      "Combat debug overlay should list temporal hooks",
+    );
+    assert.ok(
+      root.innerHTML.includes("Attempts"),
+      "Combat debug overlay should include status attempts",
+    );
+
+    overlay.destroy();
+  }
+
   console.log("✓ Combat messages show initially");
   console.log("✓ Combat messages bypass recent system messages");
   console.log("✓ Combat messages show after system message timeout");
   console.log("✓ System messages override combat messages");
+  console.log("✓ Combat debug overlay renders attack breakdown");
 })().catch((err) => {
   console.error("UI combat feedback test failed:", err);
   process.exitCode = 1;

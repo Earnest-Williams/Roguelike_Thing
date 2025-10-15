@@ -3,6 +3,7 @@
 import { DEFAULT_MARTIAL_DAMAGE_TYPE } from "../../js/constants.js";
 import { getAttackModesForItem } from "../../js/item-system.js";
 import { resolveAttack } from "../combat/resolve.js";
+import { breakdownFromContext } from "../combat/attack-breakdown.js";
 import { EVENT, emit } from "../ui/event-log.js";
 import { Sound } from "../ui/sound.js";
 import "../combat/status-registry.js";
@@ -165,6 +166,7 @@ export function performEquippedAttack(attacker, defender, weaponItem, distTiles,
   };
 
   const out = resolveAttack(ctx);
+  const breakdown = breakdownFromContext(out);
   if (defender?.res && typeof defender.res.hp === "number") {
     defender.res.hp = Math.max(0, defender.res.hp);
   }
@@ -194,7 +196,8 @@ export function performEquippedAttack(attacker, defender, weaponItem, distTiles,
     packets: out.packetsAfterDefense,
     statuses: out.appliedStatuses,
     ctx,
-    breakdown: null,
+    attackContext: out,
+    breakdown,
     echoResult: out.echo?.result ?? null,
   };
   emit(EVENT.COMBAT, payload);
