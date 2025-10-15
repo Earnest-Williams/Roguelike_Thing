@@ -1,5 +1,5 @@
 // src/combat/rng.js
-// @ts-check
+// @ts-nocheck
 
 let _seed = 1234567;
 

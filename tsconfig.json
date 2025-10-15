@@ -15,6 +15,7 @@
     "allowJs": true,
     "checkJs": false,
     "outDir": "dist",
+    "rootDir": ".",
     "baseUrl": ".",
     "paths": {
       "@types/*": ["src/types/*"],
@@ -23,5 +24,10 @@
       "@runes/*": ["src/runes/*"]
     }
   },
-  "include": ["src/**/*"]
+  "include": [
+    "main.ts",
+    "js/**/*.ts",
+    "src/**/*",
+    "tests/**/*.ts"
+  ]
 }

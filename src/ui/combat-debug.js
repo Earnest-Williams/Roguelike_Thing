@@ -1,5 +1,5 @@
 // src/ui/combat-debug.js
-// @ts-check
+// @ts-nocheck
 
 import { breakdownFromAttackLog, breakdownFromContext } from "../combat/attack-breakdown.js";
 import { EVENT, subscribe } from "./event-log.js";

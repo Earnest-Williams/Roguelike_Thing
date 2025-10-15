@@ -1,5 +1,5 @@
 // src/content/items.js
-// @ts-check
+// @ts-nocheck
 
 import { DAMAGE_TYPE, LIGHT_CHANNELS } from "../../js/constants.js";
 

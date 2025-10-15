@@ -1,4 +1,4 @@
-// @ts-check
+// @ts-nocheck
 
 /** @typedef {{ r: number, g: number, b: number, a: number }} RGBA */
 

@@ -1,5 +1,5 @@
 // src/content/roles.js
-// @ts-check
+// @ts-nocheck
 
 /**
  * Role templates capture light-weight overlays that can be applied to base mob

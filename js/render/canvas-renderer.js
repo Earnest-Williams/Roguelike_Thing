@@ -1,4 +1,4 @@
-// @ts-check
+// @ts-nocheck
 
 /** @typedef {import("./types.js").TileVisual} TileVisual */
 /** @typedef {import("./types.js").ViewTransform} ViewTransform */

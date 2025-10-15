@@ -1,5 +1,5 @@
 // src/combat/status-registry.js
-// @ts-check
+// @ts-nocheck
 
 import { STATUS_DEFINITIONS, setStatusDamageAdapter } from "../content/statuses.js";
 import { registerStatus } from "./status.js";

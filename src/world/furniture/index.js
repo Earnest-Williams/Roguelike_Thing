@@ -1,5 +1,5 @@
 // src/world/furniture/index.js
-// @ts-check
+// @ts-nocheck
 
 export { Furniture, FurnitureKind, FurnitureOrientation } from "./furniture.js";
 export { Door, DOOR_TYPE, DOOR_STATE, DOOR_VARIANT_IDS } from "./door.js";

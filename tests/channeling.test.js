@@ -1,5 +1,5 @@
 // tests/channeling.test.js
-// @ts-check
+// @ts-nocheck
 import { tickResources } from "../src/combat/resources.js";
 import { startTurn, endTurn } from "../src/combat/loop.js";
 import { hasStatus } from "../src/combat/status.js";

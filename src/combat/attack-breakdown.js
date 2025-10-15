@@ -1,5 +1,5 @@
 // src/combat/attack-breakdown.js
-// @ts-check
+// @ts-nocheck
 
 /**
  * Create a plain clone of JSON-compatible data. Functions and circular

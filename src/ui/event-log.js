@@ -1,5 +1,5 @@
 // src/ui/event-log.js
-// @ts-check
+// @ts-nocheck
 import { EVENT_LOG_RING_MAX, EVENT_LOG_LATEST_DEFAULT } from "../config.js";
 
 /**

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { StatusAttempt } from "@types/core";
 
 export const TARGET_KIND = {

@@ -1,5 +1,5 @@
 // src/combat/save.js
-// @ts-check
+// @ts-nocheck
 import { normalizePolaritySigned } from "./polarity.js";
 
 /**

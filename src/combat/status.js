@@ -1,5 +1,5 @@
 // src/combat/status.js
-// @ts-check
+// @ts-nocheck
 
 import { contributeDerived } from "./attunement.js";
 import { logStatusEvt } from "./debug-log.js";

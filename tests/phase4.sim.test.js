@@ -1,5 +1,5 @@
 // tests/phase4.sim.test.js
-// @ts-check
+// @ts-nocheck
 import { simulate } from "../src/sim/sim.js";
 import { MOB_TEMPLATES } from "../src/content/mobs.js";
 

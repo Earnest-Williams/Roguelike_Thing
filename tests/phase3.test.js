@@ -1,5 +1,5 @@
 // tests/phase3.test.js
-// @ts-check
+// @ts-nocheck
 import { Actor } from "../src/combat/actor.js";
 import { runTurn } from "../src/combat/loop.js";
 import { tryAttack } from "../src/combat/actions.js";

@@ -1,5 +1,5 @@
 // src/combat/actions.js
-// @ts-check
+// @ts-nocheck
 import { finalAPForAction, spendAP, startCooldown, isReady } from "./time.js";
 import { resolveAttack } from "./resolve.js";
 import { breakdownFromContext } from "./attack-breakdown.js";

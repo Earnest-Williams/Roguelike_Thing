@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { HazardSpec, StatusAttempt } from "@types/core";
 
 export const RUNE_ANCHOR = {

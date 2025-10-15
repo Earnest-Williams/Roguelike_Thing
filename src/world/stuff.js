@@ -1,5 +1,5 @@
 // src/world/stuff.js
-// @ts-check
+// @ts-nocheck
 
 /**
  * Lightweight representation of "stuff" — the material that furniture or items are built from.

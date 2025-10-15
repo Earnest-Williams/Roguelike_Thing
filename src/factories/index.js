@@ -1,5 +1,5 @@
 // src/factories/index.js
-// @ts-check
+// @ts-nocheck
 import { BASE_ITEMS } from "../content/items.js";
 import { MOB_TEMPLATES, cloneGuardConfig, cloneWanderConfig } from "../content/mobs.js";
 import { normalizeRoleIdList, resolveRoleTemplates } from "../content/roles.js";

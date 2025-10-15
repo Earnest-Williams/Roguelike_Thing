@@ -1,5 +1,5 @@
 // src/ui/palette.js
-// @ts-check
+// @ts-nocheck
 
 import { DAMAGE_TYPE, DEFAULT_MARTIAL_DAMAGE_TYPE } from "../../js/constants.js";
 

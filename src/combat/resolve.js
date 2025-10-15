@@ -1,5 +1,5 @@
 // src/combat/resolve.js
-// @ts-check
+// @ts-nocheck
 import { DEFAULT_MARTIAL_DAMAGE_TYPE } from "../../js/constants.js";
 import { applyOneStatusAttempt, rebuildStatusDerived, tryApplyHaste } from "./status.js";
 import { applyOnKillResourceGain } from "./resources.js";

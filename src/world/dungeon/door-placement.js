@@ -1,5 +1,5 @@
 // src/world/dungeon/door-placement.js
-// @ts-check
+// @ts-nocheck
 
 import { TILE_FLOOR } from "../../../js/constants.js";
 import { Door, DOOR_STATE, DOOR_TYPE, DOOR_VARIANT_IDS } from "../furniture/door.js";

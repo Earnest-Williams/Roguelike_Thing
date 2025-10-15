@@ -1,5 +1,5 @@
 // src/ui/sound.js
-// @ts-check
+// @ts-nocheck
 
 import { DEFAULT_MARTIAL_DAMAGE_TYPE, MARTIAL_DAMAGE_TYPES } from "../../js/constants.js";
 

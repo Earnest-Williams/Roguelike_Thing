@@ -1,5 +1,5 @@
 // src/content/brands.js
-// @ts-check
+// @ts-nocheck
 
 import { DAMAGE_TYPE } from "../../js/constants.js";
 

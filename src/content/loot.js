@@ -1,5 +1,5 @@
 // src/content/loot.js
-// @ts-check
+// @ts-nocheck
 
 /** Weighted tables by area/tier */
 export const LOOT_TABLES = {

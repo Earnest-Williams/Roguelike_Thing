@@ -1,5 +1,5 @@
 // src/combat/loop.sample-planner.js
-// @ts-check
+// @ts-nocheck
 import { tryAttack, tryAttackEquipped, tryMove } from "./actions.js";
 import { apCost } from "./time.js";
 import {

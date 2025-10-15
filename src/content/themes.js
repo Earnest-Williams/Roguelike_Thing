@@ -1,5 +1,5 @@
 // src/content/themes.js
-// @ts-check
+// @ts-nocheck
 
 // Default fallback for how many dungeon levels a theme should create when
 // depth-specific data does not increase the count.

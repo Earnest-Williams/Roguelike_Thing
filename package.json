@@ -8,9 +8,14 @@
     "test:run": "node tests/run-basic-tests.js",
     "test:html": "npm run test:run | node tests/make-latest.js",
     "test:all": "npm run test:html",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
     "dev": "node dev/dev-server.js"
   },
   "dependencies": {
     "express": "^4.19.2"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
   }
 }

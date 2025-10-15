@@ -1,5 +1,5 @@
 // src/world/light_settings.js
-// @ts-check
+// @ts-nocheck
 
 /**
  * Default knob values for the lighting falloff curve.

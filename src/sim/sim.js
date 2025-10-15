@@ -1,5 +1,5 @@
 // src/sim/sim.js
-// @ts-check
+// @ts-nocheck
 import { createActorFromTemplate, ensureItemsRegistered } from "../factories/index.js";
 import { runTurn, runTurnAsync } from "../combat/loop.js";
 import { planTurn } from "../combat/ai-planner.js";

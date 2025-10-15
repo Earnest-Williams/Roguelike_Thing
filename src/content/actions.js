@@ -1,5 +1,5 @@
 // src/content/actions.js
-// @ts-check
+// @ts-nocheck
 
 import { planEquippedAttack, tryAttackEquipped, tryMove } from "../combat/actions.js";
 

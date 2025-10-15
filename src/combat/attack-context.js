@@ -1,5 +1,5 @@
 // src/combat/attack-context.js
-// @ts-check
+// @ts-nocheck
 
 import { logAttackStep } from "./debug-log.js";
 

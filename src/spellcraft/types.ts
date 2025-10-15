@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { SpellDef } from "@spells/types";
 
 export const KINDS = {

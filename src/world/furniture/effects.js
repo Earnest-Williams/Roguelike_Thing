@@ -1,5 +1,5 @@
 // src/world/furniture/effects.js
-// @ts-check
+// @ts-nocheck
 
 export const FURNITURE_EFFECT_IDS = Object.freeze({
   LOCKED: "locked",

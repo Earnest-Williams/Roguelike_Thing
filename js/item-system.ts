@@ -223,9 +223,11 @@ function dimsVolumeL(d: Dimensions | null | undefined): number {
   if (!d || typeof d !== "object") {
     return 0.001;
   }
-  const dims = [d.l, d.w, d.h].map((value) =>
-    Number.isFinite(value) && value > 0 ? value : 1,
-  );
+  const dims: number[] = [d.l, d.w, d.h].map((value): number => {
+    return typeof value === "number" && Number.isFinite(value) && value > 0
+      ? value
+      : 1;
+  });
   const volumeCm3 = dims.reduce((acc, value) => acc * value, 1);
   return volumeCm3 / 1000.0;
 } // cm^3 to liters
@@ -234,8 +236,11 @@ function dimsLongest(d: Dimensions | null | undefined): number {
   if (!d || typeof d !== "object") {
     return 1;
   }
-  const values = [d.l, d.w, d.h]
-    .map((value) => (Number.isFinite(value) && value > 0 ? value : 0));
+  const values: number[] = [d.l, d.w, d.h].map((value): number => {
+    return typeof value === "number" && Number.isFinite(value) && value > 0
+      ? value
+      : 0;
+  });
   const longest = Math.max(...values, 0);
   return longest > 0 ? longest : 1;
 }
@@ -255,43 +260,39 @@ function normalizeLightDescriptor(
   defaults: LightDescriptorInput = {},
 ): LightDescriptor | null {
   const source = light && typeof light === "object" ? light : {};
-  const radiusCandidate = source.radius ?? defaults.radius;
-  const radius = Number.isFinite(radiusCandidate) ? Number(radiusCandidate) : 0;
+  const merged: LightDescriptorInput = { ...defaults, ...source };
+  const radiusCandidate = merged.radius;
+  const radius =
+    typeof radiusCandidate === "number" && Number.isFinite(radiusCandidate)
+      ? radiusCandidate
+      : 0;
   if (radius <= 0) return null;
-  const color =
-    typeof source.color === "string"
-      ? source.color
-      : typeof defaults.color === "string"
-        ? defaults.color
-        : null;
   const intensitySource =
-    source.intensity ??
-    defaults.intensity ??
-    (Number.isFinite(defaults.baseIntensity) ? defaults.baseIntensity : undefined);
-  const intensity =
-    intensitySource === undefined ? 1 : clamp01Normalized(Number(intensitySource));
-  const flickerRateCandidate = source.flickerRate ?? defaults.flickerRate;
-  const flickerRate = Number.isFinite(flickerRateCandidate)
-    ? Number(flickerRateCandidate)
-    : 0;
-  const worksWhenDropped =
-    source.worksWhenDropped ?? defaults.worksWhenDropped ?? true;
-  const angleCandidate = source.angle ?? defaults.angle;
-  const angle = Number.isFinite(angleCandidate) ? Number(angleCandidate) : undefined;
-  const widthCandidate = source.width ?? defaults.width;
-  const width = Number.isFinite(widthCandidate) ? Math.max(0, Number(widthCandidate)) : undefined;
-  const channelCandidate = source.channel ?? defaults.channel;
-  const channel = Number.isFinite(channelCandidate) ? Number(channelCandidate) : undefined;
-  return {
+    merged.intensity ??
+    (typeof merged.baseIntensity === "number" && Number.isFinite(merged.baseIntensity)
+      ? merged.baseIntensity
+      : undefined);
+  const descriptor: LightDescriptor = {
     radius,
-    color,
-    intensity,
-    flickerRate,
-    worksWhenDropped,
-    angle,
-    width,
-    channel,
+    color: typeof merged.color === "string" ? merged.color : null,
+    intensity:
+      intensitySource === undefined ? 1 : clamp01Normalized(Number(intensitySource)),
+    flickerRate:
+      typeof merged.flickerRate === "number" && Number.isFinite(merged.flickerRate)
+        ? merged.flickerRate
+        : 0,
+    worksWhenDropped: merged.worksWhenDropped ?? true,
   };
+  if (typeof merged.angle === "number" && Number.isFinite(merged.angle)) {
+    descriptor.angle = merged.angle;
+  }
+  if (typeof merged.width === "number" && Number.isFinite(merged.width)) {
+    descriptor.width = Math.max(0, merged.width);
+  }
+  if (typeof merged.channel === "number" && Number.isFinite(merged.channel)) {
+    descriptor.channel = merged.channel;
+  }
+  return descriptor;
 }
 
 function computeHeftScore(item: Item | null | undefined): number {
@@ -598,7 +599,7 @@ export function normalizeWeaponProfile(profile: WeaponProfileInput | null | unde
   const max = Math.max(optimal, Math.floor(rangeIn.max ?? rangeIn.long ?? optimal));
   return {
     category,
-    isRanged: RANGED_WEAPON_CATEGORIES.has(category),
+    isRanged: category !== WEAPON_CATEGORY.MELEE,
     range: { min, optimal, max },
     reloadTime: Math.max(0, Math.floor(profile.reloadTime ?? profile.reload ?? 0)),
     aimTime: Math.max(0, Math.floor(profile.aimTime ?? profile.aim ?? 0)),
@@ -625,7 +626,7 @@ export function cloneWeaponProfile(profile: WeaponProfile | null | undefined): W
     aimTime: profile.aimTime,
     volley: profile.volley,
     ammo: profile.ammo ? { ...profile.ammo } : null,
-    damage: profile.damage ? { ...profile.damage } : null,
+    damage: normalizeDamageProfile(profile.damage),
     accuracy: profile.accuracy,
     consumeWeaponOnUse: profile.consumeWeaponOnUse,
     recoveryChance: profile.recoveryChance,
@@ -675,34 +676,57 @@ export class Item {
     this.lightRadius = o.lightRadius ?? 0;
     this.lightColor = o.lightColor ?? null;
     this.flickerRate = typeof o.flickerRate === "number" ? o.flickerRate : 0;
-    this.light = normalizeLightDescriptor(o.light, {
+    const defaultLight: LightDescriptorInput = {
       radius: this.lightRadius,
       color: this.lightColor,
-      intensity: o.light?.intensity,
       flickerRate: this.flickerRate,
-      worksWhenDropped: o.light?.worksWhenDropped,
-      angle: o.light?.angle,
-      width: o.light?.width,
-      channel: o.light?.channel,
-    });
+    };
+    if (typeof o.light?.intensity === "number") {
+      defaultLight.intensity = o.light.intensity;
+    }
+    if (typeof o.light?.worksWhenDropped === "boolean") {
+      defaultLight.worksWhenDropped = o.light.worksWhenDropped;
+    }
+    if (typeof o.light?.angle === "number") {
+      defaultLight.angle = o.light.angle;
+    }
+    if (typeof o.light?.width === "number") {
+      defaultLight.width = o.light.width;
+    }
+    if (typeof o.light?.channel === "number") {
+      defaultLight.channel = o.light.channel;
+    }
+    this.light = normalizeLightDescriptor(o.light, defaultLight);
     this.lightMask = o.lightMask ?? LIGHT_CHANNELS.ALL;
     this.container = o.container ? { ...o.container } : null;
     if (this.container) this.contents = [];
-    this.brands = Array.isArray(o.brands)
-      ? o.brands.map((b) => ({ ...b }))
-      : o.brands === undefined
-        ? undefined
-        : null;
-    this.resists = o.resists ? { ...o.resists } : undefined;
-    this.affinities = o.affinities ? { ...o.affinities } : undefined;
-    this.immunities = Array.isArray(o.immunities)
-      ? o.immunities.slice()
-      : o.immunities ?? null;
-    this.dmgMult = o.dmgMult;
-    this.speedMult = o.speedMult;
-    this.affixes = Array.isArray(o.affixes)
-      ? o.affixes.map((a) => ({ ...a }))
-      : o.affixes;
+    if (Array.isArray(o.brands)) {
+      this.brands = o.brands.map((b) => ({ ...b }));
+    } else if (o.brands === null) {
+      this.brands = null;
+    }
+    if (o.resists) {
+      this.resists = { ...o.resists };
+    }
+    if (o.affinities) {
+      this.affinities = { ...o.affinities };
+    }
+    if (Array.isArray(o.immunities)) {
+      this.immunities = o.immunities.slice();
+    } else if (o.immunities !== undefined) {
+      this.immunities = o.immunities ?? null;
+    }
+    if (o.dmgMult !== undefined) {
+      this.dmgMult = o.dmgMult;
+    }
+    if (o.speedMult !== undefined) {
+      this.speedMult = o.speedMult;
+    }
+    if (Array.isArray(o.affixes)) {
+      this.affixes = o.affixes.map((a) => ({ ...a }));
+    } else if (o.affixes !== undefined) {
+      this.affixes = o.affixes;
+    }
     const hasExplicitThrowProfile =
       o.throwProfile !== undefined && o.throwProfile !== null;
     this.throwProfile = hasExplicitThrowProfile
@@ -733,7 +757,7 @@ export class Item {
       throwProfile: BaseThrowProfile | null;
       weaponProfile: WeaponProfile | null;
       container: (ContainerDefinition & Record<string, unknown>) | null;
-      brands?: BrandDefinition[] | null | undefined;
+      brands?: BrandDefinition[] | null;
       resists?: Record<string, number>;
       affinities?: Record<string, number>;
       immunities?: string[] | null;
@@ -746,7 +770,7 @@ export class Item {
         ? this.equipSlots.slice()
         : this.equipSlots,
       handsRequired: this.handsRequired,
-      dims: this.dims ? { ...this.dims } : undefined,
+      dims: { ...this.dims },
       mass: this.mass,
       stackable: this.stackable,
       maxStack: this.maxStack,
@@ -758,14 +782,6 @@ export class Item {
       container: null,
       throwProfile: this.throwProfile ? cloneThrowProfile(this.throwProfile) : null,
       weaponProfile: cloneWeaponProfile(this.weaponProfile),
-      brands: this.brands ? this.brands.map((b) => ({ ...b })) : undefined,
-      resists: this.resists ? { ...this.resists } : undefined,
-      affinities: this.affinities ? { ...this.affinities } : undefined,
-      immunities: Array.isArray(this.immunities)
-        ? this.immunities.slice()
-        : this.immunities ?? null,
-      dmgMult: this.dmgMult,
-      speedMult: this.speedMult,
       affixes: Array.isArray(this.affixes)
         ? this.affixes.map((a) => ({ ...a }))
         : this.affixes,
@@ -773,6 +789,27 @@ export class Item {
 
     if (this.container) {
       copy.container = { ...this.container };
+    }
+
+    if (this.brands !== undefined) {
+      copy.brands = this.brands ? this.brands.map((b) => ({ ...b })) : null;
+    }
+    if (this.resists) {
+      copy.resists = { ...this.resists };
+    }
+    if (this.affinities) {
+      copy.affinities = { ...this.affinities };
+    }
+    if (this.immunities !== undefined) {
+      copy.immunities = Array.isArray(this.immunities)
+        ? this.immunities.slice()
+        : this.immunities ?? null;
+    }
+    if (this.dmgMult !== undefined) {
+      copy.dmgMult = this.dmgMult;
+    }
+    if (this.speedMult !== undefined) {
+      copy.speedMult = this.speedMult;
     }
 
     const cloned = new Item(copy);
