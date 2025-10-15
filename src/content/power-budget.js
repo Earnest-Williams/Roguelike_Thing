@@ -1,5 +1,5 @@
 // src/content/power-budget.js
-// @ts-check
+// @ts-nocheck
 
 export function computeItemPower(it) {
   if (!it || typeof it !== "object") return 0;

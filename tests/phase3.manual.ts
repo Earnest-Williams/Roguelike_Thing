@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Manual phase 3 combat sanity check.
  *

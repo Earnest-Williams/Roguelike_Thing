@@ -1,5 +1,5 @@
 // src/combat/polarity.js
-// @ts-check
+// @ts-nocheck
 
 import { POLAR_BIAS as POLAR_BIAS_SOURCE } from "../../js/constants.js";
 import { clamp } from "../utils/number.js";

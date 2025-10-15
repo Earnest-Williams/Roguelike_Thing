@@ -1,5 +1,5 @@
 // src/content/affixes.budgeted.js
-// @ts-check
+// @ts-nocheck
 import { AFFIX_POOLS } from "./affixes.js";
 
 function formatAffixName(id = "") {

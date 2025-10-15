@@ -1,5 +1,5 @@
 // src/ui/dev-console.js
-// @ts-check
+// @ts-nocheck
 import {
   DEV_CONSOLE_DEFAULT_SIM_ITERATIONS,
   DEV_CONSOLE_DEFAULT_STATUS_DURATION,

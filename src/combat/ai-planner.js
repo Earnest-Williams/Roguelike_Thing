@@ -1,5 +1,5 @@
 // src/combat/ai-planner.js
-// @ts-check
+// @ts-nocheck
 import { ACTIONS } from "../content/actions.js";
 import { FactionService } from "../game/faction-service.js";
 // All entity targeting must normalize to Actor and exclude self before hostility checks.

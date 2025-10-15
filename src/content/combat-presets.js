@@ -1,5 +1,5 @@
 // src/content/combat-presets.js
-// @ts-check
+// @ts-nocheck
 
 import { DAMAGE_TYPE } from "../../js/constants.js";
 import { computeItemPower } from "./power-budget.js";

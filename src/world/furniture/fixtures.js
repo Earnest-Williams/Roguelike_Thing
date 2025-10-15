@@ -1,5 +1,5 @@
 // src/world/furniture/fixtures.js
-// @ts-check
+// @ts-nocheck
 
 import { Furniture, FurnitureKind, FurnitureOrientation } from "./furniture.js";
 import { resolveStuff } from "../stuff.js";

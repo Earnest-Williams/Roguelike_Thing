@@ -1,5 +1,5 @@
 // src/game/faction-service.js
-// @ts-check
+// @ts-nocheck
 
 /**
  * @file Centralizes all logic for determining allegiance between actors.

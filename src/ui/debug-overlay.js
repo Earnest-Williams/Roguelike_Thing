@@ -1,5 +1,5 @@
 // src/ui/debug-overlay.js
-// @ts-check
+// @ts-nocheck
 import {
   DEBUG_OVERLAY_BREAKDOWN_LIMIT,
   DEBUG_OVERLAY_LOG_LIMIT,

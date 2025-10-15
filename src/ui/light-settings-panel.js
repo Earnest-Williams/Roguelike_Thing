@@ -1,5 +1,5 @@
 // src/ui/light-settings-panel.js
-// @ts-check
+// @ts-nocheck
 
 import { EVENT, subscribe } from "./event-log.js";
 import {

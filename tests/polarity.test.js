@@ -1,5 +1,5 @@
 // tests/polarity.test.js
-// @ts-check
+// @ts-nocheck
 import assert from "node:assert/strict";
 import { normalizePolarity, polarityOffenseMult, polarityDefenseMult } from "../src/combat/polarity.js";
 

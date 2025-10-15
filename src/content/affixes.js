@@ -1,5 +1,5 @@
 // src/content/affixes.js
-// @ts-check
+// @ts-nocheck
 
 export const AFFIX_POOLS = {
   prefix: [

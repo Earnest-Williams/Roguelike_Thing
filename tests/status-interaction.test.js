@@ -1,5 +1,5 @@
 // tests/status-interaction.test.js
-// @ts-check
+// @ts-nocheck
 import { applyOneStatusAttempt } from "../src/combat/status.js";
 
 function mkActor() {

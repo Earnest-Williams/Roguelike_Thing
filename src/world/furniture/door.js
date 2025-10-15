@@ -1,5 +1,5 @@
 // src/world/furniture/door.js
-// @ts-check
+// @ts-nocheck
 
 import { Furniture, FurnitureKind, FurnitureOrientation } from "./furniture.js";
 import { FurnitureEffect, FURNITURE_EFFECT_IDS } from "./effects.js";

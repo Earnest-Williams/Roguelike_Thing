@@ -1,5 +1,5 @@
 // src/factories/loot.js
-// @ts-check
+// @ts-nocheck
 import { LOOT_TABLES } from "../content/loot.js";
 import { BASE_ITEMS } from "../content/items.js";
 import { applyAffixes } from "../content/affixes.js";

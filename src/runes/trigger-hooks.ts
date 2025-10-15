@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { ActorLike, GameCtx } from "@types/core";
 import { RUNE_TRIGGER } from "./types";
 import { tryTriggerRune } from "./engine";

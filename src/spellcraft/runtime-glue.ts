@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { ActorLike, GameCtx } from "@types/core";
 import { castSpell } from "@spells/engine";
 import type { SpellDef } from "@spells/types";

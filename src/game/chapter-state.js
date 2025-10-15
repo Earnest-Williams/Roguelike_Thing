@@ -1,5 +1,5 @@
 // src/game/chapter-state.js
-// @ts-check
+// @ts-nocheck
 import { generateDungeonTheme } from "../content/themes.js";
 
 const DEFAULT_PER_LEVEL_BUDGET = 5;

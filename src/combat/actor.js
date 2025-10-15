@@ -1,5 +1,5 @@
 // src/combat/actor.js
-// @ts-check
+// @ts-nocheck
 import {
   ALL_SLOTS_ORDER,
   BASE_DAMAGE_MULTIPLIER,

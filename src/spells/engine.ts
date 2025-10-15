@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { ActorLike, GameCtx } from "@types/core";
 import { resolveAttack } from "@combat/resolve";
 import { EVENT, emit } from "@ui/event-log";

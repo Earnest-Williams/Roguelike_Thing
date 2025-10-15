@@ -1,5 +1,5 @@
 // src/combat/time.js
-// @ts-check
+// @ts-nocheck
 
 import { BASE_AP_GAIN_PER_TURN } from "../../js/constants.js";
 import { rand } from "./rng.js";

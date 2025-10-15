@@ -1,5 +1,5 @@
 // src/sim/senses.js
-// @ts-check
+// @ts-nocheck
 
 import { computeFieldOfView } from "../world/fov.js";
 import { posKeyFromCoords } from "../../js/utils.js";

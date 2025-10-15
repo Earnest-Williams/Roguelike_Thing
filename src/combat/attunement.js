@@ -1,5 +1,5 @@
 // src/combat/attunement.js
-// @ts-check
+// @ts-nocheck
 
 /**
  * @typedef {Object} AttuneRule

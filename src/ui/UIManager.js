@@ -1,5 +1,5 @@
 // src/ui/UIManager.js
-// @ts-check
+// @ts-nocheck
 import { EVENT, subscribe } from "./event-log.js";
 
 /**

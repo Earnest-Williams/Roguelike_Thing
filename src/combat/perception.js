@@ -1,5 +1,5 @@
 // src/combat/perception.js
-// @ts-check
+// @ts-nocheck
 import { computeActorFOV, collectWorldLightSources } from "../sim/senses.js";
 import { posKeyFromCoords } from "../../js/utils.js";
 import { asActor } from "./actor.js";

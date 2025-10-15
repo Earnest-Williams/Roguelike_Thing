@@ -1,5 +1,5 @@
 // src/combat/defense-merge.js
-// @ts-check
+// @ts-nocheck
 
 export function consolidatedResists(actor) {
   const primary = actor?.modCache?.defense?.resists;

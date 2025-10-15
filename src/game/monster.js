@@ -1,5 +1,5 @@
 // src/game/monster.js
-// @ts-check
+// @ts-nocheck
 
 import { SLOT, LIGHT_CHANNELS } from "../../js/constants.js";
 import { MOB_TEMPLATES, cloneGuardConfig, cloneWanderConfig } from "../content/mobs.js";

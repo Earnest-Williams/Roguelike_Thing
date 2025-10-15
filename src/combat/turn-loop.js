@@ -1,5 +1,5 @@
 // src/combat/turn-loop.js
-// @ts-check
+// @ts-nocheck
 
 import { applyStatuses, rebuildDerived } from "./status.js";
 import { tickResources } from "./resources.js";

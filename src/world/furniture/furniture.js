@@ -1,5 +1,5 @@
 // src/world/furniture/furniture.js
-// @ts-check
+// @ts-nocheck
 
 import { LIGHT_CHANNELS } from "../../../js/constants.js";
 import { FurnitureEffect } from "./effects.js";

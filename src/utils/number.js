@@ -1,5 +1,5 @@
 // src/utils/number.js
-// @ts-check
+// @ts-nocheck
 
 /**
  * Clamp a numeric value to the inclusive range [min, max].

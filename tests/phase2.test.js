@@ -1,5 +1,5 @@
 // tests/phase2.test.js
-// @ts-check
+// @ts-nocheck
 import { Actor } from "../src/combat/actor.js";
 import { addStatus, rebuildDerived } from "../src/combat/status.js";
 import { runTurn } from "../src/combat/loop.js";

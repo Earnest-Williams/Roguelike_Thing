@@ -134,7 +134,11 @@ function computeBreakdown(
     if (!Number.isFinite(value)) value = rawValue;
     const contribution = value * weight;
     total += contribution;
-    breakdown[key] = { id: key, weight, value, raw: rawValue, contribution, formula };
+    const entry: TermBreakdown = { id: key, weight, value, raw: rawValue, contribution };
+    if (typeof formula === "string" && formula.length > 0) {
+      entry.formula = formula;
+    }
+    breakdown[key] = entry;
   }
 
   return { total, breakdown };

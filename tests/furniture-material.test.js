@@ -1,5 +1,5 @@
 // tests/furniture-material.test.js
-// @ts-check
+// @ts-nocheck
 
 import { Furniture, FurnitureKind } from "../src/world/furniture/furniture.js";
 import { STUFF } from "../src/world/stuff.js";

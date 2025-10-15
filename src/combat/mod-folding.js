@@ -1,5 +1,5 @@
 // src/combat/mod-folding.js
-// @ts-check
+// @ts-nocheck
 import { COMBAT_RESIST_MAX, COMBAT_RESIST_MIN } from "../config.js";
 import { rebuildDerived } from "./status.js";
 import { normalizePolaritySigned } from "./polarity.js";

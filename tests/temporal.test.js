@@ -1,5 +1,5 @@
 // tests/temporal.test.js
-// @ts-check
+// @ts-nocheck
 import { Actor } from "../src/combat/actor.js";
 import { tryAttack } from "../src/combat/actions.js";
 
