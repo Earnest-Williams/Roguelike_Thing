@@ -1,0 +1,30 @@
+{
+  "id": "sentinel",
+  "label": "Sentinel",
+  "description": "Hold territory, preferring bright, defensible ground.",
+  "switches": { "pursueCombat": false, "healWhenHurt": true },
+  "thresholds": { "minimumLight": 0.45, "lowHealth": 0.7 },
+  "weights": {
+    "exploration": 0.25,
+    "light": 0.75,
+    "safety": 1.35,
+    "loot": 0.1,
+    "exit": 0.35,
+    "combat": 0.25,
+    "progress": 0.4
+  },
+  "gates": { "allowAggro": false },
+  "formulas": {
+    "combat": "Math.max(0, combat - threat * 0.6)",
+    "progress": "Math.max(progress, light * 0.4)"
+  },
+  "pathCost": {
+    "lighting": -0.45,
+    "threat": 1.1,
+    "lava": 3.2,
+    "revisit": 0.2,
+    "loot": -0.1,
+    "unexplored": -0.25
+  },
+  "metadata": { "role": "defensive" }
+}

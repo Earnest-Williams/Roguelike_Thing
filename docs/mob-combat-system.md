@@ -74,6 +74,21 @@ For day-to-day tuning there is also a lightweight combat debug overlay (`src/ui/
 
 `Monster` is also responsible for exposing combat stats (HP, equipment, statuses) on the world entity and for storing planner diagnostics such as `lastPlannerDecision`.
 
+## AI Policy Presets (`src/ai/explore_policy.ts`)
+
+The utility planner can be biased via *policy presets* that describe different behavioural tones. Each preset tweaks metric weights, gating flags, and optional formula overrides before the candidate evaluation step. The built-in catalog now covers both exploration-leaning and combat-focused styles:
+
+- **Cartographer** – Greedy for exploration progress while still valuing light and safety.
+- **Greedy** – Hunts loot and opportunistic fights but reins in aggression as threat rises.
+- **Coward** – Prioritises survival, light, and exit safety above everything else.
+- **Speedrunner** – Chases forward progress and exit discovery with minimal detours.
+- **Arena** – Front-loads combat scoring to keep pressure on visible hostiles.
+- **Sentinel** – Defensive stance that holds bright territory and avoids overextending.
+- **Skirmisher** – Mobile combatant that pokes threats while keeping an escape path.
+- **Opportunist** – Raiding behaviour that favours easy kills and unattended loot.
+
+Presets are JSON friendly (see `config/policies/`) so designers can hot-load variants or override defaults per mob or faction without touching the core planner implementation.
+
 ## Faction System (`src/game/faction-service.js`)
 
 - `relation(a, b)` is the canonical helper—`< 0` means hostile, `> 0` means friendly, `0` is neutral.
