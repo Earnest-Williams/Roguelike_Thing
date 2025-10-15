@@ -6,6 +6,7 @@ import {
   DEFAULT_MOB_HP,
   DEFAULT_MOB_SPEED,
   DEFAULT_INVENTORY_CAPACITY,
+  DEFAULT_AP_CAP,
   SHORT_TERM_MEMORY_PENALTY,
   CARDINAL_DIRECTIONS,
   WEAPON_CATEGORY,
@@ -1235,6 +1236,13 @@ const Game = (() => {
         affiliations,
       });
       attachLogs(this.__actor);
+
+      if (!Number.isFinite(this.__actor.ap) || this.__actor.ap <= 0) {
+        const cap = Number.isFinite(this.__actor.apCap) && this.__actor.apCap > 0
+          ? this.__actor.apCap
+          : DEFAULT_AP_CAP;
+        this.__actor.ap = cap;
+      }
 
       this.syncActorEquipment();
     }

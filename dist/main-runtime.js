@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { TILE_FLOOR, TILE_WALL, DEFAULT_MOB_HP, DEFAULT_MOB_SPEED, DEFAULT_INVENTORY_CAPACITY, SHORT_TERM_MEMORY_PENALTY, CARDINAL_DIRECTIONS, WEAPON_CATEGORY, ATTACK_KIND, THROW_CLASS, DEFAULT_MARTIAL_DAMAGE_TYPE, SLOT, ALL_SLOTS_ORDER, LIGHT_CHANNELS, } from "./js/constants.js";
+import { TILE_FLOOR, TILE_WALL, DEFAULT_MOB_HP, DEFAULT_MOB_SPEED, DEFAULT_INVENTORY_CAPACITY, DEFAULT_AP_CAP, SHORT_TERM_MEMORY_PENALTY, CARDINAL_DIRECTIONS, WEAPON_CATEGORY, ATTACK_KIND, THROW_CLASS, DEFAULT_MARTIAL_DAMAGE_TYPE, SLOT, ALL_SLOTS_ORDER, LIGHT_CHANNELS, } from "./js/constants.js";
 import { shuffle, posKey, posKeyFromCoords, randChoice, clamp, getNow, chebyshevDistance, hasLineOfSight, clamp01Normalized, colorStringToRgba, } from "./js/utils.js";
 import { CONFIG } from "./src/config.js";
 import { createInitialState } from "./src/game/state.js";
@@ -1147,6 +1147,12 @@ const Game = (() => {
                 affiliations,
             });
             attachLogs(this.__actor);
+            if (!Number.isFinite(this.__actor.ap) || this.__actor.ap <= 0) {
+                const cap = Number.isFinite(this.__actor.apCap) && this.__actor.apCap > 0
+                    ? this.__actor.apCap
+                    : DEFAULT_AP_CAP;
+                this.__actor.ap = cap;
+            }
             this.syncActorEquipment();
         }
         get actor() {
