@@ -7,7 +7,7 @@ import { performEquippedAttack, pickAttackMode } from "../game/combat-glue.js";
 import { FactionService } from "../game/faction-service.js";
 import { EVENT, emit } from "../ui/event-log.js";
 import { BASE_MOVE_AP_COST, COOLDOWN_MIN_TURNS, DEFAULT_ATTACK_BASE_COOLDOWN, DEFAULT_ATTACK_BASE_DAMAGE, DEFAULT_BASE_ACTION_AP, DEFAULT_MELEE_RANGE_TILES, DEFAULT_RELOAD_TIME_TURNS, DEFAULT_MARTIAL_DAMAGE_TYPE, HEALTH_FLOOR, MIN_AP_COST, MIN_ATTACK_DAMAGE, SLOT, TILE_FLOOR, } from "../../js/constants.js";
-import { canPay, eventGain } from "./resources.js";
+import { canPay, eventGain, spendResources } from "./resources.js";
 import { noteAttacked, noteMoved } from "./actor.js";
 import { cloneGuardConfig, cloneWanderConfig } from "../content/mobs.js";
 import { Door, DOOR_STATE, FURNITURE_EFFECT_IDS, FurnitureKind, } from "../world/furniture/index.js";
@@ -91,6 +91,7 @@ export function tryAttack(attacker, defender, opts = {}) {
     const { costAP } = finalAPForAction(attacker, action.baseAP, action.tags);
     if (!spendAP(attacker, costAP))
         return false;
+    spendResources(attacker, baseCosts, action.tags);
     const profile = {
         label: opts.label || "Basic Attack",
         base: Math.max(MIN_ATTACK_DAMAGE, opts.base ?? DEFAULT_ATTACK_BASE_DAMAGE),
@@ -209,6 +210,7 @@ export function tryAttackEquipped(attacker, defender, distTiles = DEFAULT_MELEE_
     const res = performEquippedAttack(attacker, defender, plan.item, distTiles, plan.mode);
     if (!res.ok)
         return false;
+    spendResources(attacker, plan.baseCosts, plan.action.tags);
     attacker._turnDidAttack = true;
     noteAttacked(attacker);
     startCooldown(attacker, plan.key, plan.action.baseCooldown);

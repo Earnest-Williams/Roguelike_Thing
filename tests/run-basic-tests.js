@@ -25,6 +25,7 @@ import "./ai-wireup.test.js";
 import "./mob-combat-integration.test.js";
 import "./event-log-async.test.js";
 import "./combat-run-turn-async.test.js";
+import "./combat-resource-cost.test.js";
 import "./ui-combat-feedback.test.js";
 import "./sample-gear.test.js";
 import "./armor-immunity-ordering.test.js";
