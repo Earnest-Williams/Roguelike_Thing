@@ -26,6 +26,11 @@ import "./event-log-async.test.js";
 import "./combat-run-turn-async.test.js";
 import "./ui-combat-feedback.test.js";
 import "./sample-gear.test.js";
+import "./armor-immunity-ordering.test.js";
+import "./accuracy-miss-semantics.test.js";
+import "./resource-gating-exhaustion.test.js";
+import "./save-load-stacks-timers.test.js";
+import "./determinism-seed.test.js";
 
 import { strict as assert } from "node:assert";
 import { foldModsFromEquipment, foldMods } from "../src/combat/mod-folding.js";

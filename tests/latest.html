@@ -1,100 +1,29 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <title>Test Results</title>
-  <style>
-    body { font-family: system-ui, sans-serif; margin: 2rem; background: #111; color: #eee; }
-    h1 { font-size: 1.5rem; margin-bottom: 1rem; }
-    pre { background: #222; padding: 1rem; border-radius: 8px; overflow-x: auto; }
-    .timestamp { font-size: 0.9rem; color: #aaa; margin-bottom: 1rem; }
-  </style>
-</head>
-<body>
-  <h1>Automated Test Run</h1>
-  <div class="timestamp">Generated: 2025-10-15T01:45:11.206Z</div>
-  <pre>
-&gt; roguelike-thing@0.0.0 test
-&gt; node tests/run-basic-tests.js
-
-✓ bleed stacks, damages, and expires
-✓ outgoing scaling uses stacks
-✓ outgoing scaling skips zero/invalid packets
-✓ noteUseGain clamps to maxStacks
-✓ noteUseGain ignores unsupported damage types
-✓ decayAttunements reduces stacks and prunes empties
-✓ decayAttunements skips types without rules
-✓ decayAttunements clamps negative decay rates
-✓ decayAttunements floors remaining stacks after decay
-✓ decayAttunements removes invalid stack entries
-✓ tickAttunements handles multi-turn decay
-✓ contributeDerived adds resist and accuracy bonuses
-✓ attunement gain/decay
-✓ echo triggers once, haste and resource gain apply on kill
-✓ allowOnKill=false suppresses on-kill haste/resource gains from echo
-✓ primary kills still award haste/resources when echo suppresses on-kill kills
-✓ on-kill haste respects oncePerTurn and cooldownTurns gates
-✓ echo suppresses on-hit statuses when copyStatuses is false
-✓ echo copies status attempts when copyStatuses is true
-✓ channeling idle regen behavior
-✓ affix pool extensions registered
-✓ composite items expose layered modifiers
-✓ elemental brand coverage expanded
-✓ item brands registered in catalog
-✓ FOV covers Chebyshev radius when unobstructed
-✓ FOV respects blocking walls
-✓ Known-grid exploration ignores unknown blockers
-✓ light radius &amp; flicker delegate to Actor accessors
-✓ compositeOverlayAt respects losFn gates
-✓ directional lights only illuminate tiles inside their cone
-✓ light channels respect entity masks
-✓ light falloff settings adjust the composite overlay in real time
-✓ innate vision bonus stacks with equipment radius
-✓ innate bonus applies when equipment exposes custom light accessors
-✓ rebuildModCache refreshes innate vision bonuses
-✓ generateDungeonTheme produces a procedural theme
-✓ applyAffixesBudgeted respects budget constraints
-✓ faction alliances, hostility edges &amp; innate vision
-✓ spawn weights filter by tags
-✓ spawnMonsters populates mobs from templates
-✓ collectWorldLightSources aggregates world lights
-✓ updatePerception populates actors and lights
-✓ skeleton loadout extinguishes light sources
-✓ humanoid loadouts always include light sources and spare oil
-✓ innates from actor objects fold into cache
-✓ template innates still fold into cache
-✓ planner falls back to wander when target position is unknown
-✓ planner avoids context.tryMove collisions
-
-=== All mob combat integration tests passed ===
-✓ event log unsubscribe prevents additional calls
-✓ event log emit logs handler exceptions defensively
-✓ status ticking &amp; expiry
-✓ status zero-duration cleanup
-✓ resolveAttack polarity/resist order
-✓ foldMods slot filter
-✓ cooldown begin/tick lifecycle
-✓ temporal math
-✓ save/hydrate actor state
-✓ rng determinism
-✓ foldMods basic
-✓ monster wanders within leash when idle
-✓ monster approaches visible hostile
-✓ guard decision pulls monster toward home
-✓ mobs detect and pursue hostile mobs from different factions
-✓ mobs ignore allies in their own faction (no friendly fire)
-✓ mobs detect and pursue player character
-✓ mobs attack player when adjacent (in range)
-✓ mobs attack hostile mobs when adjacent (mob-to-mob combat)
-✓ mobs prioritize closer hostile targets
-✓ complex faction scenario: mobs respect multiple faction relationships
-✓ event log await covers typed + wildcard listeners
-✓ runTurnAsync awaits planner and event emission
-✓ event log async dispatch
-✓ Combat messages show initially
-✓ Combat messages bypass recent system messages
-✓ Combat messages show after system message timeout
-✓ System messages override combat messages
-</pre>
-</body>
-</html>
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Test Results</title>
+<style>
+body{background:#111;color:#eee;font-family:system-ui,Segoe UI,Roboto,Ubuntu,Helvetica,Arial,sans-serif;margin:20px}
+.ok{color:#9FE970}.bad{color:#ff6b6b;background:#2a1515}
+pre{background:#222;padding:1rem;border-radius:8px;max-height:70vh;overflow:auto;white-space:pre-wrap}
+button{background:#333;color:#eee;border:1px solid #444;border-radius:6px;padding:.4rem .6rem;cursor:pointer}
+</style></head><body>
+<h1>Automated Test Run</h1>
+<div>Generated: <time datetime="2025-10-15T02:32:00.780Z">2025-10-15T02:32:00.780Z</time></div>
+<p><strong>Summary:</strong> 82 passed, 0 failed
+   <button id="copy">Copy as Markdown</button></p>
+<pre id="log"></pre>
+<script>
+const RAW = "\n> roguelike-thing@0.0.0 test:run\n> node tests/run-basic-tests.js\n\n✓ bleed stacks, damages, and expires\n✓ outgoing scaling uses stacks\n✓ outgoing scaling skips zero/invalid packets\n✓ noteUseGain clamps to maxStacks\n✓ noteUseGain ignores unsupported damage types\n✓ decayAttunements reduces stacks and prunes empties\n✓ decayAttunements skips types without rules\n✓ decayAttunements clamps negative decay rates\n✓ decayAttunements floors remaining stacks after decay\n✓ decayAttunements removes invalid stack entries\n✓ tickAttunements handles multi-turn decay\n✓ contributeDerived adds resist and accuracy bonuses\n✓ attunement gain/decay\n✓ echo triggers once, haste and resource gain apply on kill\n✓ allowOnKill=false suppresses on-kill haste/resource gains from echo\n✓ primary kills still award haste/resources when echo suppresses on-kill kills\n✓ on-kill haste respects oncePerTurn and cooldownTurns gates\n✓ echo suppresses on-hit statuses when copyStatuses is false\n✓ echo copies status attempts when copyStatuses is true\n✓ channeling idle regen behavior\n✓ affix pool extensions registered\n✓ composite items expose layered modifiers\n✓ elemental brand coverage expanded\n✓ item brands registered in catalog\n✓ FOV covers Chebyshev radius when unobstructed\n✓ FOV respects blocking walls\n✓ Known-grid exploration ignores unknown blockers\n✓ light radius & flicker delegate to Actor accessors\n✓ compositeOverlayAt respects losFn gates\n✓ directional lights only illuminate tiles inside their cone\n✓ light channels respect entity masks\n✓ light falloff settings adjust the composite overlay in real time\n✓ innate vision bonus stacks with equipment radius\n✓ innate bonus applies when equipment exposes custom light accessors\n✓ rebuildModCache refreshes innate vision bonuses\n✓ generateDungeonTheme produces a procedural theme\n✓ applyAffixesBudgeted respects budget constraints\n✓ faction alliances, hostility edges & innate vision\n✓ spawn weights filter by tags\n✓ spawnMonsters populates mobs from templates\n✓ collectWorldLightSources aggregates world lights\n✓ updatePerception populates actors and lights\n✓ skeleton loadout extinguishes light sources\n✓ humanoid loadouts always include light sources and spare oil\n✓ innates from actor objects fold into cache\n✓ template innates still fold into cache\n✓ planner falls back to wander when target position is unknown\n✓ planner avoids context.tryMove collisions\n\n=== All mob combat integration tests passed ===\n✓ event log unsubscribe prevents additional calls\n✓ event log emit logs handler exceptions defensively\n✓ defense ordering respects immunities and flat DR\n✓ misses consume AP and produce no packets or attunement\n✓ insufficient resource cancels action without AP spend\n✓ channel drains resources to zero then applies cooldown\n✓ save/load restores stacked status timers accurately\n✓ combat packets deterministic with fixed seed\n✓ status ticking & expiry\n✓ status zero-duration cleanup\n✓ resolveAttack polarity/resist order\n✓ foldMods slot filter\n✓ cooldown begin/tick lifecycle\n✓ temporal math\n✓ save/hydrate actor state\n✓ rng determinism\n✓ foldMods basic\n✓ monster wanders within leash when idle\n✓ monster approaches visible hostile\n✓ guard decision pulls monster toward home\n✓ mobs detect and pursue hostile mobs from different factions\n✓ mobs ignore allies in their own faction (no friendly fire)\n✓ mobs detect and pursue player character\n✓ mobs attack player when adjacent (in range)\n✓ mobs attack hostile mobs when adjacent (mob-to-mob combat)\n✓ mobs prioritize closer hostile targets\n✓ complex faction scenario: mobs respect multiple faction relationships\n✓ event log await covers typed + wildcard listeners\n✓ runTurnAsync awaits planner and event emission\n✓ event log async dispatch\n✓ Combat messages show initially\n✓ Combat messages bypass recent system messages\n✓ Combat messages show after system message timeout\n✓ System messages override combat messages\n";
+document.getElementById('log').innerHTML = RAW.split(/\r?\n/).map(ln=>{
+  const esc = ln.replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  if (/^[✓✔]\b/.test(ln)) return '<div class="ok">✅ '+esc.slice(1)+'</div>';
+  if (/^(✗|x|X|!)\b|Error:|AssertionError|FAILED/i.test(ln)) return '<div class="bad">❌ '+esc+'</div>';
+  return '<div>'+esc+'</div>';
+}).join('\n');
+document.getElementById('copy').onclick = async ()=>{
+  const summary = document.querySelector('p').innerText;
+  const fence = String.fromCharCode(96).repeat(3);
+  const md = '### Test Results\n\n' + summary + '\n\n' + fence + '\n' + RAW + '\n' + fence + '\n';
+  try { await navigator.clipboard.writeText(md); } catch {}
+};
+</script>
+</body></html>

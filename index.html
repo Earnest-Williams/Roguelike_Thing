@@ -442,6 +442,69 @@
         <div id="minimapHint">Press “m” to toggle, “Esc” to close</div>
       </div>
     </div>
+    <div id="dev-tools" style="position:fixed;right:16px;bottom:16px;z-index:9999">
+      <button
+        id="btn-run-tests"
+        style="background:#333;color:#eee;border:1px solid #444;border-radius:999px;padding:.6rem 1rem;cursor:pointer"
+      >
+        ▶ Run Tests
+      </button>
+    </div>
+    <div
+      id="test-overlay"
+      style="display:none;position:fixed;inset:5%;background:#111;border:1px solid #333;border-radius:12px;z-index:10000;padding:1rem;box-shadow:0 10px 40px rgba(0,0,0,.6)"
+    >
+      <div style="display:flex;gap:.5rem;align-items:center;justify-content:space-between;margin-bottom:.5rem">
+        <strong>Test Results</strong>
+        <span>
+          <button id="btn-copy-md">Copy MD</button>
+          <button id="btn-close-tests">Close</button>
+        </span>
+      </div>
+      <iframe id="test-frame" style="width:100%;height:85%;background:#222;border:0;border-radius:8px"></iframe>
+    </div>
+    <script>
+      (function () {
+        const btn = document.getElementById("btn-run-tests");
+        const overlay = document.getElementById("test-overlay");
+        const iframe = document.getElementById("test-frame");
+        const btnClose = document.getElementById("btn-close-tests");
+        const btnCopy = document.getElementById("btn-copy-md");
+
+        async function runAndShow() {
+          overlay.style.display = "block";
+          try {
+            const resp = await fetch("/__run-tests", { method: "POST" });
+            const html = await resp.text();
+            const blob = new Blob([html], { type: "text/html" });
+            iframe.src = URL.createObjectURL(blob);
+          } catch (err) {
+            console.error("Unable to run tests", err);
+          }
+        }
+
+        if (btn) btn.addEventListener("click", runAndShow);
+        if (btnClose)
+          btnClose.addEventListener("click", () => {
+            overlay.style.display = "none";
+            iframe.src = "about:blank";
+          });
+        if (btnCopy)
+          btnCopy.addEventListener("click", async () => {
+            try {
+              const doc = iframe.contentDocument || iframe.contentWindow.document;
+              const pre = doc?.querySelector("#log");
+              const time = doc?.querySelector("time")?.textContent || "";
+              const summaryMatch = doc?.body?.textContent?.match(/Summary:\s*\d+\s*passed,\s*\d+\s*failed/);
+              const summary = summaryMatch ? summaryMatch[0] : "Summary";
+              const md = `### Test Results\n\n${summary}\n\nGenerated: ${time}\n\n\`\`\`\n${pre ? pre.innerText : ""}\n\`\`\`\n`;
+              await navigator.clipboard.writeText(md);
+            } catch (err) {
+              console.error("Copy failed", err);
+            }
+          });
+      })();
+    </script>
     <script type="module" src="./main.js"></script>
   </body>
 </html>
