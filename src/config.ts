@@ -72,7 +72,7 @@ export const COMBAT_FALLBACK_ATTACK_BASE_DAMAGE = DEFAULT_ATTACK_BASE_DAMAGE;
 
 export const CONFIG = {
   visual: {
-    view: { width: 41, height: 41 },
+    view: { width: 49, height: 45 },
     cellSize: 20,
     minCellSize: 12,
     colors: {
