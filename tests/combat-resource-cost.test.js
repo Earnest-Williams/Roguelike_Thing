@@ -50,4 +50,26 @@ function makeCombatant(id) {
   );
 }
 
+// --- Attacks should remove HP from the defender ---
+{
+  const attacker = makeCombatant("damage-attacker");
+  const defender = makeCombatant("damage-target");
+  const startHp = defender.res.hp;
+
+  const ok = tryAttack(attacker, defender, { base: 8 });
+  assert.equal(ok, true, "damage tryAttack should resolve");
+
+  assert.ok(startHp > 0, "defender should start with positive HP");
+  assert.ok(
+    defender.res.hp < startHp,
+    "successful attacks should reduce defender HP",
+  );
+  assert.equal(
+    defender.res.hp,
+    startHp - 8,
+    "basic attack damage should subtract directly from defender HP",
+  );
+}
+
 console.log("✓ attacks spend resource costs");
+console.log("✓ attacks reduce defender HP");
