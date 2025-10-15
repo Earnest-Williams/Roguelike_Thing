@@ -12,6 +12,7 @@ import "./fov.test.js";
 import "./light-radius-unified.test.js";
 import "./light-math.test.js";
 import "./vision-radius.test.js";
+import "./vision-lighting.test.js";
 import "./theme-generation.test.js";
 import "./theme-spawn.test.js";
 import "./loot-budget.test.js";
