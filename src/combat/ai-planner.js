@@ -7,6 +7,7 @@ import { asActor } from "../combat/actor.js";
 import { hasLineOfSight } from "../../js/utils.js";
 import { evaluateCandidates, explainDecision, clamp01 as clamp01Utility } from "../ai/planner.js";
 import { computePathCost } from "../ai/path_cost.js";
+import { TILE_FLOOR } from "../../js/constants.js";
 
 /**
  * @file
@@ -60,6 +61,83 @@ const listMobs = (mobManager) => {
 };
 
 const DEFAULT_WANDER_RADIUS = 6;
+
+function gatherCollisionEntities(context) {
+  const entities = [];
+  if (context?.player) entities.push(context.player);
+  for (const mob of listMobs(context?.mobManager)) {
+    if (mob && !entities.includes(mob)) entities.push(mob);
+  }
+  if (Array.isArray(context?.entities)) {
+    for (const ent of context.entities) {
+      if (ent && !entities.includes(ent)) entities.push(ent);
+    }
+  }
+  return entities;
+}
+
+function resolveGridLike(context) {
+  if (Array.isArray(context?.mapState?.grid)) return context.mapState.grid;
+  if (Array.isArray(context?.maze)) return context.maze;
+  if (Array.isArray(context?.grid)) return context.grid;
+  return null;
+}
+
+function buildCollisionGuards(self, context = {}) {
+  const grid = resolveGridLike(context);
+  const entities = gatherCollisionEntities(context);
+
+  const canMove = (entity, step) => {
+    if (!entity || !step) return false;
+    const dx = Number(step.dx) || 0;
+    const dy = Number(step.dy) || 0;
+    if (!dx && !dy) return false;
+    const origin = asPosition(entity) ?? asPosition(entity?.__actor) ?? null;
+    if (!origin) return false;
+    const nx = origin.x + dx;
+    const ny = origin.y + dy;
+    if (!Number.isFinite(nx) || !Number.isFinite(ny)) return false;
+
+    if (grid) {
+      const row = grid[ny];
+      if (!row || row[nx] == null) return false;
+      if (row[nx] !== TILE_FLOOR) return false;
+    }
+
+    for (const candidate of entities) {
+      if (!candidate) continue;
+      if (candidate === entity) continue;
+      if (candidate === self) continue;
+      if (candidate === entity?.__actor) continue;
+      if (candidate === entity?.actor) continue;
+      if (candidate === self?.__actor) continue;
+      const pos = asPosition(candidate);
+      if (pos && pos.x === nx && pos.y === ny) {
+        return false;
+      }
+    }
+
+    return true;
+  };
+
+  const tryMove = (entity, step) => {
+    if (!canMove(entity, step)) return false;
+    if (typeof context?.tryMove === "function") {
+      return context.tryMove(entity, step);
+    }
+    if (typeof entity?.tryMove === "function") {
+      const maze = grid ?? context?.maze;
+      return entity.tryMove(step.dx, step.dy, maze, context?.mobManager);
+    }
+    if (entity?.__actor && typeof entity.__actor.tryMove === "function") {
+      const maze = grid ?? context?.maze;
+      return entity.__actor.tryMove(step.dx, step.dy, maze, context?.mobManager);
+    }
+    return false;
+  };
+
+  return { canMove, tryMove };
+}
 
 function selectTarget(self, ctx = {}) {
   /** @type {(e: any) => import("./actor.js").Actor | null} */
@@ -234,11 +312,20 @@ export function planTurn({ actor, combatant, world = {}, perception, rng }) {
   const home = resolveHomePosition(actor, combatant ?? performer);
   const guardRadius = resolveGuardRadius(actor, combatant ?? performer);
   if (home && Number.isFinite(guardRadius) && guardRadius >= 0) {
-    return { type: "GUARD", at: home, radius: guardRadius };
+    return {
+      type: "GUARD",
+      at: home,
+      radius: guardRadius,
+      todo: "TODO: replace guard fallback with richer idle behavior",
+    };
   }
 
   const leash = resolveWanderRadius(actor, combatant ?? performer);
-  return { type: "WANDER", leash };
+  return {
+    type: "WANDER",
+    leash,
+    todo: "TODO: implement wander/idle routines",
+  };
 }
 
 function resolveHealthRatio(actor) {
@@ -424,15 +511,19 @@ export const AIPlanner = {
       ? AIPlanner.distanceBetween(selfMob, selection.entity, context)
       : AIPlanner.distanceBetween(selfMob, null, { ...context, distance: context?.distance ?? Infinity });
 
-    const decision = buildUtilityDecision(selfMob, selection, context, distance);
+    const movementGuards = buildCollisionGuards(selfMob, context);
+    const plannerContext = { ...context, ...movementGuards };
+    const decision = buildUtilityDecision(selfMob, selection, plannerContext, distance);
     const explain = explainDecision(decision);
     if (explain) {
       selfMob.lastPlannerDecision = explain;
       if (actor && actor !== selfMob) {
         actor.lastPlannerDecision = explain;
       }
+      plannerContext.lastPlannerDecision = explain;
       context.lastPlannerDecision = explain;
     }
+    plannerContext.utilityDecision = decision;
     context.utilityDecision = decision;
     if (typeof context?.onDecision === "function") {
       try {
@@ -454,7 +545,7 @@ export const AIPlanner = {
       actor,
       target: targetEntity,
       targetActor,
-      context,
+      context: plannerContext,
       distance,
       decision,
     };

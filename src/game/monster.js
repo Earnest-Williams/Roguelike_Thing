@@ -6,6 +6,7 @@ import { MOB_TEMPLATES } from "../content/mobs.js";
 import { planTurn } from "../combat/ai-planner.js";
 import { updatePerception } from "../combat/perception.js";
 import { executeDecision } from "../combat/actions.js";
+import { rebuildModCache } from "../combat/mod-folding.js";
 
 /**
  * @file Monster
@@ -26,6 +27,9 @@ export class Monster {
   constructor({ actor, glyph = "?", color = "#fff", baseDelay = 1 }) {
     if (!actor) throw new Error("Monster requires an actor instance");
     this.__actor = actor;
+    if (actor) {
+      rebuildModCache(actor);
+    }
     this.glyph = glyph;
     this.color = color;
     this.baseDelay = Number.isFinite(baseDelay) && baseDelay > 0 ? baseDelay : 1;

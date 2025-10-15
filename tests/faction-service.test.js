@@ -5,11 +5,7 @@ import { MOB_TEMPLATES } from "../src/content/mobs.js";
 import { FactionService } from "../src/game/faction-service.js";
 // [Unified Implementation] Pull the Monster wrapper from its canonical module.
 import { Monster } from "../src/game/monster.js";
-import {
-  foldInnatesIntoModCache,
-  foldModsFromEquipment,
-  rebuildModCache,
-} from "../src/combat/mod-folding.js";
+import { rebuildModCache } from "../src/combat/mod-folding.js";
 
 function makeActor({ id, factions, affiliations }) {
   return new Actor({
@@ -31,6 +27,17 @@ function makeActor({ id, factions, affiliations }) {
     affiliations,
   });
 }
+
+(function testActorSanitizesFactionsAndAffiliations() {
+  const actor = new Actor({
+    id: "sanity",
+    factions: ["npc_hostile", null, "npc_hostile", ""],
+    affiliations: [null, "bandits:redhands", "", "bandits:redhands"],
+  });
+
+  assert.deepEqual(actor.factions, ["npc_hostile"], "constructor should dedupe/sanitize factions");
+  assert.deepEqual(actor.affiliations, ["bandits:redhands"], "affiliations should omit invalid entries");
+})();
 
 (function testSharedFactionAllies() {
   const a = makeActor({ id: "a", factions: ["npc_hostile"], affiliations: [] });
@@ -111,8 +118,7 @@ function makeActor({ id, factions, affiliations }) {
       configurable: true,
       writable: false,
     });
-    foldModsFromEquipment(actor);
-    foldInnatesIntoModCache(actor);
+    rebuildModCache(actor);
     return actor;
   }
 
@@ -152,8 +158,7 @@ function makeActor({ id, factions, affiliations }) {
     writable: false,
   });
 
-  foldModsFromEquipment(actor);
-  foldInnatesIntoModCache(actor);
+  rebuildModCache(actor);
   assert.equal(actor.modCache?.vision?.lightBonus, 1, "innate dark vision should apply");
 
   rebuildModCache(actor);

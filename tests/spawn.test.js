@@ -41,7 +41,8 @@ class StubMobManager {
   const maze = Array.from({ length: size }, () => Array(size).fill(TILE_FLOOR));
   const mobManager = new StubMobManager();
   const rng = sequenceRng([0, 0.1, 0.2, 0.3, 0.8, 0.9]);
-  const gameCtx = { maze, mobManager, player: null };
+  const player = { x: 1, y: 1 };
+  const gameCtx = { maze, mobManager, player };
 
   const spawned = spawnMonsters(gameCtx, { count: 2, includeTags: ["orc"], rng });
 
@@ -52,6 +53,11 @@ class StubMobManager {
     assert(mob?.actor, "spawned entities should expose their actor");
     assert.equal(mob.actor.id, "orc", "spawned mob should match requested template");
     assert(Number.isInteger(mob.x) && Number.isInteger(mob.y), "spawned mobs should have integer coordinates");
+    const dx = Math.abs(mob.x - player.x);
+    const dy = Math.abs(mob.y - player.y);
+    assert(dx + dy >= 6, "spawned mobs should respect minimum distance from player");
+    assert(mob.actor.modCache, "spawned mobs should carry a populated mod cache");
+    assert(mob.actor.modCache?.vision, "mod cache should include vision data");
   }
   console.log("✓ spawnMonsters populates mobs from templates");
 })();

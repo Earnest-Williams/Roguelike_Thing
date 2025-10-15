@@ -1,8 +1,8 @@
 import { strict as assert } from "node:assert";
 
-import { TILE_FLOOR } from "../js/constants.js";
+import { TILE_FLOOR, TILE_WALL } from "../js/constants.js";
 import { createMobFromTemplate } from "../src/factories/index.js";
-import { planTurn } from "../src/combat/ai-planner.js";
+import { planTurn, AIPlanner } from "../src/combat/ai-planner.js";
 
 function makeGrid(width, height, value = TILE_FLOOR) {
   const grid = [];
@@ -167,5 +167,62 @@ function manhattan(a, b) {
     "WANDER",
     "planner should not emit a MOVE decision without a resolvable target position",
   );
+  assert.match(decision.todo ?? "", /TODO/i, "wander fallback should advertise TODO for richer behavior");
   console.log("✓ planner falls back to wander when target position is unknown");
+})();
+
+(function testContextTryMoveHonorsCollisions() {
+  const monster = createMobFromTemplate("orc");
+  monster.pos = { x: 1, y: 1 };
+  const actor = monster.actor;
+  if (actor) {
+    actor.getLightRadius = () => 6;
+  }
+
+  const player = {
+    id: "planner-wall-target",
+    name: "Player",
+    factions: ["player"],
+    affiliations: [],
+    x: 3,
+    y: 1,
+    res: { hp: 10 },
+    base: { maxHP: 10 },
+    getLightRadius: () => 6,
+  };
+
+  const width = 5;
+  const height = 5;
+  const maze = makeGrid(width, height);
+  maze[1][2] = TILE_WALL; // block the direct path to the player
+
+  const mobManager = {
+    list: () => [monster],
+    getMobAt(x, y) {
+      if (monster.x === x && monster.y === y) return monster;
+      return null;
+    },
+  };
+
+  let attempted = false;
+  const context = {
+    selfMob: monster,
+    maze,
+    mapState: { width, height, grid: maze },
+    mobManager,
+    player,
+    tryMove(entity, step) {
+      attempted = true;
+      entity.x += step.dx;
+      entity.y += step.dy;
+      return true;
+    },
+  };
+
+  AIPlanner.takeTurn(monster, context);
+
+  assert.equal(attempted, false, "collision guard should prevent delegating to context.tryMove across walls");
+  assert.equal(monster.x, 1, "monster should remain in place when wall blocks movement");
+  assert.equal(monster.y, 1, "monster should remain in place when wall blocks movement");
+  console.log("✓ planner avoids context.tryMove collisions");
 })();

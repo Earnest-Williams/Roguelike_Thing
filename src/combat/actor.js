@@ -158,18 +158,15 @@ export class Actor {
     this.lightMask = init.lightMask ?? LIGHT_CHANNELS.ALL;
     this.lightChannel = init.lightChannel ?? LIGHT_CHANNELS.ALL;
 
-    /** @type {string[]} */
-    this.factions = Array.isArray(init.factions) && init.factions.length
-      ? [...init.factions]
-      : ["unaligned"];
-    if (this.factions.includes("unaligned") && this.factions.length > 1) {
-      this.factions = ["unaligned"];
-    }
+    const factionSeed = [];
+    if (typeof init.faction === "string") factionSeed.push(init.faction);
+    if (Array.isArray(init.factions)) factionSeed.push(...init.factions);
 
     /** @type {string[]} */
-    this.affiliations = Array.isArray(init.affiliations)
-      ? [...init.affiliations]
-      : [];
+    this.factions = sanitizeFactions(factionSeed);
+
+    /** @type {string[]} */
+    this.affiliations = sanitizeAffiliations(init.affiliations);
 
     const baseStats = init.baseStats ?? Object.create(null);
     /** @type {BaseStats} */
@@ -677,6 +674,31 @@ export function asActor(entity) {
 function clearAndAssign(target, source) {
   for (const key of Object.keys(target)) delete target[key];
   Object.assign(target, source);
+}
+
+function sanitizeStringList(values) {
+  const result = [];
+  if (!values) return result;
+  const list = Array.isArray(values) ? values : [values];
+  for (const value of list) {
+    if (typeof value !== "string") continue;
+    const trimmed = value.trim();
+    if (!trimmed) continue;
+    if (result.includes(trimmed)) continue;
+    result.push(trimmed);
+  }
+  return result;
+}
+
+function sanitizeFactions(values) {
+  const sanitized = sanitizeStringList(values);
+  if (sanitized.length === 0) return ["unaligned"];
+  if (sanitized.includes("unaligned")) return ["unaligned"];
+  return sanitized;
+}
+
+function sanitizeAffiliations(values) {
+  return sanitizeStringList(values);
 }
 
 function readItemLightDescriptor(item) {
