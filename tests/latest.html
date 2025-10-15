@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Test Results</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 2rem; background: #111; color: #eee; }
+    h1 { font-size: 1.5rem; margin-bottom: 1rem; }
+    pre { background: #222; padding: 1rem; border-radius: 8px; overflow-x: auto; }
+    .timestamp { font-size: 0.9rem; color: #aaa; margin-bottom: 1rem; }
+  </style>
+</head>
+<body>
+  <h1>Automated Test Run</h1>
+  <div class="timestamp">Generated: 2025-10-15T01:45:11.206Z</div>
+  <pre>
+&gt; roguelike-thing@0.0.0 test
+&gt; node tests/run-basic-tests.js
+
+✓ bleed stacks, damages, and expires
+✓ outgoing scaling uses stacks
+✓ outgoing scaling skips zero/invalid packets
+✓ noteUseGain clamps to maxStacks
+✓ noteUseGain ignores unsupported damage types
+✓ decayAttunements reduces stacks and prunes empties
+✓ decayAttunements skips types without rules
+✓ decayAttunements clamps negative decay rates
+✓ decayAttunements floors remaining stacks after decay
+✓ decayAttunements removes invalid stack entries
+✓ tickAttunements handles multi-turn decay
+✓ contributeDerived adds resist and accuracy bonuses
+✓ attunement gain/decay
+✓ echo triggers once, haste and resource gain apply on kill
+✓ allowOnKill=false suppresses on-kill haste/resource gains from echo
+✓ primary kills still award haste/resources when echo suppresses on-kill kills
+✓ on-kill haste respects oncePerTurn and cooldownTurns gates
+✓ echo suppresses on-hit statuses when copyStatuses is false
+✓ echo copies status attempts when copyStatuses is true
+✓ channeling idle regen behavior
+✓ affix pool extensions registered
+✓ composite items expose layered modifiers
+✓ elemental brand coverage expanded
+✓ item brands registered in catalog
+✓ FOV covers Chebyshev radius when unobstructed
+✓ FOV respects blocking walls
+✓ Known-grid exploration ignores unknown blockers
+✓ light radius &amp; flicker delegate to Actor accessors
+✓ compositeOverlayAt respects losFn gates
+✓ directional lights only illuminate tiles inside their cone
+✓ light channels respect entity masks
+✓ light falloff settings adjust the composite overlay in real time
+✓ innate vision bonus stacks with equipment radius
+✓ innate bonus applies when equipment exposes custom light accessors
+✓ rebuildModCache refreshes innate vision bonuses
+✓ generateDungeonTheme produces a procedural theme
+✓ applyAffixesBudgeted respects budget constraints
+✓ faction alliances, hostility edges &amp; innate vision
+✓ spawn weights filter by tags
+✓ spawnMonsters populates mobs from templates
+✓ collectWorldLightSources aggregates world lights
+✓ updatePerception populates actors and lights
+✓ skeleton loadout extinguishes light sources
+✓ humanoid loadouts always include light sources and spare oil
+✓ innates from actor objects fold into cache
+✓ template innates still fold into cache
+✓ planner falls back to wander when target position is unknown
+✓ planner avoids context.tryMove collisions
+
+=== All mob combat integration tests passed ===
+✓ event log unsubscribe prevents additional calls
+✓ event log emit logs handler exceptions defensively
+✓ status ticking &amp; expiry
+✓ status zero-duration cleanup
+✓ resolveAttack polarity/resist order
+✓ foldMods slot filter
+✓ cooldown begin/tick lifecycle
+✓ temporal math
+✓ save/hydrate actor state
+✓ rng determinism
+✓ foldMods basic
+✓ monster wanders within leash when idle
+✓ monster approaches visible hostile
+✓ guard decision pulls monster toward home
+✓ mobs detect and pursue hostile mobs from different factions
+✓ mobs ignore allies in their own faction (no friendly fire)
+✓ mobs detect and pursue player character
+✓ mobs attack player when adjacent (in range)
+✓ mobs attack hostile mobs when adjacent (mob-to-mob combat)
+✓ mobs prioritize closer hostile targets
+✓ complex faction scenario: mobs respect multiple faction relationships
+✓ event log await covers typed + wildcard listeners
+✓ runTurnAsync awaits planner and event emission
+✓ event log async dispatch
+✓ Combat messages show initially
+✓ Combat messages bypass recent system messages
+✓ Combat messages show after system message timeout
+✓ System messages override combat messages
+</pre>
+</body>
+</html>
