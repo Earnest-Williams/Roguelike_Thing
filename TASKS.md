@@ -1,5 +1,8 @@
 # TASKS.md
 
+## Build & Typecheck Notes
+- Run `npm run build` to regenerate both the core TypeScript build and the legacy `js/` module outputs.
+
 ## Priority Zero — “Make things fight”
 1) **Ensure the AI planner runs each mob turn and uses factions for hostility.**  
 - In the simulation loop, iterate mobs and call `mob.takeTurn(gameCtx)`. `takeTurn` already delegates to `AIPlanner` with `selfActor`. Verify `gameCtx` includes `{ player, mobManager, maze, state, AIPlanner }`.  
