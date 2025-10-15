@@ -2,6 +2,7 @@
 // @ts-check
 import { finalAPForAction, spendAP, startCooldown, isReady } from "./time.js";
 import { resolveAttack } from "./resolve.js";
+import { breakdownFromContext } from "./attack-breakdown.js";
 import { performEquippedAttack, pickAttackMode } from "../game/combat-glue.js";
 import { FactionService } from "../game/faction-service.js";
 import { EVENT, emit } from "../ui/event-log.js";
@@ -137,6 +138,7 @@ export function tryAttack(attacker, defender, opts = {}) {
   
   const hpBefore = defender?.res && typeof defender.res.hp === "number" ? defender.res.hp : 0;
   const out = resolveAttack(ctx);
+  const breakdown = breakdownFromContext(out);
   const hpAfter = defender?.res && typeof defender.res.hp === "number" ? defender.res.hp : 0;
   
   attacker._turnDidAttack = true;
@@ -159,6 +161,8 @@ export function tryAttack(attacker, defender, opts = {}) {
     packets: out.packetsAfterDefense,
     statuses: out.appliedStatuses,
     ctx,
+    attackContext: out,
+    breakdown,
   };
   emit(EVENT.COMBAT, payload);
 
