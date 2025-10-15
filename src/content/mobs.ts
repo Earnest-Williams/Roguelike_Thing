@@ -5,6 +5,7 @@
  * will be handled by a future "Role Template" system.
  * - `factions`: Intrinsic allegiance. Drives AI hostility.
  * - `tags`: Descriptive metadata for filtering (e.g., by spawn system).
+ * - `intelligent`: Boolean toggle to inform AI/utility systems (e.g., light usage).
  */
 import { DAMAGE_TYPE } from "../../js/constants.js"; // This import provides the damage type constants.
 
@@ -15,6 +16,7 @@ export const MOB_TEMPLATES = {
     factions: ["npc_hostile"],
     affiliations: ["bandits:redhands"],
     tags: ["humanoid", "bandit", "melee"],
+    intelligent: true,
     spawnWeight: 10,
     guard: {
       anchorOffset: { x: 0, y: 0 },
@@ -36,6 +38,7 @@ export const MOB_TEMPLATES = {
     factions: ["npc_hostile"],
     affiliations: [],
     tags: ["humanoid","caster","fire","tier1"],
+    intelligent: true,
     spawnWeight: 6,
     guard: {
       anchorOffset: { x: 0, y: 0 },
@@ -59,6 +62,7 @@ export const MOB_TEMPLATES = {
     factions: ["unaligned"],
     affiliations: [],
     tags: ["undead", "melee", "tier1"],
+    intelligent: false,
     spawnWeight: 8,
     guard: {
       anchorOffset: { x: 0, y: 0 },
@@ -83,6 +87,7 @@ export const MOB_TEMPLATES = {
     factions: ["npc_hostile"],
     affiliations: [],
     tags: ["orc", "humanoid", "melee", "tier1"],
+    intelligent: true,
     spawnWeight: 7,
     guard: {
       anchorOffset: { x: 0, y: 0 },
@@ -111,6 +116,7 @@ export const MOB_TEMPLATES = {
     factions: ["unaligned"],
     affiliations: [],
     tags: ["debug", "test", "target"],
+    intelligent: false,
     spawnWeight: 0,
     guard: {
       anchorOffset: { x: 0, y: 0 },
@@ -193,6 +199,9 @@ function normalizeWanderConfig(id, raw) {
 
 for (const t of Object.values(MOB_TEMPLATES)) {
   if (!t?.id) throw new Error("Mob template missing id");
+  if (typeof t.intelligent !== "boolean") {
+    throw new Error(`Template ${t.id} must define an intelligent boolean flag`);
+  }
   const F = t.factions || [];
   if (F.includes("unaligned") && F.length > 1) {
     throw new Error(`Template ${t.id}: 'unaligned' cannot be combined with other factions`);
