@@ -144,6 +144,9 @@ function selectTarget(self, ctx = {}) {
   const toActor = ctx.toActor ?? asActor;
   const selfActor = toActor(self) ?? self;
   const selfMob = ctx.selfMob ?? selfActor;
+  if (ctx.guard) {
+    ctx.guardDistance = guardDistanceFrom(selfMob, ctx.guard);
+  }
 
   const allEntities = [ctx.player, ...listMobs(ctx.mobManager)];
   if (ctx.target) {
@@ -261,16 +264,32 @@ function resolveHomePosition(actor, combatant) {
   return null;
 }
 
-function resolveGuardRadius(actor, combatant) {
+function resolveGuardRadius(actor, combatant, guard) {
+  if (guard && Number.isFinite(guard.radius)) return guard.radius;
   if (Number.isFinite(actor?.guardRadius)) return actor.guardRadius;
   if (Number.isFinite(combatant?.guardRadius)) return combatant.guardRadius;
   return null;
 }
 
-function resolveWanderRadius(actor, combatant) {
+function resolveGuardResumeBias(actor, combatant, guard) {
+  if (guard && Number.isFinite(guard.resumeBias)) return clamp01Utility(guard.resumeBias);
+  if (Number.isFinite(actor?.guardResumeBias)) return clamp01Utility(actor.guardResumeBias);
+  if (Number.isFinite(combatant?.guardResumeBias)) return clamp01Utility(combatant.guardResumeBias);
+  return 0;
+}
+
+function resolveWanderRadius(actor, combatant, wander) {
+  if (wander && Number.isFinite(wander.radius)) return wander.radius;
   if (Number.isFinite(actor?.wanderRadius)) return actor.wanderRadius;
   if (Number.isFinite(combatant?.wanderRadius)) return combatant.wanderRadius;
   return DEFAULT_WANDER_RADIUS;
+}
+
+function resolveWanderResumeBias(actor, combatant, wander) {
+  if (wander && Number.isFinite(wander.resumeBias)) return clamp01Utility(wander.resumeBias);
+  if (Number.isFinite(actor?.wanderResumeBias)) return clamp01Utility(actor.wanderResumeBias);
+  if (Number.isFinite(combatant?.wanderResumeBias)) return clamp01Utility(combatant.wanderResumeBias);
+  return 0.25;
 }
 
 function chebyshevDistance(a, b) {
@@ -282,12 +301,134 @@ function isValidPoint(pos) {
   return Boolean(pos && Number.isFinite(pos.x) && Number.isFinite(pos.y));
 }
 
-export function planTurn({ actor, combatant, world = {}, perception, rng }) {
+function resolveGuardAnchor(actor, combatant, guard, fallbackHome) {
+  if (!guard) return fallbackHome;
+  if (guard.anchor && Number.isFinite(guard.anchor.x) && Number.isFinite(guard.anchor.y)) {
+    return { x: guard.anchor.x | 0, y: guard.anchor.y | 0 };
+  }
+  const base = fallbackHome ?? resolveHomePosition(actor, combatant);
+  if (!base) return null;
+  if (guard.anchorOffset && Number.isFinite(guard.anchorOffset.x) && Number.isFinite(guard.anchorOffset.y)) {
+    return { x: base.x + (guard.anchorOffset.x | 0), y: base.y + (guard.anchorOffset.y | 0) };
+  }
+  return base ? { ...base } : null;
+}
+
+function guardDistanceFrom(selfMob, guard) {
+  if (!guard) return Infinity;
+  const anchor = guard.anchor;
+  const selfPos = asPosition(selfMob);
+  if (!anchor || !selfPos) return Infinity;
+  return chebyshevDistance(selfPos, anchor);
+}
+
+function shouldResumeGuard(rng, bias, distance, radius) {
+  if (!Number.isFinite(distance)) return false;
+  if (Number.isFinite(radius) && distance > radius) return true;
+  if (!Number.isFinite(bias) || bias <= 0) return false;
+  const roll = typeof rng === "function" ? rng() : Math.random();
+  return roll < clamp01Utility(bias);
+}
+
+function resolveSelfActor(selfMob) {
+  if (!selfMob) return null;
+  if (selfMob.__actor && selfMob.__actor !== selfMob) return selfMob.__actor;
+  if (selfMob.actor && selfMob.actor !== selfMob) return selfMob.actor;
+  return asActor(selfMob);
+}
+
+function resolveBaseHome(selfMob) {
+  if (!selfMob) return null;
+  const actor = resolveSelfActor(selfMob);
+  const base = selfMob.homePos || selfMob.spawnPos || actor?.homePos || actor?.spawnPos || null;
+  if (base && Number.isFinite(base.x) && Number.isFinite(base.y)) {
+    return { x: base.x | 0, y: base.y | 0 };
+  }
+  const pos = asPosition(selfMob);
+  return pos ? { x: pos.x | 0, y: pos.y | 0 } : null;
+}
+
+function normalizeGuardStateForPlanner(selfMob, context) {
+  const actor = resolveSelfActor(selfMob);
+  const guard = context?.guard ?? selfMob?.guard ?? actor?.guard ?? null;
+  if (!guard) return null;
+  const baseHome = resolveBaseHome(selfMob);
+  let anchor = null;
+  if (guard.anchor && Number.isFinite(guard.anchor.x) && Number.isFinite(guard.anchor.y)) {
+    anchor = { x: guard.anchor.x | 0, y: guard.anchor.y | 0 };
+  } else if (guard.anchorOffset && Number.isFinite(guard.anchorOffset.x) && Number.isFinite(guard.anchorOffset.y) && baseHome) {
+    anchor = { x: baseHome.x + (guard.anchorOffset.x | 0), y: baseHome.y + (guard.anchorOffset.y | 0) };
+  } else if (baseHome) {
+    anchor = { ...baseHome };
+  }
+  const radius = Number.isFinite(guard.radius)
+    ? guard.radius
+    : Number.isFinite(selfMob?.guardRadius)
+      ? selfMob.guardRadius
+      : Number.isFinite(actor?.guardRadius)
+        ? actor.guardRadius
+        : null;
+  const resumeBias = Number.isFinite(guard.resumeBias)
+    ? clamp01Utility(guard.resumeBias)
+    : Number.isFinite(selfMob?.guardResumeBias)
+      ? clamp01Utility(selfMob.guardResumeBias)
+      : Number.isFinite(actor?.guardResumeBias)
+        ? clamp01Utility(actor.guardResumeBias)
+        : 0;
+  const normalized = {
+    anchor,
+    anchorOffset: guard.anchorOffset ? { ...guard.anchorOffset } : null,
+    radius,
+    resumeBias,
+  };
+  normalized.distance = guardDistanceFrom(selfMob, normalized);
+  return normalized;
+}
+
+function normalizeWanderStateForPlanner(selfMob, context, guardState) {
+  const actor = resolveSelfActor(selfMob);
+  const wander = context?.wander ?? selfMob?.wander ?? actor?.wander ?? null;
+  const baseHome = guardState?.anchor ?? resolveBaseHome(selfMob);
+  if (!wander && !baseHome) return null;
+  const radius = wander && Number.isFinite(wander.radius)
+    ? wander.radius
+    : Number.isFinite(selfMob?.wanderRadius)
+      ? selfMob.wanderRadius
+      : Number.isFinite(actor?.wanderRadius)
+        ? actor.wanderRadius
+        : DEFAULT_WANDER_RADIUS;
+  const resumeBias = wander && Number.isFinite(wander.resumeBias)
+    ? clamp01Utility(wander.resumeBias)
+    : Number.isFinite(selfMob?.wanderResumeBias)
+      ? clamp01Utility(selfMob.wanderResumeBias)
+      : Number.isFinite(actor?.wanderResumeBias)
+        ? clamp01Utility(actor.wanderResumeBias)
+        : 0.2;
+  let anchor = null;
+  if (wander?.anchor && Number.isFinite(wander.anchor.x) && Number.isFinite(wander.anchor.y)) {
+    anchor = { x: wander.anchor.x | 0, y: wander.anchor.y | 0 };
+  } else if (wander?.anchorOffset && baseHome) {
+    anchor = { x: baseHome.x + (wander.anchorOffset.x | 0), y: baseHome.y + (wander.anchorOffset.y | 0) };
+  } else if (baseHome) {
+    anchor = { ...baseHome };
+  }
+  return {
+    anchor,
+    radius,
+    resumeBias,
+  };
+}
+
+export function planTurn({ actor, combatant, world = {}, perception, rng, guard, wander }) {
   const performer = combatant ?? asActor(actor) ?? actor;
   const selfMob = actor ?? performer;
   const rngFn = resolvePlanRng(rng);
   const ctx = { ...world, selfMob, rng: rngFn };
   if (perception) ctx.perception = perception;
+  const guardState = guard ?? actor?.guard ?? performer?.guard ?? null;
+  const wanderState = wander ?? actor?.wander ?? performer?.wander ?? null;
+  if (guardState) ctx.guard = guardState;
+  if (wanderState) ctx.wander = wanderState;
 
   const selfPos = asPosition(selfMob) ?? asPosition(performer);
   const selection = selectTarget(performer, ctx);
@@ -310,21 +451,37 @@ export function planTurn({ actor, combatant, world = {}, perception, rng }) {
   }
 
   const home = resolveHomePosition(actor, combatant ?? performer);
-  const guardRadius = resolveGuardRadius(actor, combatant ?? performer);
-  if (home && Number.isFinite(guardRadius) && guardRadius >= 0) {
-    return {
-      type: "GUARD",
-      at: home,
-      radius: guardRadius,
-      todo: "TODO: replace guard fallback with richer idle behavior",
-    };
+  const guardAnchor = resolveGuardAnchor(actor, combatant ?? performer, guardState, home);
+  const guardRadius = resolveGuardRadius(actor, combatant ?? performer, guardState);
+  const guardBias = resolveGuardResumeBias(actor, combatant ?? performer, guardState);
+  const guardDistance = guardDistanceFrom(selfMob, { ...guardState, anchor: guardAnchor });
+  if (guardAnchor && Number.isFinite(guardRadius) && guardRadius >= 0) {
+    if (Number.isFinite(guardDistance) && guardDistance > guardRadius) {
+      return {
+        type: "GUARD",
+        at: guardAnchor,
+        radius: guardRadius,
+        guard: { ...guardState, anchor: guardAnchor, radius: guardRadius, distance: guardDistance },
+        reason: "outside_guard_radius",
+      };
+    }
+    if (shouldResumeGuard(rngFn, guardBias, guardDistance, guardRadius)) {
+      return {
+        type: "GUARD",
+        at: guardAnchor,
+        radius: guardRadius,
+        guard: { ...guardState, anchor: guardAnchor, radius: guardRadius, distance: guardDistance },
+        reason: "resume_bias",
+      };
+    }
   }
 
-  const leash = resolveWanderRadius(actor, combatant ?? performer);
+  const leash = resolveWanderRadius(actor, combatant ?? performer, wanderState);
+  const wanderBias = resolveWanderResumeBias(actor, combatant ?? performer, wanderState);
   return {
     type: "WANDER",
     leash,
-    todo: "TODO: implement wander/idle routines",
+    wander: { ...wanderState, radius: leash, resumeBias: wanderBias },
   };
 }
 
@@ -397,6 +554,11 @@ function buildUtilityDecision(selfMob, selection, context, distance) {
   const distVal = Number.isFinite(distance) ? Number(distance) : Infinity;
   const distanceBias = clamp01Utility(1 - Math.min(distVal, maxEngage) / maxEngage);
 
+  const guardState = normalizeGuardStateForPlanner(selfMob, context);
+  const wanderState = normalizeWanderStateForPlanner(selfMob, context, guardState);
+  context.guardState = guardState;
+  context.wanderState = wanderState;
+
   const candidates = [];
 
   if (selection) {
@@ -442,6 +604,75 @@ function buildUtilityDecision(selfMob, selection, context, distance) {
     context: { distance: distVal, distanceBias, selfHealth, targetThreat },
     baseScore: selection ? 0.1 : 0.2,
   });
+
+  if (!selection && guardState) {
+    const urgency = guardState.radius != null && guardState.radius >= 0
+      ? clamp01Utility(guardState.distance > guardState.radius
+        ? 1
+        : guardState.radius > 0
+          ? guardState.distance / Math.max(1, guardState.radius)
+          : guardState.distance > 0 ? 1 : 0)
+      : clamp01Utility(guardState.distance > 0 ? 1 : 0);
+    candidates.push({
+      goal: "guard",
+      metrics: {
+        light: lightLevel,
+        minimumLight: lightLevel,
+        safety: clamp01Utility(1 - urgency * 0.25),
+        lowHealth: selfHealth,
+        threat: threatLevel,
+        loot: 0,
+        exit: exitUrgency,
+        exploration: 0,
+        combat: urgency * 0.1,
+        targetThreat: 0,
+        progress: clamp01Utility(guardState.distance == null
+          ? 0
+          : guardState.radius && guardState.radius > 0
+            ? 1 - Math.min(guardState.distance, guardState.radius) / Math.max(1, guardState.radius)
+            : guardState.distance > 0 ? 0 : 1),
+      },
+      context: {
+        guardDistance: guardState.distance ?? Infinity,
+        guardRadius: guardState.radius ?? null,
+        guardAnchor: guardState.anchor ?? null,
+        guardResumeBias: guardState.resumeBias ?? 0,
+      },
+      baseScore: 0.2 + (guardState.resumeBias ?? 0) + urgency * 0.6,
+    });
+  }
+
+  if (!selection && wanderState) {
+    const anchor = wanderState.anchor ?? guardState?.anchor ?? null;
+    const selfPos = asPosition(selfMob);
+    const leash = Number.isFinite(wanderState.radius) ? wanderState.radius : DEFAULT_WANDER_RADIUS;
+    const distanceFromAnchor = anchor && selfPos ? chebyshevDistance(selfPos, anchor) : 0;
+    const leashRatio = leash > 0 ? clamp01Utility(distanceFromAnchor / leash) : 0;
+    const exploreWeight = Math.max(explorationFocus, 0.25);
+    candidates.push({
+      goal: "wander",
+      metrics: {
+        light: lightLevel,
+        minimumLight: lightLevel,
+        safety: selfHealth,
+        lowHealth: selfHealth,
+        threat: threatLevel * 0.25,
+        loot: lootFocus,
+        exit: exitUrgency,
+        exploration: exploreWeight,
+        combat: 0,
+        targetThreat: 0,
+        progress: clamp01Utility(1 - leashRatio * 0.5),
+      },
+      context: {
+        leash,
+        wanderResumeBias: wanderState.resumeBias ?? 0,
+        wanderAnchor: anchor,
+        distanceFromAnchor,
+      },
+      baseScore: 0.15 + (wanderState.resumeBias ?? 0) + exploreWeight * 0.5,
+    });
+  }
 
   const retreatThreshold = clamp01Utility(
     Number.isFinite(context?.retreatHealthThreshold) ? context.retreatHealthThreshold : 0.25,

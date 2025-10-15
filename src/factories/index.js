@@ -1,7 +1,7 @@
 // src/factories/index.js
 // @ts-check
 import { BASE_ITEMS } from "../content/items.js";
-import { MOB_TEMPLATES } from "../content/mobs.js";
+import { MOB_TEMPLATES, cloneGuardConfig, cloneWanderConfig } from "../content/mobs.js";
 import { SLOT } from "../../js/constants.js";
 import { makeItem, registerItem, upsertItem } from "../../js/item-system.js";
 import { Actor } from "../combat/actor.js";
@@ -96,12 +96,54 @@ export function createMobFromTemplate(tid) {
   const template = MOB_TEMPLATES[tid];
   if (!template) throw new Error("Unknown mob template: " + tid);
   const actor = createActorFromTemplate(tid);
-  return new Monster({
+  const spawnPos = snapshotPosition(actor);
+  if (spawnPos) {
+    actor.spawnPos = { ...spawnPos };
+    if (!actor.homePos) actor.homePos = { ...spawnPos };
+  }
+
+  const guardConfig = cloneGuardConfig(template.guard) ?? cloneGuardConfig(actor.guard);
+  if (guardConfig) {
+    actor.guard = cloneGuardConfig(guardConfig);
+    actor.guardRadius = typeof guardConfig.radius === "number" ? guardConfig.radius : actor.guardRadius;
+    actor.guardResumeBias = typeof guardConfig.resumeBias === "number"
+      ? guardConfig.resumeBias
+      : actor.guardResumeBias;
+  }
+
+  const wanderConfig = cloneWanderConfig(template.wander) ?? cloneWanderConfig(actor.wander);
+  if (wanderConfig) {
+    actor.wander = cloneWanderConfig(wanderConfig);
+    actor.wanderRadius = typeof wanderConfig.radius === "number" ? wanderConfig.radius : actor.wanderRadius;
+    actor.wanderResumeBias = typeof wanderConfig.resumeBias === "number"
+      ? wanderConfig.resumeBias
+      : actor.wanderResumeBias;
+  }
+
+  const monster = new Monster({
     actor,
     glyph: template.glyph ?? "?",
     color: template.color ?? "#fff",
     baseDelay: template.baseDelay ?? 1,
   });
+
+  if (spawnPos) {
+    monster.spawnPos = { ...spawnPos };
+    if (!monster.homePos) monster.homePos = { ...spawnPos };
+  }
+
+  if (guardConfig) {
+    monster.guard = cloneGuardConfig(guardConfig);
+    monster.guardRadius = typeof guardConfig.radius === "number" ? guardConfig.radius : monster.guardRadius;
+  }
+
+  if (wanderConfig) {
+    monster.wander = cloneWanderConfig(wanderConfig);
+    monster.wanderRadius = typeof wanderConfig.radius === "number" ? wanderConfig.radius : monster.wanderRadius;
+  }
+
+  syncBehaviorToActor(monster);
+  return monster;
 }
 
 /**
@@ -125,4 +167,49 @@ function chooseSlotFor(item) {
     if (item?.canEquipTo?.(s)) return s;
   }
   return null;
+}
+
+function snapshotPosition(entity) {
+  if (!entity) return null;
+  if (Number.isFinite(entity.x) && Number.isFinite(entity.y)) {
+    return { x: entity.x | 0, y: entity.y | 0 };
+  }
+  const pos = typeof entity.pos === "function" ? entity.pos() : entity.pos;
+  if (pos && Number.isFinite(pos.x) && Number.isFinite(pos.y)) {
+    return { x: pos.x | 0, y: pos.y | 0 };
+  }
+  return null;
+}
+
+function syncBehaviorToActor(monster) {
+  if (!monster || typeof monster !== "object") return;
+  const actor = monster.actor || monster.__actor || null;
+  if (!actor || actor === monster) return;
+  if (monster.guard) {
+    actor.guard = cloneGuardConfig(monster.guard);
+    if (typeof monster.guard?.radius === "number") {
+      actor.guardRadius = monster.guard.radius;
+    }
+    if (typeof monster.guard?.resumeBias === "number") {
+      actor.guardResumeBias = monster.guard.resumeBias;
+    }
+    if (monster.guard?.anchor && !actor.homePos) {
+      actor.homePos = { ...monster.guard.anchor };
+    }
+  }
+  if (monster.wander) {
+    actor.wander = cloneWanderConfig(monster.wander);
+    if (typeof monster.wander?.radius === "number") {
+      actor.wanderRadius = monster.wander.radius;
+    }
+    if (typeof monster.wander?.resumeBias === "number") {
+      actor.wanderResumeBias = monster.wander.resumeBias;
+    }
+  }
+  if (monster.spawnPos) {
+    actor.spawnPos = { ...monster.spawnPos };
+  }
+  if (monster.homePos && !actor.homePos) {
+    actor.homePos = { ...monster.homePos };
+  }
 }

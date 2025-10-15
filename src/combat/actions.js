@@ -337,18 +337,25 @@ export function executeDecision({ actor, combatant, world, decision, rng }) {
         const dist = manhattanDistance(selfPos, anchor);
         if (dist > radius) {
           const step = stepToward(selfPos, anchor, world, actor);
-          if (step && applyStep(actor, step, world)) {
+          const moved = attemptPlannerStep(actor, selfPos, step, world, decision, "guard_step");
+          if (moved) {
             noteMoved(performer);
           }
+        } else {
+          recordPlannerStep(actor, "guard_step", { from: selfPos, to: selfPos, blocked: false, radius, dist });
         }
+      } else {
+        recordPlannerStep(actor, "guard_step", { blocked: true, reason: "missing_anchor" });
       }
       return baseDelay;
     }
 
     case "WANDER": {
       const leash = resolveLeash(decision.leash, actor);
+      const selfPos = resolvePosition(actor);
       const step = randomLeashedStep(actor, leash, world, rngFn);
-      if (step && applyStep(actor, step, world)) {
+      const moved = attemptPlannerStep(actor, selfPos, step, world, decision, "wander_step");
+      if (moved) {
         noteMoved(performer);
       }
       return baseDelay;
@@ -605,6 +612,56 @@ function isPassable(world, x, y, self) {
     return false;
   }
   return !isOccupied(world, x, y, self);
+}
+
+function gatherMovementGuards(decision, world) {
+  const list = [];
+  if (typeof decision?.canMove === "function") list.push(decision.canMove);
+  if (typeof decision?.movementGuards?.canMove === "function") list.push(decision.movementGuards.canMove);
+  if (typeof world?.canMove === "function") list.push(world.canMove);
+  if (typeof world?.movementGuards?.canMove === "function") list.push(world.movementGuards.canMove);
+  return list;
+}
+
+function attemptPlannerStep(entity, from, target, world, decision, label) {
+  const origin = from ?? resolvePosition(entity);
+  if (!target || !Number.isFinite(target.x) || !Number.isFinite(target.y) || !origin) {
+    recordPlannerStep(entity, label, { from: origin ?? null, to: target ?? null, blocked: true, reason: "invalid_step" });
+    return false;
+  }
+  const delta = { dx: (target.x | 0) - (origin.x | 0), dy: (target.y | 0) - (origin.y | 0) };
+  if (!delta.dx && !delta.dy) {
+    recordPlannerStep(entity, label, { from: origin, to: target, blocked: false, delta });
+    return false;
+  }
+
+  for (const guardFn of gatherMovementGuards(decision, world)) {
+    try {
+      if (guardFn && guardFn(entity, delta) === false) {
+        recordPlannerStep(entity, label, { from: origin, to: target, blocked: true, reason: "collision_guard", delta });
+        return false;
+      }
+    } catch (err) {
+      recordPlannerStep(entity, label, { from: origin, to: target, blocked: true, reason: "collision_guard_error", error: err?.message, delta });
+      return false;
+    }
+  }
+
+  const success = applyStep(entity, target, world);
+  recordPlannerStep(entity, label, { from: origin, to: target, blocked: !success, delta });
+  return success;
+}
+
+function recordPlannerStep(entity, label, payload = {}) {
+  if (!entity) return;
+  const entry = { label, ...payload };
+  entity.lastPlannerStep = entry;
+  if (entity.__actor && entity.__actor !== entity) {
+    entity.__actor.lastPlannerStep = entry;
+  }
+  if (entity.actor && entity.actor !== entity) {
+    entity.actor.lastPlannerStep = entry;
+  }
 }
 
 /**
