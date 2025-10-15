@@ -46,6 +46,20 @@ All branches resolve a base delay through `resolveDelayBase()`, respecting comba
 - `performEquippedAttack()` constructs a damage packet list, runs `resolveAttack()` for mitigation/status application, updates defender HP, and emits an `EVENT.COMBAT` payload for the UI and debug log buffer.
 - `tryAttack()` mirrors this flow with deterministic scalar values and is primarily used for tests or when no equipment profile exists.
 
+#### Attack Resolution Order & Instrumentation
+
+`resolveAttack()` now builds a rich `AttackContext` that records each stage of the damage pipeline. The stages execute in a strict order so designers can reason about stacking interactions:
+
+1. **Conversions** – base packets are translated into new types before any additive bonuses.
+2. **Brands** – flat/pct additives and status attempts tied to brands are applied.
+3. **Affinities** – elemental/weapon affinities and attacker status bonuses scale packets.
+4. **Polarity** – order/chaos polarity comparisons apply their scalar to the offense packets.
+5. **Resists** – defender resists, immunities, and damage scalars reduce the packets.
+6. **Statuses** – on-hit status attempts resolve, logging applied stacks/durations.
+7. **Triggers** – temporal/resource hooks such as on-kill haste or echoes fire last.
+
+Each stage snapshot is pushed into per-actor ring buffers (`actor.logs.attack/status`), mirrored in the developer inspection panel (`showAttackDebug`), and stored on the context for save/load inspection. This makes it easy to trace combat math while iterating on new content.
+
 ### 5. World Wrapper (`src/game/monster.js`)
 
 `Monster.takeTurn(ctx)` orchestrates the entire process:
@@ -79,3 +93,7 @@ Integration coverage lives in `tests/mob-combat-integration.test.js` and exercis
 7. Complex faction graphs (multiple affiliations/overrides) resolve correctly.
 
 There are also focused unit tests covering attack resolution, cooldown handling, status application, and the UI feedback loop (`tests/ui-combat-feedback.test.js`), ensuring each layer of the combat system stays in sync.
+
+## Dungeon Themes & Role Overlays
+
+The dungeon theme generator combines descriptors and mechanics to shape encounter pacing. Role overlays (see `ROLE_OVERLAYS` in `src/content/themes.js`) provide a lightweight way to layer archetypal behaviours on top of base monsters—frontline vanguards for ember catacombs, ritual support casters for arcane spires, or skirmisher packs for goblin redoubts. Each overlay carries stat tweaks, resist/affinity nudges, and a recommended status loadout so encounter builders can slot them into themed palettes without rewriting core templates.

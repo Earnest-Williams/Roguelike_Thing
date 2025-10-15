@@ -28,6 +28,42 @@ export const MECHANICS = [
   { id: "toxic_bloom", type: "mechanic", tags: ["poison", "blight", "growth"], weight: 4 },
 ];
 
+export const ROLE_OVERLAYS = Object.freeze([
+  Object.freeze({
+    id: "role_vanguard_captain",
+    label: "Vanguard Captain",
+    tags: ["undead", "bone", "frontline"],
+    weight: 4,
+    statMods: { vit: 2, con: 1 },
+    resists: { slash: 0.15, fire: 0.05 },
+    affinities: { blunt: 0.05 },
+    statusLoadout: "ember_burn",
+    notes: "Turns a base creature into a shield-bearing frontliner for ember-soaked catacombs.",
+  }),
+  Object.freeze({
+    id: "role_ritual_chorus",
+    label: "Ritual Chorus",
+    tags: ["arcane", "construct", "support"],
+    weight: 3,
+    statMods: { int: 2, will: 1 },
+    resists: { arcane: 0.1, poison: 0.05 },
+    affinities: { arcane: 0.1, radiant: 0.05 },
+    statusLoadout: "tempest_sting",
+    notes: "Adds support-focused spellcasters that reinforce ritual-heavy mechanics.",
+  }),
+  Object.freeze({
+    id: "role_skirmisher_pack",
+    label: "Skirmisher Pack",
+    tags: ["goblin", "scrap", "tempo"],
+    weight: 5,
+    statMods: { dex: 2 },
+    resists: { pierce: 0.1, lightning: 0.05 },
+    affinities: { pierce: 0.08 },
+    statusLoadout: "glacial_chill",
+    notes: "Leans into mobile harassment units for trap-laden goblin redoubts.",
+  }),
+]);
+
 // Choose a single element from a weighted list using the provided RNG. We fall
 // back to the first element so that generation always returns a value even if
 // the math encounters an edge case.
@@ -140,6 +176,52 @@ function buildCulminationEvent(descriptor, mechanics, tags) {
   };
 }
 
+function cloneOverlay(overlay) {
+  if (!overlay) return null;
+  try {
+    return JSON.parse(JSON.stringify(overlay));
+  } catch {
+    return { ...overlay };
+  }
+}
+
+function computeOverlayWeight(overlay, weightMap = {}) {
+  let weight = Number.isFinite(overlay?.weight) ? Number(overlay.weight) : 1;
+  if (Array.isArray(overlay?.tags)) {
+    for (const tag of overlay.tags) {
+      const bonus = Number(weightMap?.[tag] || 0);
+      if (Number.isFinite(bonus)) {
+        weight += bonus;
+      }
+    }
+  }
+  return Math.max(1, Math.floor(weight));
+}
+
+function pickRoleOverlayFromWeights(weightMap = {}, rng = Math.random) {
+  if (!Array.isArray(ROLE_OVERLAYS) || ROLE_OVERLAYS.length === 0) return null;
+  const pool = ROLE_OVERLAYS.map((overlay) => ({
+    ...overlay,
+    weight: computeOverlayWeight(overlay, weightMap),
+  }));
+  const picked = pickWeighted(pool, rng);
+  if (!picked) {
+    return ROLE_OVERLAYS[0] ? { ...ROLE_OVERLAYS[0] } : null;
+  }
+  const { weight, ...rest } = picked;
+  return rest;
+}
+
+function shortlistRoleOverlays(weightMap = {}) {
+  if (!Array.isArray(ROLE_OVERLAYS) || ROLE_OVERLAYS.length === 0) return [];
+  return ROLE_OVERLAYS.map((overlay) => ({
+    ...overlay,
+    weight: computeOverlayWeight(overlay, weightMap),
+  }))
+    .sort((a, b) => b.weight - a.weight)
+    .slice(0, 3);
+}
+
 /**
  * @param {number} [dungeonDepth]
  * @param {() => number} [rng]
@@ -179,6 +261,8 @@ export function generateDungeonTheme(dungeonDepth = 0, rng = Math.random) {
     : ["Unknown"];
   const name = `${formatComponentName(descriptor.id)} with ${mechanicNamesForName.join(" & ")}`;
   const culminationEvent = buildCulminationEvent(descriptor, mechanics, componentTags);
+  const roleOverlay = cloneOverlay(pickRoleOverlayFromWeights(weights.mobTags, picker));
+  const roleOverlayCandidates = shortlistRoleOverlays(weights.mobTags).map(cloneOverlay);
 
   return {
     id,
@@ -190,6 +274,8 @@ export function generateDungeonTheme(dungeonDepth = 0, rng = Math.random) {
     weights,
     powerBudgetCurve,
     culminationEvent,
+    roleOverlay,
+    roleOverlayCandidates,
   };
 }
 

@@ -10,29 +10,66 @@ export function showAttackDebug(ctx) {
   const el =
     document.getElementById("attack-debug") ||
     (() => {
-      const d = document.createElement("pre");
-      d.id = "attack-debug";
-      d.style.position = "absolute";
-      d.style.right = "8px";
-      d.style.bottom = "8px";
-      d.style.maxWidth = "40vw";
-      d.style.maxHeight = "40vh";
-      d.style.overflow = "auto";
-      d.style.background = "rgba(0,0,0,.7)";
-      d.style.color = "#9f9";
-      d.style.padding = "8px";
-      document.body.appendChild(d);
-      return d;
+      const wrapper = document.createElement("div");
+      wrapper.id = "attack-debug";
+      wrapper.style.position = "absolute";
+      wrapper.style.right = "8px";
+      wrapper.style.bottom = "8px";
+      wrapper.style.maxWidth = "44vw";
+      wrapper.style.maxHeight = "45vh";
+      wrapper.style.overflow = "auto";
+      wrapper.style.background = "rgba(0,0,0,.72)";
+      wrapper.style.color = "#9f9";
+      wrapper.style.padding = "8px";
+      wrapper.style.fontFamily = "monospace";
+      wrapper.style.fontSize = "12px";
+      wrapper.style.lineHeight = "1.35";
+      document.body.appendChild(wrapper);
+      return wrapper;
     })();
-  el.textContent = JSON.stringify(
-    {
-      pre: ctx?.prePackets,
-      offense: ctx?.packetsAfterOffense,
-      defense: ctx?.packetsAfterDefense,
-      total: ctx?.totalDamage,
-      statuses: ctx?.statusAttempts,
+
+  const attackerName = ctx?.attacker?.name || ctx?.attacker?.id || "?";
+  const defenderName = ctx?.defender?.name || ctx?.defender?.id || "?";
+  const steps = Array.isArray(ctx?.steps)
+    ? ctx.steps.map((step) => ({
+        stage: step.stage,
+        totals: step.packets?.byType,
+        meta: step.meta,
+      }))
+    : [];
+  const sliceLog = (log) => {
+    if (!log || typeof log.toArray !== "function") return [];
+    const arr = log.toArray();
+    return arr.slice(Math.max(0, arr.length - 6));
+  };
+  const attackerLog = sliceLog(ctx?.attacker?.logs?.attack);
+  const defenderLog = sliceLog(ctx?.defender?.logs?.attack);
+  const defenderStatus = sliceLog(ctx?.defender?.logs?.status);
+
+  const payload = {
+    turn: ctx?.turn,
+    attacker: attackerName,
+    defender: defenderName,
+    hpBefore: ctx?.hpBefore,
+    hpAfter: ctx?.hpAfter,
+    totalDamage: ctx?.totalDamage,
+    steps,
+    packets: {
+      pre: ctx?.prePackets?.byType ?? ctx?.prePackets,
+      offense: ctx?.packetsAfterOffense?.byType ?? ctx?.packetsAfterOffense,
+      defense: ctx?.packetsAfterDefense?.byType ?? ctx?.packetsAfterDefense,
     },
-    null,
-    2,
-  );
+    statuses: {
+      attempts: ctx?.statusAttempts,
+      applied: ctx?.appliedStatuses,
+    },
+    hooks: ctx?.hooks,
+    logs: {
+      attacker: attackerLog,
+      defender: defenderLog,
+      defenderStatus,
+    },
+  };
+
+  el.textContent = JSON.stringify(payload, null, 2);
 }
