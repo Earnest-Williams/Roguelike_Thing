@@ -5,13 +5,13 @@ import type {
   GateState,
   ThresholdTable,
   WeightTable,
-} from "./explore_policy.js";
-import { getPolicyPreset, mergePolicies, normalizePolicy } from "./explore_policy.js";
+} from "./explore_policy";
+import { getPolicyPreset, mergePolicies, normalizePolicy } from "./explore_policy";
 
 export interface Candidate {
   goal: string;
   target?: unknown;
-  metrics: Record<string, number>;
+  metrics?: Record<string, number>;
   gates?: string[];
   thresholds?: ThresholdTable;
   weightOverrides?: WeightTable;
@@ -60,7 +60,12 @@ export interface PlanDecision {
 const SAFE_FORMULA = /^[0-9+\-*/%().,_ a-zA-Z\[\]]+$/;
 const UNSAFE_TOKENS = /(constructor|__proto__|prototype|Function|globalThis|process|require)/i;
 
-function resolvePolicy(input?: string | ExplorePolicy | ExplorePolicyDefinition, overrides?: Partial<ExplorePolicyDefinition>): ExplorePolicy {
+const clamp01 = (v: unknown) => Math.max(0, Math.min(1, Number(v) || 0));
+
+function resolvePolicy(
+  input?: string | ExplorePolicy | ExplorePolicyDefinition,
+  overrides?: Partial<ExplorePolicyDefinition>,
+): ExplorePolicy {
   if (!input) {
     const preset = getPolicyPreset("cartographer");
     return overrides ? mergePolicies(preset, overrides) : preset;
@@ -69,7 +74,7 @@ function resolvePolicy(input?: string | ExplorePolicy | ExplorePolicyDefinition,
     const preset = getPolicyPreset(input);
     return overrides ? mergePolicies(preset, overrides) : preset;
   }
-  if ("pathCost" in input && input.switches && input.weights) {
+  if (input && typeof input === "object" && "pathCost" in input && input.switches && input.weights) {
     return overrides ? mergePolicies(input, overrides) : normalizePolicy(input);
   }
   return mergePolicies(normalizePolicy(input), overrides);
@@ -97,25 +102,25 @@ function computeBreakdown(
 ): { total: number; breakdown: Record<string, TermBreakdown> } {
   const weights: WeightTable = {
     ...policy.weights,
-    ...candidate.weightOverrides,
+    ...(candidate.weightOverrides ?? {}),
   };
   const formulas: FormulaTable = {
     ...policy.formulas,
-    ...candidate.formulaOverrides,
+    ...(candidate.formulaOverrides ?? {}),
   };
 
   const breakdown: Record<string, TermBreakdown> = {};
   let total = Number(candidate.baseScore ?? 0);
 
-  for (const [key, rawValue] of Object.entries(candidate.metrics)) {
+  for (const [key, rawValue] of Object.entries(candidate.metrics ?? {})) {
     const weight = Number(weights[key] ?? 0);
     if (!Number.isFinite(weight) || weight === 0) continue;
 
     const scope = {
       ...sharedMetrics,
-      ...candidate.metrics,
-      ...candidate.context,
-      ...context.environment,
+      ...(candidate.metrics ?? {}),
+      ...(candidate.context ?? {}),
+      ...(context.environment ?? {}),
       base: rawValue,
       value: rawValue,
       weight,
@@ -157,17 +162,17 @@ function gateState(policy: ExplorePolicy, ctx: PlannerContext): GateState {
   return {
     ...policy.switches,
     ...policy.gates,
-    ...ctx.gateOverrides,
+    ...(ctx.gateOverrides ?? {}),
   };
 }
 
 function gatherMetrics(candidate: Candidate, policy: ExplorePolicy, ctx: PlannerContext): Record<string, number> {
   return {
     ...policy.thresholds,
-    ...ctx.metricAugment,
-    ...ctx.environment,
-    ...candidate.metrics,
-    ...candidate.context,
+    ...(ctx.metricAugment ?? {}),
+    ...(ctx.environment ?? {}),
+    ...(candidate.metrics ?? {}),
+    ...(candidate.context ?? {}),
   };
 }
 
@@ -182,7 +187,7 @@ function passesGates(candidate: Candidate, gates: GateState): boolean {
 function passesThresholds(candidate: Candidate, policy: ExplorePolicy, ctx: PlannerContext, metrics: Record<string, number>): boolean {
   const thresholds: ThresholdTable = {
     ...policy.thresholds,
-    ...candidate.thresholds,
+    ...(candidate.thresholds ?? {}),
   };
   for (const [key, threshold] of Object.entries(thresholds)) {
     if (!Number.isFinite(threshold)) continue;
@@ -231,9 +236,27 @@ export function evaluateCandidates(candidates: Candidate[], ctx: PlannerContext 
     }
   }
 
-  return best;
+  const result = best;
+
+  try {
+    if (typeof window !== "undefined") {
+      window.__AI_LAST_DECISION = result ?? null;
+    }
+  } catch {
+    // ignore errors when the global object is unavailable or read-only
+  }
+
+  return result;
 }
 
 export function explainDecision(decision: PlanDecision | null): PlannerExplain | null {
   return decision ? decision.explain : null;
 }
+
+declare global {
+  interface Window {
+    __AI_LAST_DECISION?: PlanDecision | null;
+  }
+}
+
+export { clamp01 };
