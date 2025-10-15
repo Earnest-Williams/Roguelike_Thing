@@ -2,6 +2,7 @@
 // @ts-check
 import { BASE_ITEMS } from "../content/items.js";
 import { MOB_TEMPLATES, cloneGuardConfig, cloneWanderConfig } from "../content/mobs.js";
+import { normalizeRoleIdList, resolveRoleTemplates } from "../content/roles.js";
 import { SLOT } from "../../js/constants.js";
 import { makeItem, registerItem, upsertItem } from "../../js/item-system.js";
 import { Actor } from "../combat/actor.js";
@@ -92,10 +93,12 @@ export function createActorFromTemplate(tid) {
  * Create a world mob instance from a template id.
  * @param {string} tid
  */
-export function createMobFromTemplate(tid) {
+export function createMobFromTemplate(tid, roleOptions = null) {
   const template = MOB_TEMPLATES[tid];
   if (!template) throw new Error("Unknown mob template: " + tid);
   const actor = createActorFromTemplate(tid);
+  const { roleIds: requestedRoleIds, overlayId } = parseRoleOptions(roleOptions);
+  const appliedRoles = applyRolesToActor(actor, requestedRoleIds, overlayId);
   const spawnPos = snapshotPosition(actor);
   if (spawnPos) {
     actor.spawnPos = clonePoint(spawnPos);
@@ -139,7 +142,248 @@ export function createMobFromTemplate(tid) {
   });
 
   syncBehaviorToActor(monster);
+  monster.roleIds = appliedRoles.slice();
+  monster.roleOverlayId = appliedRoles.length ? (overlayId ?? null) : null;
+  if (Array.isArray(actor.roleStatusLoadouts) && actor.roleStatusLoadouts.length) {
+    monster.roleStatusLoadouts = actor.roleStatusLoadouts.slice();
+  }
+  if (actor.aiHints && typeof actor.aiHints === "object") {
+    monster.aiHints = { ...actor.aiHints };
+  }
   return monster;
+}
+
+export function createMobWithRoles(tid, roleIds, options = {}) {
+  const normalizedRoles = normalizeRoleIdList(roleIds);
+  const overlayId = typeof options.overlayId === "string" ? options.overlayId : null;
+  return createMobFromTemplate(tid, { roleIds: normalizedRoles, overlayId });
+}
+
+function parseRoleOptions(input) {
+  if (Array.isArray(input) || typeof input === "string") {
+    return { roleIds: normalizeRoleIdList(input), overlayId: null };
+  }
+  if (!input || typeof input !== "object") {
+    return { roleIds: [], overlayId: null };
+  }
+  const roleIds = normalizeRoleIdList(input.roleIds ?? input.roles ?? input.roleId ?? null);
+  const overlayId = typeof input.overlayId === "string" ? input.overlayId : null;
+  return { roleIds, overlayId };
+}
+
+function applyRolesToActor(actor, roleIds = [], overlayId = null) {
+  if (!actor) return [];
+  const normalized = normalizeRoleIdList(roleIds);
+  if (!normalized.length) {
+    actor.roleIds = [];
+    actor.roleOverlayId = null;
+    return [];
+  }
+
+  const templates = resolveRoleTemplates(normalized);
+  if (!templates.length) {
+    actor.roleIds = [];
+    actor.roleOverlayId = null;
+    return [];
+  }
+
+  const aiHints = actor.aiHints && typeof actor.aiHints === "object"
+    ? { ...actor.aiHints }
+    : {};
+
+  let innate = null;
+  let innatesTouched = false;
+  const applied = [];
+
+  for (const role of templates) {
+    applied.push(role.id);
+
+    if (role.statMods) {
+      applyStatMods(actor, role.statMods);
+    }
+
+    if (role.affinities || role.resists || role.polarity) {
+      if (!innate) {
+        innate = cloneInnatePayload(actor.innates || actor.__template?.innate || null);
+      }
+      if (role.affinities) {
+        innate.affinities = mergeNumberRecords(innate.affinities, role.affinities);
+        innatesTouched = true;
+      }
+      if (role.resists) {
+        innate.resists = mergeNumberRecords(innate.resists, role.resists);
+        innatesTouched = true;
+      }
+      if (role.polarity) {
+        const pol = innate.polarity = clonePolarityPayload(innate.polarity);
+        if (role.polarity.grant) {
+          pol.grant = mergeNumberRecords(pol.grant, role.polarity.grant);
+          innatesTouched = true;
+        }
+        if (role.polarity.onHitBias) {
+          pol.onHitBias = mergeNumberRecords(pol.onHitBias, role.polarity.onHitBias);
+          innatesTouched = true;
+        }
+        if (role.polarity.defenseBias) {
+          pol.defenseBias = mergeNumberRecords(pol.defenseBias, role.polarity.defenseBias);
+          innatesTouched = true;
+        }
+      }
+    }
+
+    if (role.aiHints) {
+      mergeAiHints(aiHints, role.aiHints);
+    }
+
+    if (role.statusLoadout) {
+      if (!Array.isArray(actor.roleStatusLoadouts)) actor.roleStatusLoadouts = [];
+      if (!actor.roleStatusLoadouts.includes(role.statusLoadout)) {
+        actor.roleStatusLoadouts.push(role.statusLoadout);
+      }
+    }
+  }
+
+  if (innatesTouched && innate) {
+    actor.innates = innate;
+  }
+
+  if (Object.keys(aiHints).length > 0) {
+    actor.aiHints = aiHints;
+  }
+
+  actor.roleIds = applied.slice();
+  actor.roleOverlayId = overlayId ?? null;
+
+  rebuildModCache(actor);
+
+  return applied;
+}
+
+function applyStatMods(actor, mods) {
+  if (!actor || !mods || typeof mods !== "object") return;
+  const base = actor.base;
+  if (!base || typeof base !== "object") return;
+  for (const [key, value] of Object.entries(mods)) {
+    const amount = Number(value);
+    if (!Number.isFinite(amount) || amount === 0) continue;
+    const current = Number(base[key]) || 0;
+    let next = current + amount;
+    if (key === "baseSpeed") {
+      next = Math.max(0.05, next);
+    }
+    base[key] = next;
+    if (actor.baseStats && actor.baseStats !== base) {
+      actor.baseStats[key] = next;
+    }
+    if (key === "maxHP") {
+      syncPrimaryResource(actor, "hp", next);
+    } else if (key === "maxStamina") {
+      syncPrimaryResource(actor, "stamina", next);
+    } else if (key === "maxMana") {
+      syncPrimaryResource(actor, "mana", next);
+    }
+  }
+}
+
+function syncPrimaryResource(actor, pool, rawMax) {
+  if (!actor || !Number.isFinite(rawMax)) return;
+  const max = Math.max(0, Math.round(rawMax));
+  actor.res = actor.res || {};
+  actor.resources = actor.resources || actor.res;
+  if (pool === "hp") {
+    actor.res.hp = max;
+    actor.hp = max;
+    actor.resources.hp = max;
+  } else if (pool === "stamina") {
+    actor.res.stamina = max;
+    actor.stamina = max;
+    actor.resources.stamina = max;
+    const staminaPool = actor.resources?.pools?.stamina;
+    if (staminaPool) {
+      staminaPool.baseMax = max;
+      staminaPool.max = max;
+      staminaPool.cur = Math.min(Number.isFinite(staminaPool.cur) ? staminaPool.cur : max, max);
+    }
+  } else if (pool === "mana") {
+    actor.res.mana = max;
+    actor.mana = max;
+    actor.resources.mana = max;
+    const manaPool = actor.resources?.pools?.mana;
+    if (manaPool) {
+      manaPool.baseMax = max;
+      manaPool.max = max;
+      manaPool.cur = Math.min(Number.isFinite(manaPool.cur) ? manaPool.cur : max, max);
+    }
+  }
+}
+
+function cloneInnatePayload(source) {
+  if (!source || typeof source !== "object") return {};
+  const out = {};
+  for (const [key, value] of Object.entries(source)) {
+    if (key === "polarity" && value && typeof value === "object") {
+      out.polarity = clonePolarityPayload(value);
+      continue;
+    }
+    if (!value || typeof value !== "object") {
+      out[key] = value;
+      continue;
+    }
+    if (Array.isArray(value)) {
+      out[key] = value.slice();
+      continue;
+    }
+    out[key] = { ...value };
+  }
+  return out;
+}
+
+function clonePolarityPayload(source) {
+  if (!source || typeof source !== "object") return {};
+  const out = {};
+  if (source.grant && typeof source.grant === "object") {
+    out.grant = { ...source.grant };
+  }
+  if (source.onHitBias && typeof source.onHitBias === "object") {
+    out.onHitBias = { ...source.onHitBias };
+  }
+  if (source.defenseBias && typeof source.defenseBias === "object") {
+    out.defenseBias = { ...source.defenseBias };
+  }
+  return out;
+}
+
+function mergeNumberRecords(target, add) {
+  const base = target && typeof target === "object" ? { ...target } : {};
+  if (!add || typeof add !== "object") return base;
+  for (const [key, value] of Object.entries(add)) {
+    const amount = Number(value);
+    if (!Number.isFinite(amount) || amount === 0) continue;
+    const current = Number(base[key]) || 0;
+    base[key] = current + amount;
+  }
+  return base;
+}
+
+function mergeAiHints(target, payload) {
+  if (!payload || typeof payload !== "object") return target;
+  for (const [key, value] of Object.entries(payload)) {
+    if (Number.isFinite(value)) {
+      const prev = Number(target[key]) || 0;
+      target[key] = prev + Number(value);
+    } else if (Array.isArray(value)) {
+      const existing = Array.isArray(target[key]) ? target[key].slice() : [];
+      for (const entry of value) {
+        if (!existing.includes(entry)) {
+          existing.push(entry);
+        }
+      }
+      target[key] = existing;
+    } else if (value != null) {
+      target[key] = value;
+    }
+  }
+  return target;
 }
 
 /**
