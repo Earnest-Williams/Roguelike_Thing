@@ -14,9 +14,12 @@ import { createActor, performAction, tickChannel } from "./_helpers.js";
   const start = performAction(actor, "SustainBeam");
   assert.ok(start.ok && start.channel, "channel action should start successfully");
   const channel = start.channel;
-  while (channel.active) {
+  let guard = 0;
+  while (channel.active && guard < 20) {
     tickChannel(channel);
+    guard += 1;
   }
+  assert.ok(guard > 0, "channel should tick at least once");
   assert.equal(actor.mana, 0, "channel should drain mana to zero");
   assert.equal(channel.active, false, "channel should mark as inactive when drained");
   if (actor.cooldowns instanceof Map) {

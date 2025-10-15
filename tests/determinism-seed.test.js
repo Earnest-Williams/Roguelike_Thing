@@ -10,6 +10,7 @@ import { setSeed, runShortCombat, hashPackets } from "./_helpers.js";
   const second = runShortCombat();
   const hashTwo = hashPackets(second.packets);
 
+  assert.equal(first.packets.length, second.packets.length, "packet traces should have matching lengths");
   assert.equal(hashOne, hashTwo, "combat traces should match when seeded identically");
   console.log("✓ combat packets deterministic with fixed seed");
 })();

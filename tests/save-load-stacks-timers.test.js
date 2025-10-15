@@ -9,9 +9,22 @@ import { createActor, applyStatus, tickN, serialize, deserialize } from "./_help
   const snapshot = serialize({ defender });
   const restored = deserialize(snapshot);
   const defenderCopy = restored.defender;
+  assert.ok(defenderCopy, "deserialization should yield defender entry");
 
-  tickN(4, { actors: [defender] });
-  tickN(4, { actors: [defenderCopy] });
+  function tickUntilDone(actor) {
+    let guard = 0;
+    while (guard < 10) {
+      const bleed = actor.statuses?.find((s) => s.id === "bleed");
+      if (!bleed || (bleed.stacks ?? 0) <= 0) break;
+      tickN(1, { actors: [actor] });
+      guard += 1;
+    }
+    return guard;
+  }
+
+  const ticksOriginal = tickUntilDone(defender);
+  const ticksRestored = tickUntilDone(defenderCopy);
+  assert.equal(ticksOriginal, ticksRestored, "bleed should expire in the same number of turns");
 
   assert.equal(defender.hp, defenderCopy.hp, "restored actor should take identical damage after remaining ticks");
   const liveStacks = defender.statuses?.find((s) => s.id === "bleed")?.stacks || 0;
