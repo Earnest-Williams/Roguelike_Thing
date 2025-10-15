@@ -200,6 +200,10 @@ function chebyshevDistance(a, b) {
   return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
 }
 
+function isValidPoint(pos) {
+  return Boolean(pos && Number.isFinite(pos.x) && Number.isFinite(pos.y));
+}
+
 export function planTurn({ actor, combatant, world = {}, perception, rng }) {
   const performer = combatant ?? asActor(actor) ?? actor;
   const selfMob = actor ?? performer;
@@ -207,22 +211,24 @@ export function planTurn({ actor, combatant, world = {}, perception, rng }) {
   const ctx = { ...world, selfMob, rng: rngFn };
   if (perception) ctx.perception = perception;
 
+  const selfPos = asPosition(selfMob) ?? asPosition(performer);
   const selection = selectTarget(performer, ctx);
   if (selection) {
     const targetActor = selection.actor ?? asActor(selection.entity);
     const targetEntity = selection.entity ?? targetActor;
     const targetPos = selection.position ?? asPosition(targetEntity) ?? asPosition(targetActor);
-    const selfPos = asPosition(selfMob) ?? asPosition(performer);
-    const dist = chebyshevDistance(selfPos, targetPos);
-    if (Number.isFinite(dist) && dist <= 1) {
-      return { type: "ATTACK", target: targetActor ?? targetEntity };
+    if (isValidPoint(selfPos) && isValidPoint(targetPos)) {
+      const dist = chebyshevDistance(selfPos, targetPos);
+      if (Number.isFinite(dist) && dist <= 1) {
+        return { type: "ATTACK", target: targetActor ?? targetEntity };
+      }
+      return {
+        type: "MOVE",
+        target: targetEntity ?? targetActor,
+        targetActor,
+        targetPos,
+      };
     }
-    return {
-      type: "MOVE",
-      target: targetEntity ?? targetActor,
-      targetActor,
-      targetPos,
-    };
   }
 
   const home = resolveHomePosition(actor, combatant ?? performer);
