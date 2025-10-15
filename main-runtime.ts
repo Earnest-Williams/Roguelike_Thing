@@ -448,15 +448,16 @@ const Game = (() => {
       .filter(Boolean);
   }
 
-  function getFurniturePlacementAt(x, y) {
+  function getFurniturePlacementAt(x, y, map = mapState) {
     if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    if (!map) return null;
     const key = posKeyFromCoords(x, y);
-    if (mapState?.furnitureIndex instanceof Map) {
-      const placement = mapState.furnitureIndex.get(key);
+    if (map?.furnitureIndex instanceof Map) {
+      const placement = map.furnitureIndex.get(key);
       if (placement) return placement;
     }
-    if (!Array.isArray(mapState?.furniture)) return null;
-    for (const placement of mapState.furniture) {
+    if (!Array.isArray(map?.furniture)) return null;
+    for (const placement of map.furniture) {
       if (!placement || !placement.position) continue;
       const px = Math.round(placement.position.x ?? NaN);
       const py = Math.round(placement.position.y ?? NaN);
@@ -1679,6 +1680,288 @@ const Game = (() => {
     return false;
   }
 
+  let __thrownWorldItemSeq = 1;
+
+  function resolveMapStateFromContext(context) {
+    if (!context) return mapState;
+    if (context.mapState) return context.mapState;
+    if (context.map) return context.map;
+    if (context.gameCtx?.mapState) return context.gameCtx.mapState;
+    if (context.gameCtx?.map) return context.gameCtx.map;
+    if (context.game?.mapState) return context.game.mapState;
+    if (context.game?.map) return context.game.map;
+    if (context.world?.mapState) return context.world.mapState;
+    if (context.state?.map) return context.state.map;
+    return mapState;
+  }
+
+  function ensureGroundItemStore(map = mapState) {
+    if (!map) return null;
+    if (!Array.isArray(map.groundItems)) {
+      map.groundItems = [];
+    }
+    return map.groundItems;
+  }
+
+  function resolveEntityPosition(entity) {
+    if (!entity) return null;
+    const rawX = Number.isFinite(entity?.x)
+      ? Number(entity.x)
+      : Number.isFinite(entity?.pos?.x)
+      ? Number(entity.pos.x)
+      : NaN;
+    const rawY = Number.isFinite(entity?.y)
+      ? Number(entity.y)
+      : Number.isFinite(entity?.pos?.y)
+      ? Number(entity.pos.y)
+      : NaN;
+    if (!Number.isFinite(rawX) || !Number.isFinite(rawY)) return null;
+    return { x: Math.round(rawX), y: Math.round(rawY) };
+  }
+
+  function createThrownItemInstance(item, context = {}) {
+    if (!item) return null;
+    if (context?.forceClone === true && typeof item.clone === "function") {
+      return item.clone();
+    }
+    const fromStack = context?.stack instanceof ItemStack;
+    const stackable = item.stackable === true;
+    if ((fromStack || stackable) && typeof item.clone === "function") {
+      return item.clone();
+    }
+    return item;
+  }
+
+  function canEmbedThrownItemInstance(item, profile) {
+    if (!item || !profile) return false;
+    if (profile.canEmbed === true) return true;
+    if (profile.canEmbed === false) return false;
+    if (typeof item.canEmbed === "boolean") return item.canEmbed;
+    const cls = profile.throwClass || classifyThrowability(item);
+    return cls === THROW_CLASS.PURPOSE_BUILT;
+  }
+
+  function embedItemInTarget(target, item, meta = {}) {
+    if (!target || !item) return null;
+    if (!Array.isArray(target.embeddedItems)) {
+      target.embeddedItems = [];
+    }
+    const entry = {
+      item,
+      sourceId: meta.sourceId ?? null,
+      turn: meta.turn ?? null,
+      origin: meta.origin ?? "throw",
+    };
+    target.embeddedItems.push(entry);
+    return entry;
+  }
+
+  function attachItemToFurniture(placement, item, meta = {}) {
+    if (!placement || !item) return null;
+    if (!Array.isArray(placement.stuckItems)) {
+      placement.stuckItems = [];
+    }
+    const entry = {
+      item,
+      sourceId: meta.sourceId ?? null,
+      turn: meta.turn ?? null,
+      origin: meta.origin ?? "throw",
+      missed: meta.missed ?? false,
+    };
+    placement.stuckItems.push(entry);
+    const furniture = placement.furniture;
+    if (furniture && furniture !== placement) {
+      if (!Array.isArray(furniture.stuckItems)) {
+        furniture.stuckItems = [];
+      }
+      furniture.stuckItems.push(entry);
+    }
+    return entry;
+  }
+
+  function computeThrowDirection(attacker, target, context = {}) {
+    const attackerPos = resolveEntityPosition(attacker) || { x: 0, y: 0 };
+    const targetPos = resolveEntityPosition(target) || attackerPos;
+    let dx = Math.sign(targetPos.x - attackerPos.x);
+    let dy = Math.sign(targetPos.y - attackerPos.y);
+    if (!dx && !dy && context && typeof context.direction === "object") {
+      const dir = context.direction;
+      const dirX = Number(dir?.dx ?? dir?.x ?? 0);
+      const dirY = Number(dir?.dy ?? dir?.y ?? 0);
+      if (dirX || dirY) {
+        dx = Math.sign(dirX);
+        dy = Math.sign(dirY);
+      }
+    }
+    return { dx, dy, attackerPos, targetPos };
+  }
+
+  function ensureDropPosition(map, candidate, fallback = null) {
+    if (!candidate) return fallback;
+    let { x, y } = candidate;
+    if (!Number.isFinite(x) || !Number.isFinite(y)) {
+      return fallback;
+    }
+    x = Math.round(x);
+    y = Math.round(y);
+    if (!map || !Array.isArray(map?.grid) || !map.grid.length) {
+      return { x, y };
+    }
+    const height = map.grid.length;
+    const width = Array.isArray(map.grid[0]) ? map.grid[0].length : 0;
+    if (width > 0) {
+      x = Math.max(0, Math.min(width - 1, x));
+    }
+    if (height > 0) {
+      y = Math.max(0, Math.min(height - 1, y));
+    }
+    const tileRow = map.grid[y];
+    const tile = tileRow ? tileRow[x] : null;
+    if (tile === TILE_WALL && fallback) {
+      return ensureDropPosition(map, fallback, null);
+    }
+    return { x, y };
+  }
+
+  function placeThrownItemOnGround(item, x, y, meta = {}, map = mapState) {
+    if (!item) return null;
+    const store = ensureGroundItemStore(map);
+    if (!store) return null;
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    const entry = {
+      id: meta?.id ?? `thrown:${item.id ?? "item"}:${__thrownWorldItemSeq++}`,
+      x: Math.round(x),
+      y: Math.round(y),
+      item,
+    };
+    if (meta && typeof meta === "object") {
+      for (const [key, value] of Object.entries(meta)) {
+        if (key === "id" || key === "x" || key === "y" || key === "item") continue;
+        entry[key] = value;
+      }
+    }
+    store.push(entry);
+    return entry;
+  }
+
+  function handleThrownItemLanding({
+    attacker,
+    target,
+    profile,
+    attackResult,
+    evaluation,
+    context = {},
+    itemInstance,
+    removedFromInventory,
+  }) {
+    if (!itemInstance || !profile) return null;
+    const mapRef = resolveMapStateFromContext(context);
+    const sourceId = attacker?.id ?? null;
+    const turn = Number.isFinite(context?.turn)
+      ? Number(context.turn)
+      : Number.isFinite(attacker?.turn)
+      ? Number(attacker.turn)
+      : null;
+
+    const { dx, dy, attackerPos, targetPos } = computeThrowDirection(
+      attacker,
+      target,
+      context,
+    );
+    const impactPos = targetPos || attackerPos;
+
+    if (attackResult?.hit) {
+      if (!evaluation?.targetDefeated && canEmbedThrownItemInstance(itemInstance, profile)) {
+        const embedded = embedItemInTarget(target, itemInstance, {
+          sourceId,
+          turn,
+          origin: "throw",
+          removed: removedFromInventory,
+        });
+        if (embedded) {
+          return {
+            location: "embedded",
+            targetId: target?.id ?? null,
+          };
+        }
+      }
+      const dropPos = ensureDropPosition(mapRef, impactPos, attackerPos);
+      if (!dropPos) return null;
+      const entry = placeThrownItemOnGround(
+        itemInstance,
+        dropPos.x,
+        dropPos.y,
+        {
+          sourceId,
+          turn,
+          origin: "throw",
+          hit: true,
+          stuckTo: target?.id ?? null,
+          removed: removedFromInventory,
+        },
+        mapRef,
+      );
+      if (!entry) return null;
+      return {
+        location: "ground",
+        x: entry.x,
+        y: entry.y,
+        entryId: entry.id,
+        hit: true,
+        stuckTo: target?.id ?? null,
+      };
+    }
+
+    const nextPos = {
+      x: (impactPos?.x ?? attackerPos?.x ?? 0) + (dx || 0),
+      y: (impactPos?.y ?? attackerPos?.y ?? 0) + (dy || 0),
+    };
+
+    const placement = getFurniturePlacementAt(nextPos.x, nextPos.y, mapRef);
+    if (placement) {
+      const record = attachItemToFurniture(placement, itemInstance, {
+        sourceId,
+        turn,
+        origin: "throw",
+        missed: true,
+        removed: removedFromInventory,
+      });
+      if (record) {
+        return {
+          location: "furniture",
+          furnitureId: placement?.furniture?.id ?? placement?.id ?? null,
+          x: nextPos.x,
+          y: nextPos.y,
+          missed: true,
+        };
+      }
+    }
+
+    const dropPos = ensureDropPosition(mapRef, nextPos, impactPos);
+    if (!dropPos) return null;
+    const entry = placeThrownItemOnGround(
+      itemInstance,
+      dropPos.x,
+      dropPos.y,
+      {
+        sourceId,
+        turn,
+        origin: "throw",
+        missed: true,
+        removed: removedFromInventory,
+      },
+      mapRef,
+    );
+    if (!entry) return null;
+    return {
+      location: "ground",
+      x: entry.x,
+      y: entry.y,
+      entryId: entry.id,
+      missed: true,
+    };
+  }
+
   function evaluateRangedAttack(attacker, target, weapon, context = {}) {
     if (!isRangedWeapon(weapon)) {
       return { ok: false, reason: "not_ranged" };
@@ -1993,7 +2276,7 @@ const Game = (() => {
   }
 
   function performThrow(attacker, target, item, context = {}) {
-    const evaluation = evaluateThrow(attacker, target, item, context);
+    let evaluation = evaluateThrow(attacker, target, item, context);
     if (!evaluation.ok) return evaluation;
     const profile = evaluation.profile;
     const baseRoll = rollDamage(profile.damage);
@@ -2015,18 +2298,34 @@ const Game = (() => {
     if (Array.isArray(context.brands) && context.brands.length) {
       attackCtx.brands = context.brands;
     }
-    evaluation = finalizeAttackOutcome({
+    const attackOutcome = finalizeAttackOutcome({
       evaluation,
       attackCtx,
       baseRoll,
       target,
     });
+    const { attackResult, evaluation: updatedEvaluation } = attackOutcome;
+    evaluation = updatedEvaluation ?? evaluation;
+
+    const thrownInstance = createThrownItemInstance(item, context);
+    const removed = consumeThrownItemFromAttacker(attacker, item, context);
+    evaluation.itemRemoved = removed;
     if (profile.consumesItem) {
-      evaluation.itemConsumed = consumeThrownItemFromAttacker(
+      evaluation.itemConsumed = removed;
+    } else if (thrownInstance) {
+      const landing = handleThrownItemLanding({
         attacker,
-        item,
+        target,
+        profile,
+        attackResult,
+        evaluation,
         context,
-      );
+        itemInstance: thrownInstance,
+        removedFromInventory: removed,
+      });
+      if (landing) {
+        evaluation.thrownItem = landing;
+      }
     }
     return evaluation;
   }

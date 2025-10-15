@@ -23,6 +23,7 @@ export function createInitialState() {
       known: [],
       furniture: [],
       furnitureIndex: new Map(),
+      groundItems: [],
     },
     sim: {
       timeout: null,
