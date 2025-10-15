@@ -75,6 +75,10 @@ function createBasicActors() {
   attacker.modCache.temporal.echo = { chancePct: 1, fraction: 0.5, allowOnKill: false };
   attacker.modCache.temporal.onKillHaste = { statusId: "haste", duration: 1 };
 
+  const staminaPool = attacker.resources.pools.stamina;
+  const staminaBefore = staminaPool.cur;
+  attacker.modCache.resource.onKillGain = { stamina: 3 };
+
   defender.res.hp = 12;
 
   resolveAttack({
@@ -86,7 +90,44 @@ function createBasicActors() {
   const haste = attacker.statuses.find((s) => s.id === "haste");
   assert.ok(!haste, "echo-only kill should not grant haste when allowOnKill=false");
 
-  console.log("✓ allowOnKill=false suppresses on-kill haste from echo");
+  const staminaAfter = attacker.resources.pools.stamina.cur;
+  assert.equal(
+    staminaAfter,
+    staminaBefore,
+    "echo-only kill should not grant on-kill resources when allowOnKill=false",
+  );
+
+  console.log("✓ allowOnKill=false suppresses on-kill haste/resource gains from echo");
+})();
+
+(function testAllowOnKillFalseDoesNotBlockPrimaryKillRewards() {
+  const { attacker, defender } = createBasicActors();
+  attacker.modCache.temporal.echo = { chancePct: 1, fraction: 0.5, allowOnKill: false };
+  attacker.modCache.temporal.onKillHaste = { statusId: "haste", duration: 1, stacks: 1 };
+  attacker.modCache.resource.onKillGain = { stamina: 4 };
+
+  const staminaPool = attacker.resources.pools.stamina;
+  const staminaBefore = staminaPool.cur;
+
+  resolveAttack({
+    attacker,
+    defender,
+    packets: [{ type: DAMAGE_TYPE.SLASH, amount: 12 }],
+  });
+
+  const haste = attacker.statuses.find((s) => s.id === "haste");
+  assert.ok(haste, "primary kill should still grant haste stacks when allowOnKill=false");
+  assert.equal(haste.stacks, 1, "haste stacks should reflect configuration");
+
+  const staminaAfter = attacker.resources.pools.stamina.cur;
+  const expected = Math.min(staminaPool.max, staminaBefore + 4);
+  assert.equal(
+    staminaAfter,
+    expected,
+    "primary kill should still grant resource gains even when echo disallows on-kill",
+  );
+
+  console.log("✓ primary kills still award haste/resources when echo suppresses on-kill kills");
 })();
 
 (function testOnKillHasteCooldownAndOncePerTurn() {

@@ -169,4 +169,44 @@ function makeActor({ id, factions, affiliations }) {
   );
 })();
 
-console.log("✓ faction alliances & innate vision");
+(function testFactionlessActorsAreHostileToFactionedOpponents() {
+  const loner = makeActor({ id: "loner", factions: [], affiliations: [] });
+  const raider = makeActor({ id: "raider", factions: ["npc_hostile"], affiliations: [] });
+
+  assert.equal(
+    FactionService.isHostile(loner, raider),
+    true,
+    "actors without factions should be treated as hostile toward factioned opponents",
+  );
+  assert.equal(
+    FactionService.relation(loner, raider),
+    -1,
+    "relation() should report hostility when one side lacks factions",
+  );
+})();
+
+(function testFactionlessPeersRemainNeutral() {
+  const a = makeActor({ id: "fa", factions: [], affiliations: [] });
+  const b = makeActor({ id: "fb", factions: [], affiliations: [] });
+
+  assert.equal(FactionService.isHostile(a, b), false, "two factionless actors should not be hostile");
+  assert.equal(FactionService.relation(a, b), 0, "relation should be neutral for factionless peers");
+})();
+
+(function testRelationTreatsSelfAsFriendly() {
+  const self = makeActor({ id: "self", factions: ["neutral"], affiliations: [] });
+  assert.equal(FactionService.relation(self, self), 1, "actor should be friendly to itself");
+})();
+
+(function testDeepWrapperResolution() {
+  const allied = makeActor({ id: "ally", factions: ["player_allies"], affiliations: [] });
+  const wrapped = { actor: { __actor: allied } };
+
+  assert.equal(
+    FactionService.isAllied(wrapped, allied),
+    true,
+    "wrapper objects should resolve down to the underlying actor",
+  );
+})();
+
+console.log("✓ faction alliances, hostility edges & innate vision");
