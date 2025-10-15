@@ -927,27 +927,6 @@ const Game = (() => {
 
   // ===================== EQUIPMENT MODEL =====================
 
-  // ---- Slot enum (canonical names)
-  const SLOT = {
-    Head: "Head",
-    LeftHand: "LeftHand",
-    RightHand: "RightHand",
-    LeftRing: "LeftRing",
-    RightRing: "RightRing",
-    Amulet: "Amulet",
-    BodyArmor: "BodyArmor",
-    Cloak: "Cloak",
-    Boots: "Boots",
-    Gloves: "Gloves",
-    Belt: "Belt", // the belt garment itself
-    Belt1: "Belt1", // attachments on belt
-    Belt2: "Belt2",
-    Belt3: "Belt3",
-    Belt4: "Belt4",
-    Backpack: "Backpack",
-    Quiver: "Quiver",
-  };
-
   // Legacy aliases so existing UI keeps showing something
   const LEGACY_SLOT_ALIAS = new Map([
     ["Left", SLOT.LeftHand],
@@ -955,26 +934,7 @@ const Game = (() => {
     ["Body", SLOT.BodyArmor],
   ]);
 
-  // Order for rendering later
-  const ALL_SLOTS_ORDER = [
-    SLOT.Head,
-    SLOT.Amulet,
-    SLOT.LeftRing,
-    SLOT.RightRing,
-    SLOT.Cloak,
-    SLOT.BodyArmor,
-    SLOT.Gloves,
-    SLOT.Boots,
-    SLOT.LeftHand,
-    SLOT.RightHand,
-    SLOT.Belt,
-    SLOT.Belt1,
-    SLOT.Belt2,
-    SLOT.Belt3,
-    SLOT.Belt4,
-    SLOT.Backpack,
-    SLOT.Quiver,
-  ];
+  // Order for rendering later (imported from constants)
 
   const SLOT_LABELS = {
     [SLOT.Head]: "Head",
