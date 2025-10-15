@@ -463,7 +463,18 @@
         async function runAndShow() {
           overlay.style.display = "block";
           try {
-            const resp = await fetch("/__run-tests", { method: "POST" });
+            let resp = await fetch("/__run-tests", { method: "POST" });
+
+            if (resp.status === 405 || resp.status === 404) {
+              resp = await fetch(`/tests/latest.html?ts=${Date.now()}`, {
+                cache: "no-cache",
+              });
+            }
+
+            if (!resp.ok) {
+              throw new Error(`Test runner unavailable (status ${resp.status})`);
+            }
+
             const html = await resp.text();
             const blob = new Blob([html], { type: "text/html" });
             iframe.src = URL.createObjectURL(blob);
