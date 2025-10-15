@@ -1,14 +1,31 @@
-// js/debug/debug-panel.js
-// Developer overlay for inspecting combat resolution packets.
+import { DebugBus, type DebugEvent } from "./debug-bus.js";
 
-import { DebugBus } from "./debug-bus.js";
+export interface DebugPanelApi {
+  element: HTMLElement;
+  show(): boolean;
+  hide(): boolean;
+  toggle(): boolean;
+  isVisible(): boolean;
+}
 
-let root = null;
+interface AttackDebugPayload {
+  afterDefense?: Record<string, number>;
+  totalDamage?: number;
+  appliedStatuses?: Array<{ id?: string } | string>;
+  [key: string]: unknown;
+}
+
+interface AttackDebugEvent extends DebugEvent {
+  type: "attack";
+  payload?: AttackDebugPayload | null;
+}
+
+let root: HTMLElement | null = null;
 let mounted = false;
 let visible = false;
-let unsubscribe = null;
+let unsubscribe: (() => void) | null = null;
 
-function ensureRoot() {
+function ensureRoot(): HTMLElement | null {
   if (root || typeof document === "undefined") return root;
   const el = document.createElement("div");
   el.id = "debug-panel";
@@ -16,7 +33,7 @@ function ensureRoot() {
     position: "fixed",
     top: "8px",
     right: "8px",
-    zIndex: 9999,
+    zIndex: "9999",
     width: "420px",
     maxHeight: "80vh",
     overflow: "auto",
@@ -27,14 +44,14 @@ function ensureRoot() {
     borderRadius: "12px",
     boxShadow: "0 4px 16px rgba(0, 0, 0, 0.4)",
     display: "none",
-  });
+  } satisfies Partial<CSSStyleDeclaration>);
   document.body.appendChild(el);
   root = el;
   mounted = true;
   return root;
 }
 
-function setVisible(next) {
+function setVisible(next: boolean): boolean {
   visible = !!next;
   if (!root) ensureRoot();
   if (root) {
@@ -43,9 +60,9 @@ function setVisible(next) {
   return visible;
 }
 
-function renderAttack(evt) {
+function renderAttack(evt: DebugEvent): void {
   if (!visible || !evt || evt.type !== "attack") return;
-  const { payload } = evt;
+  const { payload } = evt as AttackDebugEvent;
   if (!payload) return;
   if (!root) ensureRoot();
   if (!root) return;
@@ -53,8 +70,8 @@ function renderAttack(evt) {
   const summary = document.createElement("div");
   summary.style.margin = "6px 0 12px";
 
-  const packets = payload.afterDefense || {};
-  const packetKeys = Object.keys(packets).filter((key) => packets[key] > 0);
+  const packets = payload.afterDefense ?? {};
+  const packetKeys = Object.keys(packets).filter((key) => (packets[key] ?? 0) > 0);
   const chips = packetKeys
     .map(
       (key) =>
@@ -63,7 +80,7 @@ function renderAttack(evt) {
     .join("");
 
   const applied = Array.isArray(payload.appliedStatuses)
-    ? payload.appliedStatuses.map((s) => s?.id || String(s)).join(", ") || "—"
+    ? payload.appliedStatuses.map((s) => (typeof s === "string" ? s : s?.id ?? String(s))).join(", ") || "—"
     : "—";
 
   summary.innerHTML = `
@@ -81,55 +98,57 @@ function renderAttack(evt) {
   root.prepend(summary);
 
   while (root.childElementCount > 20) {
-    root.removeChild(root.lastChild);
+    const last = root.lastElementChild;
+    if (!last) break;
+    root.removeChild(last);
   }
 }
 
-function subscribe() {
+function subscribe(): void {
   if (unsubscribe) return;
   unsubscribe = DebugBus.on(renderAttack);
 }
 
-function ensurePanel() {
+function ensurePanel(): HTMLElement | null {
   if (!mounted) ensureRoot();
   if (mounted) subscribe();
   return root;
 }
 
-export function ensureDebugPanel() {
+export function ensureDebugPanel(): DebugPanelApi | null {
   const el = ensurePanel();
   if (!el) return null;
   return {
     element: el,
-    show() {
+    show(): boolean {
       return setVisible(true);
     },
-    hide() {
+    hide(): boolean {
       return setVisible(false);
     },
-    toggle() {
+    toggle(): boolean {
       return setVisible(!visible);
     },
-    isVisible() {
+    isVisible(): boolean {
       return visible;
     },
-  };
+  } satisfies DebugPanelApi;
 }
 
-export function getDebugPanelElement() {
-  return root || null;
+export function getDebugPanelElement(): HTMLElement | null {
+  return root;
 }
 
-export function isDebugPanelVisible() {
+export function isDebugPanelVisible(): boolean {
   return visible;
 }
 
-export function destroyDebugPanel() {
+export function destroyDebugPanel(): void {
   if (unsubscribe) {
     unsubscribe();
     unsubscribe = null;
   }
-  if (root && root.parentNode) {
+  if (root?.parentNode) {
     root.parentNode.removeChild(root);
   }
   root = null;
