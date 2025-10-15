@@ -21,7 +21,7 @@ import {
   SLOT,
   TILE_FLOOR,
 } from "../../js/constants.js";
-import { canPay, eventGain } from "./resources.js";
+import { canPay, eventGain, spendResources } from "./resources.js";
 import { noteAttacked, noteMoved } from "./actor.js";
 import { cloneGuardConfig, cloneWanderConfig } from "../content/mobs.js";
 import {
@@ -119,6 +119,8 @@ export function tryAttack(attacker, defender, opts = {}) {
   if (!canPay(attacker, { resourceCost: baseCosts, tags: action.tags })) return false;
   const { costAP } = finalAPForAction(attacker, action.baseAP, action.tags);
   if (!spendAP(attacker, costAP)) return false;
+
+  spendResources(attacker, baseCosts, action.tags);
 
   const profile = {
     label: opts.label || "Basic Attack",
@@ -262,6 +264,8 @@ export function tryAttackEquipped(
     plan.mode,
   );
   if (!res.ok) return false;
+
+  spendResources(attacker, plan.baseCosts, plan.action.tags);
 
   attacker._turnDidAttack = true;
   noteAttacked(attacker);
