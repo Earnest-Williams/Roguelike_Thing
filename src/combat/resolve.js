@@ -34,6 +34,10 @@ import {
  *   isEcho?: boolean,
  *   hpBefore?: number,
  *   hpAfter?: number,
+ *   hit?: boolean,
+ *   hitChance?: number,
+ *   costAP?: number,
+ *   packets?: ReturnType<typeof attachPacketView>,
  * }} AttackContext
  */
 
@@ -75,6 +79,8 @@ function resolveAttackFromLegacyContext(legacy) {
     conversions: legacy.conversions,
     brands: legacy.brands,
     damageScalar: legacy.damageScalar,
+    accuracy: legacy.accuracy ?? legacy.hitChance,
+    costAP: legacy.costAP,
     skipOnHitStatuses: legacy.skipOnHitStatuses,
   };
 
@@ -141,6 +147,21 @@ function resolveAttackCore(attacker, defender, opts = {}) {
   });
   ctx.hpBefore = hpBefore;
   ctx.hpAfter = hpBefore;
+  if (Number.isFinite(opts?.costAP)) {
+    ctx.costAP = Number(opts.costAP);
+  }
+
+  const accuracySummary = computeHitOutcome(attacker, defender, opts, ctx);
+  ctx.hitChance = accuracySummary.chance;
+  ctx.hit = accuracySummary.hit;
+  recordAttackStep(ctx, "accuracy", [], { chance: accuracySummary.chance, roll: accuracySummary.roll, hit: accuracySummary.hit });
+  if (!accuracySummary.hit) {
+    ctx.packetsAfterOffense = attachPacketView([]);
+    ctx.packetsAfterDefense = attachPacketView([]);
+    ctx.totalDamage = 0;
+    ctx.packets = ctx.packetsAfterDefense;
+    return ctx;
+  }
 
   // ----- offense stages -----
   const conversionSources = [];
@@ -241,12 +262,15 @@ function resolveAttackCore(attacker, defender, opts = {}) {
   if (defenseResult.mergedResists && Object.keys(defenseResult.mergedResists).length) {
     defenseMeta.resists = defenseResult.mergedResists;
   }
+  if (defenseResult.flatDR && Object.keys(defenseResult.flatDR).length) {
+    defenseMeta.flatDR = defenseResult.flatDR;
+  }
   if (immunities && immunities.size) defenseMeta.immunities = Array.from(immunities);
   if (defenseMult !== 1) defenseMeta.defenseMult = Number(defenseMult.toFixed(3));
   if (damageScalar !== 1) defenseMeta.damageScalar = Number(damageScalar.toFixed(3));
   recordAttackStep(ctx, "resists", defendedPackets, Object.keys(defenseMeta).length ? defenseMeta : undefined);
   let totalDamage = defendedPackets.reduce((sum, pkt) => sum + Math.max(0, Math.floor(pkt.amount)), 0);
-  if (totalDamage <= 0 && ctx.packetsAfterOffense.length > 0) {
+  if (totalDamage <= 0 && defendedPackets.length > 0) {
     totalDamage = 1;
   }
   ctx.totalDamage = totalDamage;
@@ -305,7 +329,7 @@ function resolveAttackCore(attacker, defender, opts = {}) {
     if (!Number.isFinite(amount) || amount <= 0) continue;
     dealtTypes.push(pkt.type);
   }
-  if (dealtTypes.length) {
+  if (ctx.hit !== false && dealtTypes.length) {
     noteUseGain(attacker, dealtTypes);
   }
 
@@ -317,6 +341,7 @@ function resolveAttackCore(attacker, defender, opts = {}) {
     showAttackDebug(ctx);
   }
 
+  ctx.packets = ctx.packetsAfterDefense;
   return ctx;
 }
 
@@ -607,17 +632,68 @@ function applyDefense(packets, { defender, resists, immunities, defenseMult, pol
   const baseResists = consolidatedResists(defender);
   const resistSources = Array.isArray(resists) ? resists : [resists];
   const mergedResists = mergeResists(baseResists, ...resistSources);
+  const flatReduction = consolidatedFlatDamageReduction(defender);
   const out = [];
   for (const pkt of packets) {
     if (!pkt?.type) continue;
     if (immunities && immunities.has(pkt.type)) continue;
     const resist = clamp01(mergedResists?.[pkt.type] || 0);
     const scaled = Math.max(0, Math.floor(pkt.amount * (1 - resist) * finalMult));
-    if (scaled > 0) {
-      out.push(createPacket(pkt.type, scaled, false));
+    const reduced = applyFlatReduction(scaled, pkt.type, flatReduction);
+    if (reduced > 0) {
+      out.push(createPacket(pkt.type, reduced, false));
     }
   }
-  return { packets: out, mergedResists };
+  return { packets: out, mergedResists, flatDR: flatReduction };
+}
+
+function consolidatedFlatDamageReduction(defender) {
+  const sources = [];
+  if (defender?.modCache?.defense?.flatDR) sources.push(defender.modCache.defense.flatDR);
+  if (defender?.modCache?.flatDR) sources.push(defender.modCache.flatDR);
+  if (defender?.statusDerived?.flatDR) sources.push(defender.statusDerived.flatDR);
+  if (Number.isFinite(defender?.armorFlat)) sources.push({ all: defender.armorFlat });
+  const out = Object.create(null);
+  for (const source of sources) {
+    if (!source || typeof source !== "object") continue;
+    for (const [key, value] of Object.entries(source)) {
+      const amount = Number(value) || 0;
+      if (!amount) continue;
+      const normalized = normalizeFlatKey(key);
+      out[normalized] = (out[normalized] || 0) + amount;
+    }
+  }
+  return out;
+}
+
+function normalizeFlatKey(key) {
+  if (!key) return "all";
+  const normalized = String(key).toLowerCase();
+  if (normalized === "generic" || normalized === "any" || normalized === "default") return "all";
+  return key;
+}
+
+function applyFlatReduction(amount, type, map) {
+  if (!Number.isFinite(amount) || amount <= 0) return 0;
+  if (!map || typeof map !== "object") return amount;
+  const specific = Number(map[type]) || 0;
+  const universal = Number(map.all || map.ALL || 0);
+  const reduced = amount - (specific + universal);
+  return reduced > 0 ? Math.floor(reduced) : 0;
+}
+
+function computeHitOutcome(attacker, defender, opts, ctx) {
+  const chance = clamp01(pickNumber(
+    opts?.hitChance,
+    opts?.accuracy,
+    attacker?.hitChance,
+    attacker?.accuracy,
+    1 + (attacker?.statusDerived?.accuracyFlat || 0)
+  ));
+  const rng = ctx?.rng || Math.random;
+  const roll = typeof rng === "function" ? rng() : Math.random();
+  const hit = chance >= 1 || roll <= chance;
+  return { hit, chance, roll };
 }
 
 /**

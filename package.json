@@ -3,7 +3,14 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "test": "node tests/run-basic-tests.js",
-    "test-basic": "node tests/run-basic-tests.js"
+    "test": "npm run test:run",
+    "test-basic": "node tests/run-basic-tests.js",
+    "test:run": "node tests/run-basic-tests.js",
+    "test:html": "npm run test:run | node tests/make-latest.js",
+    "test:all": "npm run test:html",
+    "dev": "node dev/dev-server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
   }
 }

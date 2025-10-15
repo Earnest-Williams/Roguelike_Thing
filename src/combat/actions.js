@@ -131,6 +131,7 @@ export function tryAttack(attacker, defender, opts = {}) {
     statusAttempts: [],
     baseCosts,
     tags: action.tags,
+    costAP,
   };
   
   const hpBefore = defender?.res && typeof defender.res.hp === "number" ? defender.res.hp : 0;
