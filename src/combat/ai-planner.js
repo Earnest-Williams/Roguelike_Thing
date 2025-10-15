@@ -504,8 +504,10 @@ export const AIPlanner = {
    * @returns {string[]}
    */
   defaultActions(actor) {
-    if (actor?.isRangedAttacker) return ["fire_bolt", "strike"];
-    return ["strike"];
+    if (actor?.isRangedAttacker) {
+      return ["move_towards_target", "fire_bolt", "strike"];
+    }
+    return ["move_towards_target", "strike"];
   },
 
   /**
