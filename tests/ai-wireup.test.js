@@ -2,6 +2,7 @@ import { strict as assert } from "node:assert";
 
 import { TILE_FLOOR } from "../js/constants.js";
 import { createMobFromTemplate } from "../src/factories/index.js";
+import { planTurn } from "../src/combat/ai-planner.js";
 
 function makeGrid(width, height, value = TILE_FLOOR) {
   const grid = [];
@@ -136,3 +137,35 @@ function manhattan(a, b) {
   console.error(err);
   process.exitCode = 1;
 });
+
+(function testPlannerSkipsMoveWithoutTargetCoords() {
+  const monster = createMobFromTemplate("orc");
+  monster.pos = { x: 4, y: 4 };
+  monster.getLightRadius = () => 6;
+  if (monster.actor) {
+    monster.actor.getLightRadius = () => 6;
+  }
+
+  const target = {
+    id: "mystery",
+    name: "Mystery",
+    factions: ["player"],
+    affiliations: [],
+    res: { hp: 10 },
+    base: { maxHP: 10 },
+    getLightRadius: () => 6,
+  };
+
+  const size = 9;
+  const maze = Array.from({ length: size }, () => Array(size).fill(TILE_FLOOR));
+  const mobManager = { list: () => [monster] };
+  const world = { maze, mobManager, player: target };
+
+  const decision = planTurn({ actor: monster, combatant: monster.actor, world });
+  assert.equal(
+    decision.type,
+    "WANDER",
+    "planner should not emit a MOVE decision without a resolvable target position",
+  );
+  console.log("✓ planner falls back to wander when target position is unknown");
+})();
