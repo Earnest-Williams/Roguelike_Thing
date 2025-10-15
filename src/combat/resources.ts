@@ -398,6 +398,12 @@ function clamp(value, min, max) {
 export function isDefeated(actor) {
   if (!actor) return false;
   const store = actor.resources || actor.res;
-  const hp = Number.isFinite(store?.hp) ? Number(store.hp) : 0;
+  let hp = Number(store?.hp);
+  if (!Number.isFinite(hp)) {
+    hp = Number(actor?.hp);
+  }
+  if (!Number.isFinite(hp)) {
+    return false;
+  }
   return hp <= HEALTH_FLOOR;
 }
