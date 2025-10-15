@@ -22,6 +22,7 @@ import {
 } from "../../js/constants.js";
 import { canPay, eventGain } from "./resources.js";
 import { noteAttacked, noteMoved } from "./actor.js";
+import { cloneGuardConfig, cloneWanderConfig } from "../content/mobs.js";
 import {
   Door,
   DOOR_STATE,
@@ -326,34 +327,123 @@ export function executeDecision({ actor, combatant, world, decision, rng }) {
     }
 
     case "GUARD": {
-      const anchor = decision.at ?? actor?.homePos ?? actor?.spawnPos ?? resolvePosition(actor);
-      const radius = Number.isFinite(decision.radius)
+      const guardInput = decision.guard ?? actor?.guard ?? performer?.guard ?? null;
+      let guardState = cloneGuardConfig(guardInput);
+
+      const decisionAnchor = resolvePosition(decision.at);
+      let anchor = decisionAnchor ?? (guardState?.anchor ? { ...guardState.anchor } : null);
+      if (!anchor) {
+        anchor = resolvePosition(actor?.homePos)
+          ?? resolvePosition(performer?.homePos)
+          ?? resolvePosition(actor?.spawnPos)
+          ?? resolvePosition(performer?.spawnPos)
+          ?? resolvePosition(actor);
+      }
+
+      const defaultRadius = Number.isFinite(decision.radius)
         ? decision.radius
         : Number.isFinite(actor?.guardRadius)
         ? actor.guardRadius
+        : Number.isFinite(performer?.guardRadius)
+        ? performer.guardRadius
         : 3;
+
+      let radius = Number.isFinite(guardState?.radius) ? guardState.radius : defaultRadius;
+      if (!guardState && (anchor || Number.isFinite(defaultRadius))) {
+        guardState = {};
+      }
+      if (guardState) {
+        if (anchor) {
+          guardState.anchor = { ...anchor };
+        }
+        if (Number.isFinite(radius)) {
+          guardState.radius = radius;
+        }
+        const cloned = cloneGuardConfig(guardState);
+        if (actor && typeof actor === "object") {
+          actor.guard = cloneGuardConfig(guardState);
+          if (Number.isFinite(guardState.radius)) actor.guardRadius = guardState.radius;
+          if (guardState.resumeBias != null) actor.guardResumeBias = guardState.resumeBias;
+          if (anchor) {
+            actor.homePos = { ...anchor };
+            if ("_homeFromFallback" in actor) {
+              actor._homeFromFallback = false;
+            }
+          }
+        }
+        if (performer && performer !== actor) {
+          performer.guard = cloned ?? null;
+          if (Number.isFinite(guardState.radius)) performer.guardRadius = guardState.radius;
+          if (guardState.resumeBias != null) performer.guardResumeBias = guardState.resumeBias;
+          if (anchor) {
+            performer.homePos = { ...anchor };
+          }
+        }
+        decision.guard = cloned ?? decision.guard;
+      }
+
       const selfPos = resolvePosition(actor);
       if (anchor && selfPos) {
         const dist = manhattanDistance(selfPos, anchor);
-        if (dist > radius) {
+        if (Number.isFinite(radius) && dist > radius) {
           const step = stepToward(selfPos, anchor, world, actor);
           const moved = attemptPlannerStep(actor, selfPos, step, world, decision, "guard_step");
           if (moved) {
             noteMoved(performer);
           }
         } else {
-          recordPlannerStep(actor, "guard_step", { from: selfPos, to: selfPos, blocked: false, radius, dist });
+          recordPlannerStep(actor, "guard_step", {
+            from: selfPos,
+            to: selfPos,
+            blocked: false,
+            radius,
+            dist,
+            guard: guardState ?? null,
+          });
         }
       } else {
-        recordPlannerStep(actor, "guard_step", { blocked: true, reason: "missing_anchor" });
+        recordPlannerStep(actor, "guard_step", { blocked: true, reason: "missing_anchor", guard: guardState ?? null });
       }
       return baseDelay;
     }
 
     case "WANDER": {
       const leash = resolveLeash(decision.leash, actor);
+      const wanderInput = decision.wander ?? actor?.wander ?? performer?.wander ?? null;
+      let wanderState = cloneWanderConfig(wanderInput);
+      if (!wanderState) {
+        wanderState = {};
+      }
+      if (!Number.isFinite(wanderState.radius) && Number.isFinite(leash)) {
+        wanderState.radius = leash;
+      }
+      if (!wanderState.anchor) {
+        const guardAnchor = actor?.guard?.anchor ?? performer?.guard?.anchor ?? null;
+        const home = resolvePosition(actor?.homePos)
+          ?? resolvePosition(performer?.homePos)
+          ?? resolvePosition(actor?.spawnPos)
+          ?? resolvePosition(performer?.spawnPos)
+          ?? null;
+        wanderState.anchor = guardAnchor
+          ? { x: guardAnchor.x | 0, y: guardAnchor.y | 0 }
+          : home ?? null;
+      }
+      if (actor && typeof actor === "object") {
+        actor.wander = cloneWanderConfig(wanderState);
+        if (Number.isFinite(wanderState.radius)) actor.wanderRadius = wanderState.radius;
+        if (wanderState.resumeBias != null) actor.wanderResumeBias = wanderState.resumeBias;
+      }
+      if (performer && performer !== actor) {
+        performer.wander = cloneWanderConfig(wanderState);
+        if (Number.isFinite(wanderState.radius)) performer.wanderRadius = wanderState.radius;
+        if (wanderState.resumeBias != null) performer.wanderResumeBias = wanderState.resumeBias;
+      }
+
+      decision.wander = cloneWanderConfig(wanderState);
+
       const selfPos = resolvePosition(actor);
-      const step = randomLeashedStep(actor, leash, world, rngFn);
+      const leashRadius = Number.isFinite(wanderState.radius) ? wanderState.radius : leash;
+      const step = randomLeashedStep(actor, leashRadius, world, rngFn);
       const moved = attemptPlannerStep(actor, selfPos, step, world, decision, "wander_step");
       if (moved) {
         noteMoved(performer);

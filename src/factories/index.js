@@ -98,26 +98,33 @@ export function createMobFromTemplate(tid) {
   const actor = createActorFromTemplate(tid);
   const spawnPos = snapshotPosition(actor);
   if (spawnPos) {
-    actor.spawnPos = { ...spawnPos };
-    if (!actor.homePos) actor.homePos = { ...spawnPos };
+    actor.spawnPos = clonePoint(spawnPos);
+    if (!actor.homePos) actor.homePos = clonePoint(spawnPos);
   }
 
-  const guardConfig = cloneGuardConfig(template.guard) ?? cloneGuardConfig(actor.guard);
+  const guardConfig = cloneGuardConfig(template.guard ?? actor.guard ?? null);
   if (guardConfig) {
     actor.guard = cloneGuardConfig(guardConfig);
-    actor.guardRadius = typeof guardConfig.radius === "number" ? guardConfig.radius : actor.guardRadius;
-    actor.guardResumeBias = typeof guardConfig.resumeBias === "number"
-      ? guardConfig.resumeBias
-      : actor.guardResumeBias;
+    if (guardConfig.anchor && !actor.homePos) {
+      actor.homePos = clonePoint(guardConfig.anchor);
+    }
+    if (typeof guardConfig.radius === "number") {
+      actor.guardRadius = guardConfig.radius;
+    }
+    if (typeof guardConfig.resumeBias === "number") {
+      actor.guardResumeBias = guardConfig.resumeBias;
+    }
   }
 
-  const wanderConfig = cloneWanderConfig(template.wander) ?? cloneWanderConfig(actor.wander);
+  const wanderConfig = cloneWanderConfig(template.wander ?? actor.wander ?? null);
   if (wanderConfig) {
     actor.wander = cloneWanderConfig(wanderConfig);
-    actor.wanderRadius = typeof wanderConfig.radius === "number" ? wanderConfig.radius : actor.wanderRadius;
-    actor.wanderResumeBias = typeof wanderConfig.resumeBias === "number"
-      ? wanderConfig.resumeBias
-      : actor.wanderResumeBias;
+    if (typeof wanderConfig.radius === "number") {
+      actor.wanderRadius = wanderConfig.radius;
+    }
+    if (typeof wanderConfig.resumeBias === "number") {
+      actor.wanderResumeBias = wanderConfig.resumeBias;
+    }
   }
 
   const monster = new Monster({
@@ -125,22 +132,11 @@ export function createMobFromTemplate(tid) {
     glyph: template.glyph ?? "?",
     color: template.color ?? "#fff",
     baseDelay: template.baseDelay ?? 1,
+    guard: guardConfig,
+    wander: wanderConfig,
+    spawnPos,
+    homePos: actor.homePos ?? spawnPos ?? null,
   });
-
-  if (spawnPos) {
-    monster.spawnPos = { ...spawnPos };
-    if (!monster.homePos) monster.homePos = { ...spawnPos };
-  }
-
-  if (guardConfig) {
-    monster.guard = cloneGuardConfig(guardConfig);
-    monster.guardRadius = typeof guardConfig.radius === "number" ? guardConfig.radius : monster.guardRadius;
-  }
-
-  if (wanderConfig) {
-    monster.wander = cloneWanderConfig(wanderConfig);
-    monster.wanderRadius = typeof wanderConfig.radius === "number" ? wanderConfig.radius : monster.wanderRadius;
-  }
 
   syncBehaviorToActor(monster);
   return monster;
@@ -174,11 +170,23 @@ function snapshotPosition(entity) {
   if (Number.isFinite(entity.x) && Number.isFinite(entity.y)) {
     return { x: entity.x | 0, y: entity.y | 0 };
   }
+  if (isPoint(entity.spawnPos)) {
+    return clonePoint(entity.spawnPos);
+  }
   const pos = typeof entity.pos === "function" ? entity.pos() : entity.pos;
-  if (pos && Number.isFinite(pos.x) && Number.isFinite(pos.y)) {
-    return { x: pos.x | 0, y: pos.y | 0 };
+  if (isPoint(pos)) {
+    return clonePoint(pos);
   }
   return null;
+}
+
+function clonePoint(point) {
+  if (!isPoint(point)) return null;
+  return { x: point.x | 0, y: point.y | 0 };
+}
+
+function isPoint(value) {
+  return value && Number.isFinite(value.x) && Number.isFinite(value.y);
 }
 
 function syncBehaviorToActor(monster) {

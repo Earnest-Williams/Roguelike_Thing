@@ -419,9 +419,9 @@ function normalizeWanderStateForPlanner(selfMob, context, guardState) {
   };
 }
 
-export function planTurn({ actor, combatant, world = {}, perception, rng, guard, wander }) {
+export function planTurn({ actor, combatant, selfMob: explicitSelfMob, world = {}, perception, rng, guard, wander }) {
   const performer = combatant ?? asActor(actor) ?? actor;
-  const selfMob = actor ?? performer;
+  const selfMob = explicitSelfMob ?? actor ?? performer;
   const rngFn = resolvePlanRng(rng);
   const ctx = { ...world, selfMob, rng: rngFn };
   if (perception) ctx.perception = perception;
