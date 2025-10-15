@@ -2,7 +2,7 @@
 // @ts-check
 
 import { SLOT, LIGHT_CHANNELS } from "../../js/constants.js";
-import { MOB_TEMPLATES } from "../content/mobs.js";
+import { MOB_TEMPLATES, cloneGuardConfig, cloneWanderConfig } from "../content/mobs.js";
 import { planTurn } from "../combat/ai-planner.js";
 import { updatePerception } from "../combat/perception.js";
 import { executeDecision } from "../combat/actions.js";
@@ -42,10 +42,16 @@ export class Monster {
     this.__template = actor.__template || null;
     this.spawnPos = null;
     this.homePos = actor.homePos ?? null;
-    this.guardRadius = actor.guardRadius ?? actor.__template?.guardRadius ?? null;
-    this.wanderRadius = actor.wanderRadius ?? actor.__template?.wanderRadius ?? null;
+    this.guard = cloneGuardConfig(actor.guard ?? actor.__template?.guard ?? null);
+    this.wander = cloneWanderConfig(actor.wander ?? actor.__template?.wander ?? null);
+    this.guardRadius = resolveRadius(this.guard, actor.guardRadius, actor.__template?.guardRadius);
+    this.wanderRadius = resolveRadius(this.wander, actor.wanderRadius, actor.__template?.wanderRadius);
+    this.guardResumeBias = resolveResumeBias(this.guard, actor.guardResumeBias);
+    this.wanderResumeBias = resolveResumeBias(this.wander, actor.wanderResumeBias);
     this.lightMask = actor.lightMask ?? LIGHT_CHANNELS.ALL;
     this.lightChannel = actor.lightChannel ?? LIGHT_CHANNELS.ALL;
+
+    syncBehaviorToActor(this);
   }
 
   get actor() {
@@ -158,6 +164,7 @@ export class Monster {
     if (!this.homePos && Number.isFinite(this.x) && Number.isFinite(this.y)) {
       this.homePos = { x: this.x, y: this.y };
     }
+    updateAnchorsFromPosition(this);
   }
 
   /** Visible-light radius is defined by the Actor. */
@@ -188,6 +195,12 @@ export class Monster {
       : ctx || {};
     const rng = resolveRng(ctx?.rng ?? world?.rng);
 
+    updateAnchorsFromPosition(this);
+    if (world && typeof world === "object") {
+      world.guard = world.guard ?? this.guard;
+      world.wander = world.wander ?? this.wander;
+    }
+
     this.perception = updatePerception(this, world);
 
     const decision = planTurn({
@@ -197,6 +210,8 @@ export class Monster {
       perception: this.perception,
       rng,
       now: ctx?.now,
+      guard: this.guard,
+      wander: this.wander,
     });
 
     this.lastPlannerDecision = decision;
@@ -229,6 +244,155 @@ function resolveRng(source) {
     return () => source.random();
   }
   return Math.random;
+}
+
+function resolveRadius(config, ...fallbacks) {
+  if (config && typeof config.radius === "number") return config.radius;
+  for (const value of fallbacks) {
+    if (Number.isFinite(value)) return value;
+  }
+  return null;
+}
+
+function resolveResumeBias(config, fallback) {
+  if (config && typeof config.resumeBias === "number") return clamp01(config.resumeBias);
+  if (Number.isFinite(fallback)) return clamp01(fallback);
+  return null;
+}
+
+function clamp01(value) {
+  const v = Number(value);
+  if (!Number.isFinite(v)) return 0;
+  if (v <= 0) return 0;
+  if (v >= 1) return 1;
+  return v;
+}
+
+function isPoint(obj) {
+  return obj && Number.isFinite(obj.x) && Number.isFinite(obj.y);
+}
+
+function computeAnchor(monster, guard) {
+  if (!monster || !guard) return null;
+  if (isPoint(guard.anchor)) {
+    return { x: guard.anchor.x | 0, y: guard.anchor.y | 0 };
+  }
+  const base = monster.homePos || monster.spawnPos || monster.__actor?.homePos || monster.__actor?.spawnPos;
+  const resolvedBase = isPoint(base)
+    ? { x: base.x | 0, y: base.y | 0 }
+    : Number.isFinite(monster.x) && Number.isFinite(monster.y)
+      ? { x: monster.x | 0, y: monster.y | 0 }
+      : null;
+  if (!resolvedBase) return null;
+  if (guard.anchorOffset && isPoint(guard.anchorOffset)) {
+    return {
+      x: resolvedBase.x + (guard.anchorOffset.x | 0),
+      y: resolvedBase.y + (guard.anchorOffset.y | 0),
+    };
+  }
+  return { ...resolvedBase };
+}
+
+function updateAnchorsFromPosition(monster) {
+  if (!monster || typeof monster !== "object") return;
+  const actor = monster.actor ?? monster.__actor ?? null;
+  if (monster.spawnPos) {
+    if (!Number.isFinite(monster.spawnPos.x) || !Number.isFinite(monster.spawnPos.y)) {
+      monster.spawnPos = null;
+    }
+  }
+  if (monster.homePos) {
+    if (!Number.isFinite(monster.homePos.x) || !Number.isFinite(monster.homePos.y)) {
+      monster.homePos = null;
+    }
+  }
+
+  if (monster.guard) {
+    const anchor = computeAnchor(monster, monster.guard);
+    if (anchor) {
+      monster.guard.anchor = anchor;
+      if (!monster.homePos) {
+        monster.homePos = { ...anchor };
+      }
+      if (actor) {
+        actor.guard = cloneGuardConfig(monster.guard);
+        actor.homePos = actor.homePos ?? { ...anchor };
+      }
+    }
+    if (typeof monster.guard.radius === "number") {
+      monster.guardRadius = monster.guard.radius;
+      if (actor) actor.guardRadius = monster.guard.radius;
+    }
+    if (typeof monster.guard.resumeBias === "number" && actor) {
+      actor.guardResumeBias = clamp01(monster.guard.resumeBias);
+    }
+  }
+
+  if (monster.wander) {
+    if (typeof monster.wander.radius === "number") {
+      monster.wanderRadius = monster.wander.radius;
+      if (actor) actor.wanderRadius = monster.wander.radius;
+    }
+    if (typeof monster.wander.resumeBias === "number" && actor) {
+      actor.wanderResumeBias = clamp01(monster.wander.resumeBias);
+    }
+    if (!monster.wander.anchor && monster.guard?.anchor) {
+      monster.wander.anchor = { ...monster.guard.anchor };
+    }
+  }
+
+  if (monster.spawnPos && actor && !actor.spawnPos) {
+    actor.spawnPos = { ...monster.spawnPos };
+  }
+  if (monster.homePos && actor && !actor.homePos) {
+    actor.homePos = { ...monster.homePos };
+  }
+}
+
+function syncBehaviorToActor(monster) {
+  if (!monster || typeof monster !== "object") return;
+  const actor = monster.actor ?? monster.__actor ?? null;
+  if (!actor || actor === monster) return;
+  if (monster.guard) {
+    actor.guard = cloneGuardConfig(monster.guard);
+    if (typeof monster.guard.radius === "number") {
+      actor.guardRadius = monster.guard.radius;
+    }
+    if (typeof monster.guard.resumeBias === "number") {
+      actor.guardResumeBias = clamp01(monster.guard.resumeBias);
+    }
+  } else if (actor.guard) {
+    monster.guard = cloneGuardConfig(actor.guard);
+  }
+  if (monster.wander) {
+    actor.wander = cloneWanderConfig(monster.wander);
+    if (typeof monster.wander.radius === "number") {
+      actor.wanderRadius = monster.wander.radius;
+    }
+    if (typeof monster.wander.resumeBias === "number") {
+      actor.wanderResumeBias = clamp01(monster.wander.resumeBias);
+    }
+  } else if (actor.wander) {
+    monster.wander = cloneWanderConfig(actor.wander);
+  }
+  if (Number.isFinite(monster.guardRadius)) {
+    actor.guardRadius = monster.guardRadius;
+  }
+  if (Number.isFinite(monster.wanderRadius)) {
+    actor.wanderRadius = monster.wanderRadius;
+  }
+  if (Number.isFinite(monster.guardResumeBias)) {
+    actor.guardResumeBias = clamp01(monster.guardResumeBias);
+  }
+  if (Number.isFinite(monster.wanderResumeBias)) {
+    actor.wanderResumeBias = clamp01(monster.wanderResumeBias);
+  }
+  if (monster.spawnPos) {
+    actor.spawnPos = { ...monster.spawnPos };
+  }
+  if (monster.homePos && !actor.homePos) {
+    actor.homePos = { ...monster.homePos };
+  }
 }
 
 const HAND_SLOTS = [SLOT.LeftHand, SLOT.RightHand];
