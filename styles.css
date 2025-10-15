@@ -1,3 +1,7 @@
+:root {
+  --mob-inspector-gap: clamp(12px, 3vh, 32px);
+}
+
 body {
   font-family: monospace;
   background-color: #1a1a1a;
@@ -242,11 +246,12 @@ h1 {
 }
 
 #mob-inspector {
-  position: absolute;
-  top: clamp(12px, 3vh, 32px);
+  position: fixed;
+  top: auto;
+  bottom: var(--mob-inspector-gap);
   right: clamp(12px, 3vw, 32px);
   width: min(360px, calc(100% - 32px));
-  max-height: min(80vh, 520px);
+  max-height: calc(100vh - var(--mob-inspector-gap) - var(--mob-inspector-gap));
   padding: 16px;
   display: none;
   flex-direction: column;
@@ -259,6 +264,7 @@ h1 {
   text-align: left;
   z-index: 5;
   backdrop-filter: blur(8px);
+  overflow-y: auto;
 }
 
 #mob-inspector[data-visible="true"] {
