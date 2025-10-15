@@ -17,7 +17,13 @@ import { createActor, resolveAttack, setSeed, finalAPForAction, spendAP } from "
   });
 
   assert.equal(result.hit, false, "attack with zero accuracy should miss");
+  assert.equal(result.costAP, costAP, "resolveAttack should surface the AP cost for the swing");
   assert.equal(result.packets.length, 0, "no packets should be produced on miss");
+  assert.equal(
+    Array.isArray(result.packetsAfterDefense) ? result.packetsAfterDefense.length : 0,
+    0,
+    "defense packet list should also be empty on miss",
+  );
   assert.equal(attacker.ap, beforeAP - costAP, "AP spent prior to attack should remain deducted");
   const attuneStacks = Object.keys(attacker.attunement?.stacks || {}).length;
   assert.equal(attuneStacks, 0, "miss should not grant attunement stacks");
